@@ -1,8 +1,12 @@
-from __future__ import division, print_function
+import sys
+import os
 import wave
 import audioop
+import time
 import contextlib
-from tqdm import trange
+from configparser import ConfigParser
+
+__all__ = ["Sample", "Mixer", "Song"]
 
 
 class Sample(object):
@@ -180,34 +184,127 @@ class Mixer(object):
     Mixes a set of ascii-bar tracks using the given sample instruments,
     into a resulting big sample.
     """
-    def __init__(self, tracks, bpm, ticks, instruments):
-        self.tracks = [track.replace(' ', '') for track in tracks]
-        if (len(self.tracks[0]) % ticks) != 0:
-            raise ValueError("track length must be multiple of the number of ticks")
+    def __init__(self, patterns, bpm, ticks, instruments):
+        for p in patterns:
+            bar_length = 0
+            for instrument, bars in p.items():
+                if instrument not in instruments:
+                    raise ValueError("instrument '{:s}' not defined".format(instrument))
+                if len(bars) % ticks != 0:
+                    raise ValueError("bar length must be multiple of the number of ticks")
+                if 0 < bar_length != len(bars):
+                    raise ValueError("all bars must be of equal length in the same pattern")
+                bar_length = len(bars)
+        self.patterns = patterns
         self.instruments = instruments
         self.bpm = bpm
         self.ticks = ticks
 
     def mix(self):
-        total_seconds = len(self.tracks[0]) / self.ticks / self.bpm * 60.0
-        print("Mixing tracks (length of mix: {:.2f} seconds)...".format(total_seconds))
+        total_seconds = 0.0
+        for p in self.patterns:
+            bar = next(iter(p.values()))
+            total_seconds += len(bar) * 60.0 / self.bpm / self.ticks
+        print("Mixing {:d} patterns...".format(len(self.patterns)))
         mixed = Sample().make_32bit()
-        for i in trange(len(self.tracks[0])):
-            letters = [track[i] for track in self.tracks]
-            for letter in letters:
-                if letter in ". ":
-                    continue
-                try:
-                    sample = self.instruments[letter]
-                except KeyError:
-                    print("  * WARNING: sample '{:s}' not defined".format(letter))
-                else:
-                    time = i / self.ticks / self.bpm * 60.0
-                    mixed.mix_at(time, sample)
-        missing = total_seconds - mixed.duration
+        timestamp = 0.0
+        start_time = time.time()
+        total_nr_of_triggers = 0
+        for num, pattern in enumerate(self.patterns, start=1):
+            print("  pattern {:d}".format(num))
+            pattern = list(pattern.items())  # make it indexable
+            num_triggers = len(pattern[0][1])
+            for i in range(num_triggers):
+                for instrument, bars in pattern:
+                    if bars[i] not in ". ":
+                        sample = self.instruments[instrument]
+                        mixed.mix_at(timestamp, sample)
+                timestamp += 60.0 / self.bpm / self.ticks
+            total_nr_of_triggers += num_triggers
+        mixing_time = time.time()-start_time
+        # chop/extend to get to the precise total duration (in case of silence in the last bars etc)
+        missing = total_seconds-mixed.duration
         if missing > 0:
             mixed.append(missing)
         elif missing < 0:
             mixed.cut(0, total_seconds)
+        print("Mix done ({:.2f} triggers/sec).".format(total_nr_of_triggers/mixing_time))
         return mixed
 
+
+class Song(object):
+    def __init__(self):
+        self.instruments = {}
+        self.sample_path = None
+        self.output_path = None
+        self.bpm = 0
+        self.ticks = 0
+        self.patterns = []
+
+    def read(self, song_file):
+        with open(song_file):
+            pass    # test for file existance
+        print("Loading song...")
+        cp = ConfigParser()
+        cp.read(song_file)
+        self.sample_path = cp['paths']['samples']
+        self.output_path = cp['paths']['output']
+        self.bpm = cp['song'].getint('bpm')
+        self.ticks = cp['song'].getint('ticks')
+        self.read_samples(cp['instruments'], self.sample_path)
+        self.read_patterns(cp, cp['song']['patterns'].split())
+        print("Done; {:d} instruments and {:d} patterns.".format(len(self.instruments), len(self.patterns)))
+        unused_instruments = self.instruments.keys()
+        for pattern in self.patterns:
+            unused_instruments -= pattern.keys()
+        if unused_instruments:
+            for instrument in unused_instruments:
+                del self.instruments[instrument]
+            print("Warning: there are unused instruments. I've unloaded them from memory.")
+            print("The unused instruments are:", ", ".join(sorted(unused_instruments)))
+
+    def read_samples(self, instruments, samples_path):
+        self.instruments = {}
+        for name, file in sorted(instruments.items()):
+            self.instruments[name] = Sample(wave_file=os.path.join(samples_path, file)).normalize().make_32bit(scale_amplitude=False).lock()
+
+    def read_patterns(self, songdef, names):
+        self.patterns = []
+        for name in names:
+            pattern = {}
+            if "pattern."+name not in songdef:
+                raise ValueError("pattern definition not found: "+name)
+            bar_length = 0
+            for instrument, bars in songdef["pattern."+name].items():
+                if instrument not in self.instruments:
+                    raise ValueError("instrument '{instr:s}' not defined (pattern: {pattern:s})".format(instr=instrument, pattern=name))
+                bars = bars.replace(' ', '')
+                if len(bars) % self.ticks != 0:
+                    raise ValueError("all patterns must be multiple of song ticks (pattern: {pattern:s}.{instr:s})".format(pattern=name, instr=instrument))
+                pattern[instrument] = bars
+                if 0 < bar_length != len(bars):
+                    raise ValueError("all bars must be of equal length in the same pattern (pattern: {pattern:s}.{instr:s})".format(pattern=name, instr=instrument))
+                bar_length = len(bars)
+            self.patterns.append(pattern)
+
+    def mix(self, output_filename):
+        mixer = Mixer(self.patterns, self.bpm, self.ticks, self.instruments)
+        result = mixer.mix()
+        output_filename = os.path.join(self.output_path, output_filename)
+        result.make_16bit().write_wav(output_filename)
+        print("Output is {:.2f} seconds, written to: {:s}".format(result.duration, output_filename))
+
+
+def main(songfile, outputfile):
+    song = Song()
+    song.read(songfile)
+    song.mix(outputfile)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Give track file as argument.")
+        raise SystemExit(1)
+    song_file = sys.argv[1]
+    output_file = os.path.splitext(song_file)[0]+".wav"
+    main(song_file, output_file)
