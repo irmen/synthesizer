@@ -4,9 +4,14 @@ import wave
 import audioop
 import time
 import contextlib
+import pyaudio
+import tempfile
+import cmd
+if sys.version_info < (3, 0):
+    raise RuntimeError("This module requires python 3.x")
 from configparser import ConfigParser
 
-__all__ = ["Sample", "Mixer", "Song"]
+__all__ = ["Sample", "Mixer", "Song", "Repl"]
 
 
 class Sample(object):
@@ -200,18 +205,20 @@ class Mixer(object):
         self.bpm = bpm
         self.ticks = ticks
 
-    def mix(self):
+    def mix(self, verbose=True):
         total_seconds = 0.0
         for p in self.patterns:
             bar = next(iter(p.values()))
             total_seconds += len(bar) * 60.0 / self.bpm / self.ticks
-        print("Mixing {:d} patterns...".format(len(self.patterns)))
+        if verbose:
+            print("Mixing {:d} patterns...".format(len(self.patterns)))
         mixed = Sample().make_32bit()
         timestamp = 0.0
         start_time = time.time()
         total_nr_of_triggers = 0
         for num, pattern in enumerate(self.patterns, start=1):
-            print("  pattern {:d}".format(num))
+            if verbose:
+                print("  pattern {:d}".format(num))
             pattern = list(pattern.items())  # make it indexable
             num_triggers = len(pattern[0][1])
             for i in range(num_triggers):
@@ -228,7 +235,8 @@ class Mixer(object):
             mixed.append(missing)
         elif missing < 0:
             mixed.cut(0, total_seconds)
-        print("Mix done ({:.2f} triggers/sec).".format(total_nr_of_triggers/mixing_time))
+        if verbose:
+            print("Mix done ({:.2f} triggers/sec).".format(total_nr_of_triggers/mixing_time))
         return mixed
 
 
@@ -241,7 +249,7 @@ class Song(object):
         self.ticks = 0
         self.patterns = []
 
-    def read(self, song_file):
+    def read(self, song_file, discard_unused_instruments=True):
         with open(song_file):
             pass    # test for file existance
         print("Loading song...")
@@ -257,7 +265,7 @@ class Song(object):
         unused_instruments = self.instruments.keys()
         for pattern in self.patterns:
             unused_instruments -= pattern.keys()
-        if unused_instruments:
+        if unused_instruments and discard_unused_instruments:
             for instrument in unused_instruments:
                 del self.instruments[instrument]
             print("Warning: there are unused instruments. I've unloaded them from memory.")
@@ -291,20 +299,156 @@ class Song(object):
         mixer = Mixer(self.patterns, self.bpm, self.ticks, self.instruments)
         result = mixer.mix()
         output_filename = os.path.join(self.output_path, output_filename)
-        result.make_16bit().write_wav(output_filename)
+        result.make_16bit()
+        result.write_wav(output_filename)
         print("Output is {:.2f} seconds, written to: {:s}".format(result.duration, output_filename))
+        return result
 
 
-def main(songfile, outputfile):
+class Repl(cmd.Cmd):
+    def __init__(self, song):
+        self.song = song
+        self.audio = pyaudio.PyAudio()
+        super(Repl, self).__init__()
+
+    def do_quit(self, args):
+        """quits the session"""
+        print("Bye.", args)
+        self.audio.terminate()
+        return True
+
+    def do_bpm(self, bpm):
+        """set the playback BPM (such as 174 for some drum'n'bass)"""
+        try:
+            self.song.bpm = int(bpm)
+        except ValueError as x:
+            print("ERROR:", x)
+
+    def do_ticks(self, ticks):
+        """set the number of pattern ticks per beat (usually 4 or 8)"""
+        try:
+            self.song.ticks = int(ticks)
+        except ValueError as x:
+            print("ERROR:", x)
+
+    def do_samples(self, args):
+        """show the loaded samples"""
+        print("Samples:")
+        print(",  ".join(self.song.instruments))
+
+    def do_patterns(self, args):
+        """show the loaded patterns"""
+        print("Patterns:")
+        for num, pattern in enumerate(self.song.patterns, start=1):
+            self.print_pattern(num, pattern)
+
+    def print_pattern(self, num, pattern):
+        print("PATTERN #{:d}".format(num))
+        for instrument, bars in pattern.items():
+            print("   {:>15s} = {:s}".format(instrument, bars))
+
+    def do_pattern(self, args):
+        """play the pattern with the given number"""
+        try:
+            pattern_nr = int(args)
+        except ValueError as x:
+            print("ERROR:", x)
+        else:
+            try:
+                pat = self.song.patterns[pattern_nr-1]
+                self.print_pattern(pattern_nr, pat)
+            except IndexError:
+                print("no such pattern")
+                return
+            try:
+                m = Mixer([pat], self.song.bpm, self.song.ticks, self.song.instruments)
+                result = m.mix(verbose=False)
+                self.play_sample(result)
+            except ValueError as x:
+                print("ERROR:", x)
+
+    def do_play(self, args):
+        """play a single sample by giving its name, add a bar (xx..x.. etc) to play it in a bar"""
+        if ' ' in args:
+            instrument, pattern = args.split(maxsplit=1)
+            pattern = pattern.replace(' ', '')
+        else:
+            instrument = args
+            pattern = None
+        instrument = instrument.strip()
+        try:
+            sample = self.song.instruments[instrument]
+        except KeyError:
+            print("unknown sample")
+            return
+        if pattern:
+            self.play_single_bar(sample, pattern)
+        else:
+            self.play_sample(sample)
+
+    def play_sample(self, sample):
+        if sample.sampwidth not in (2, 3):
+            sample = sample.dup().make_16bit()
+        with contextlib.closing(self.audio.open(
+                format=self.audio.get_format_from_width(sample.sampwidth),
+                channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
+            stream.write(sample.frames)
+            time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+
+    def play_single_bar(self, sample, pattern):
+        try:
+            m = Mixer([{"sample": pattern}], self.song.bpm, self.song.ticks, {"sample": sample})
+            result = m.mix(verbose=False)
+            self.play_sample(result)
+        except ValueError as x:
+            print("ERROR:", x)
+
+    def do_mix(self, args):
+        """mix and play all patterns of the song"""
+        output = tempfile.mktemp(".wav")
+        self.song.mix(output)
+        mix = Sample(wave_file=output)
+        print("Playing sound...")
+        self.play_sample(mix)
+        os.remove(output)
+
+    def do_rec(self, args):
+        """Record (or overwrite) a new instrument bar in a pattern.
+        Args: [pattern number] [instrument] [bar(s)].
+        Omit bars to remove the instrument from the pattern."""
+        raise NotImplementedError
+
+
+def main(songfile, outputfile=None, interactive=False):
     song = Song()
-    song.read(songfile)
-    song.mix(outputfile)
+    song.read(songfile, discard_unused_instruments=False)
+    repl = Repl(song)
+    if interactive:
+        repl.cmdloop("Interactive Samplebox session. Type 'help' for help on commands.")
+    else:
+        song.mix(outputfile)
+        mix = Sample(wave_file=outputfile)
+        print("Playing sound...")
+        repl.play_sample(mix)
 
+
+def usage():
+    print("Give track file as argument. Add -i parameter to enter interactive mode instead of mixing directly.")
+    raise SystemExit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Give track file as argument.")
-        raise SystemExit(1)
-    song_file = sys.argv[1]
-    output_file = os.path.splitext(song_file)[0]+".wav"
-    main(song_file, output_file)
+    if len(sys.argv) not in (2, 3):
+        usage()
+    interactive = None
+    if len(sys.argv) == 3:
+        print("ARGS", sys.argv, sys.argv[1:3])
+        song_file, interactive = sys.argv[1:3]
+        if song_file == "-i":
+            song_file = interactive
+        elif interactive != "-i":
+            usage()
+        main(song_file, interactive=True)
+    else:
+        song_file = sys.argv[1]
+        output_file = os.path.splitext(song_file)[0]+".wav"
+        main(song_file, output_file)
