@@ -1,3 +1,7 @@
+"""
+Sample mixer and sequencer meant to create rhythms. Inspired by the Roland TR-909.
+Written by Irmen de Jong (irmen@razorvine.net)
+"""
 import sys
 import os
 import wave
@@ -121,8 +125,9 @@ class Sample(object):
         assert not self.locked
         max_amp = audioop.max(self.frames, self.sampwidth)
         max_target = 2 ** (8 * self.sampwidth - 1) - 2
-        factor = max_target / max_amp
-        self.frames = audioop.mul(self.frames, self.sampwidth, factor)
+        if max_amp > 0:
+            factor = max_target/max_amp
+            self.frames = audioop.mul(self.frames, self.sampwidth, factor)
         return self
 
     def amplify(self, factor):
@@ -314,6 +319,7 @@ class Song(object):
         for name, sample in sorted(self.instruments.items()):
             cp["instruments"][name] = os.path.basename(sample.filename)
         for name, pattern in sorted(self.patterns.items()):
+            # Note: the layout of the patterns is not optimized for human viewing. You may want to edit it afterwards.
             cp["pattern."+name] = collections.OrderedDict(sorted(pattern.items()))
         with open(output_filename, 'w') as f:
             cp.write(f)
@@ -333,7 +339,8 @@ class Song(object):
 
 
 class Repl(cmd.Cmd):
-    def __init__(self, discard_unused_instruments=True):
+    """Interactive command line interface to load/record/save and play samples, patterns and whole tracks."""
+    def __init__(self, discard_unused_instruments=False):
         self.song = Song()
         self.discard_unused_instruments = discard_unused_instruments
         self.audio = pyaudio.PyAudio()
@@ -375,17 +382,20 @@ class Repl(cmd.Cmd):
         for instrument, bars in pattern.items():
             print("   {:>15s} = {:s}".format(instrument, bars))
 
-    def do_pattern(self, name):
-        """play the pattern with the given name"""
+    def do_pattern(self, names):
+        """play the pattern with the given name(s)"""
+        names = names.split()
+        for name in sorted(set(names)):
+            try:
+                pat = self.song.patterns[name]
+                self.print_pattern(name, pat)
+            except KeyError:
+                print("no such pattern '{:s}'".format(name))
+                return
+        patterns = [self.song.patterns[name] for name in names]
         try:
-            pat = self.song.patterns[name]
-            self.print_pattern(name, pat)
-        except KeyError:
-            print("no such pattern")
-            return
-        try:
-            m = Mixer([pat], self.song.bpm, self.song.ticks, self.song.instruments)
-            result = m.mix(verbose=False)
+            m = Mixer(patterns, self.song.bpm, self.song.ticks, self.song.instruments)
+            result = m.mix(verbose=len(patterns) > 1)
             self.play_sample(result)
         except ValueError as x:
             print("ERROR:", x)
@@ -439,10 +449,53 @@ class Repl(cmd.Cmd):
         os.remove(output)
 
     def do_rec(self, args):
-        """Record (or overwrite) a new instrument bar in a pattern.
-        Args: [pattern number] [instrument] [bar(s)].
-        Omit bars to remove the instrument from the pattern."""
-        raise NotImplementedError  # @todo
+        """Record (or overwrite) a new sample (instrument) bar in a pattern.
+        Args: [pattern name] [sample] [bar(s)].
+        Omit bars to remove the sample from the pattern.
+        If a pattern with the name doesn't exist yet it will be added."""
+        args = args.split(maxsplit=3)
+        if len(args) not in (2, 3):
+            print("Wrong arguments. Use: patternname sample bar(s)")
+            return
+        if len(args) == 2:
+            args.append(None)   # no bars
+        pattern_name, instrument, bars = args
+        if instrument not in self.song.instruments:
+            print("Unknown sample '{:s}'.".format(instrument))
+            return
+        if pattern_name not in self.song.patterns:
+            self.song.patterns[pattern_name] = {}
+        pattern = self.song.patterns[pattern_name]
+        if bars:
+            bars = bars.replace(' ', '')
+            if len(bars) % self.song.ticks != 0:
+                print("Bar length must be multiple of the number of ticks.")
+                return
+            pattern[instrument] = bars
+        else:
+            if instrument in pattern:
+                del pattern[instrument]
+        if pattern_name in self.song.patterns:
+            if not self.song.patterns[pattern_name]:
+                del self.song.patterns[pattern_name]
+                print("Pattern was empty and has been removed.")
+            else:
+                self.print_pattern(pattern_name, self.song.patterns[pattern_name])
+
+    def do_seq(self, names):
+        """
+        Print the sequence of patterns that form the current track,
+        or if you give a list of names: use that as the new pattern sequence.
+        """
+        if not names:
+            print("  ".join(self.song.pattern_sequence))
+            return
+        names = names.split()
+        for name in names:
+            if name not in self.song.patterns:
+                print("Unknown pattern '{:s}'.".format(name))
+                return
+        self.song.pattern_sequence = names
 
     def do_load(self, filename):
         """Load a new song file"""
@@ -460,7 +513,10 @@ class Repl(cmd.Cmd):
             return
         if not filename.endswith(".ini"):
             filename += ".ini"
-        self.song.write(filename)
+        if os.path.exists(filename):
+            print("Won't overwrite existing file '{:s}', choose another name.".format(filename))
+        else:
+            self.song.write(filename)
 
 
 def main(songfile, outputfile=None, interactive=False):
