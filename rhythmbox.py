@@ -247,7 +247,8 @@ class Song(object):
         self.output_path = None
         self.bpm = 0
         self.ticks = 0
-        self.patterns = []
+        self.pattern_sequence = []
+        self.patterns = {}
 
     def read(self, song_file, discard_unused_instruments=True):
         with open(song_file):
@@ -263,8 +264,8 @@ class Song(object):
         self.read_patterns(cp, cp['song']['patterns'].split())
         print("Done; {:d} instruments and {:d} patterns.".format(len(self.instruments), len(self.patterns)))
         unused_instruments = self.instruments.keys()
-        for pattern in self.patterns:
-            unused_instruments -= pattern.keys()
+        for pattern_name in self.pattern_sequence:
+            unused_instruments -= self.patterns[pattern_name].keys()
         if unused_instruments and discard_unused_instruments:
             for instrument in unused_instruments:
                 del self.instruments[instrument]
@@ -277,26 +278,28 @@ class Song(object):
             self.instruments[name] = Sample(wave_file=os.path.join(samples_path, file)).normalize().make_32bit(scale_amplitude=False).lock()
 
     def read_patterns(self, songdef, names):
-        self.patterns = []
+        self.pattern_sequence = []
+        self.patterns = {}
         for name in names:
-            pattern = {}
             if "pattern."+name not in songdef:
                 raise ValueError("pattern definition not found: "+name)
             bar_length = 0
+            self.patterns[name] = {}
             for instrument, bars in songdef["pattern."+name].items():
                 if instrument not in self.instruments:
                     raise ValueError("instrument '{instr:s}' not defined (pattern: {pattern:s})".format(instr=instrument, pattern=name))
                 bars = bars.replace(' ', '')
                 if len(bars) % self.ticks != 0:
                     raise ValueError("all patterns must be multiple of song ticks (pattern: {pattern:s}.{instr:s})".format(pattern=name, instr=instrument))
-                pattern[instrument] = bars
+                self.patterns[name][instrument] = bars
                 if 0 < bar_length != len(bars):
                     raise ValueError("all bars must be of equal length in the same pattern (pattern: {pattern:s}.{instr:s})".format(pattern=name, instr=instrument))
                 bar_length = len(bars)
-            self.patterns.append(pattern)
+            self.pattern_sequence.append(name)
 
     def mix(self, output_filename):
-        mixer = Mixer(self.patterns, self.bpm, self.ticks, self.instruments)
+        patterns = [self.patterns[name] for name in self.pattern_sequence]
+        mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
         result = mixer.mix()
         output_filename = os.path.join(self.output_path, output_filename)
         result.make_16bit()
@@ -339,33 +342,28 @@ class Repl(cmd.Cmd):
     def do_patterns(self, args):
         """show the loaded patterns"""
         print("Patterns:")
-        for num, pattern in enumerate(self.song.patterns, start=1):
-            self.print_pattern(num, pattern)
+        for name, pattern in sorted(self.song.patterns.items()):
+            self.print_pattern(name, pattern)
 
-    def print_pattern(self, num, pattern):
-        print("PATTERN #{:d}".format(num))
+    def print_pattern(self, name, pattern):
+        print("PATTERN {:s}".format(name))
         for instrument, bars in pattern.items():
             print("   {:>15s} = {:s}".format(instrument, bars))
 
-    def do_pattern(self, args):
-        """play the pattern with the given number"""
+    def do_pattern(self, name):
+        """play the pattern with the given name"""
         try:
-            pattern_nr = int(args)
+            pat = self.song.patterns[name]
+            self.print_pattern(name, pat)
+        except KeyError:
+            print("no such pattern")
+            return
+        try:
+            m = Mixer([pat], self.song.bpm, self.song.ticks, self.song.instruments)
+            result = m.mix(verbose=False)
+            self.play_sample(result)
         except ValueError as x:
             print("ERROR:", x)
-        else:
-            try:
-                pat = self.song.patterns[pattern_nr-1]
-                self.print_pattern(pattern_nr, pat)
-            except IndexError:
-                print("no such pattern")
-                return
-            try:
-                m = Mixer([pat], self.song.bpm, self.song.ticks, self.song.instruments)
-                result = m.mix(verbose=False)
-                self.play_sample(result)
-            except ValueError as x:
-                print("ERROR:", x)
 
     def do_play(self, args):
         """play a single sample by giving its name, add a bar (xx..x.. etc) to play it in a bar"""
@@ -416,12 +414,20 @@ class Repl(cmd.Cmd):
         """Record (or overwrite) a new instrument bar in a pattern.
         Args: [pattern number] [instrument] [bar(s)].
         Omit bars to remove the instrument from the pattern."""
-        raise NotImplementedError
+        raise NotImplementedError  # @todo
+
+    def do_load(self, filename):
+        """Load a new song file"""
+        raise NotImplementedError   # @todo
+
+    def do_save(self, filename):
+        """Save current song to file"""
+        raise NotImplementedError   # @todo
 
 
 def main(songfile, outputfile=None, interactive=False):
     song = Song()
-    song.read(songfile, discard_unused_instruments=False)
+    song.read(songfile, discard_unused_instruments=not interactive)
     repl = Repl(song)
     if interactive:
         repl.cmdloop("Interactive Samplebox session. Type 'help' for help on commands.")
