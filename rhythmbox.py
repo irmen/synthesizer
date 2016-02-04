@@ -5,7 +5,6 @@ import audioop
 import time
 import contextlib
 import pyaudio
-import tempfile
 import cmd
 if sys.version_info < (3, 0):
     raise RuntimeError("This module requires python 3.x")
@@ -26,11 +25,13 @@ class Sample(object):
         self.locked = False
         if wave_file:
             self.load_wav(wave_file)
+            self.filename = wave_file
         else:
             self.samplerate = self.norm_samplerate
             self.nchannels = self.norm_nchannels
             self.sampwidth = self.norm_sampwidth
             self.frames = frames
+            self.filename = None
         if duration > 0:
             if len(frames) > 0:
                 raise ValueError("cannot specify a duration if frames are provided")
@@ -41,6 +42,7 @@ class Sample(object):
         copy.sampwidth = self.sampwidth
         copy.samplerate = self.samplerate
         copy.nchannels = self.nchannels
+        copy.filename = self.filename
         return copy
 
     def lock(self):
@@ -206,6 +208,9 @@ class Mixer(object):
         self.ticks = ticks
 
     def mix(self, verbose=True):
+        if not self.patterns:
+            print("No patterns to mix, output is empty.")
+            return Sample()
         total_seconds = 0.0
         for p in self.patterns:
             bar = next(iter(p.values()))
@@ -236,7 +241,10 @@ class Mixer(object):
         elif missing < 0:
             mixed.cut(0, total_seconds)
         if verbose:
-            print("Mix done ({:.2f} triggers/sec).".format(total_nr_of_triggers/mixing_time))
+            if mixing_time > 0:
+                print("Mix done ({:.2f} triggers/sec).".format(total_nr_of_triggers/mixing_time))
+            else:
+                print("Mix done.")
         return mixed
 
 
@@ -297,7 +305,23 @@ class Song(object):
                 bar_length = len(bars)
             self.pattern_sequence.append(name)
 
+    def write(self, output_filename):
+        import collections
+        cp = ConfigParser(dict_type=collections.OrderedDict)
+        cp["paths"] = {"samples": self.sample_path, "output": self.output_path}
+        cp["song"] = {"bpm": self.bpm, "ticks": self.ticks, "patterns": " ".join(self.pattern_sequence)}
+        cp["instruments"] = {}
+        for name, sample in sorted(self.instruments.items()):
+            cp["instruments"][name] = os.path.basename(sample.filename)
+        for name, pattern in sorted(self.patterns.items()):
+            cp["pattern."+name] = collections.OrderedDict(sorted(pattern.items()))
+        with open(output_filename, 'w') as f:
+            cp.write(f)
+        print("Saved to '{:s}'.".format(output_filename))
+
     def mix(self, output_filename):
+        if not self.output_path or not self.pattern_sequence:
+            raise ValueError("There's nothing to be mixed; song has not yet been loaded.")
         patterns = [self.patterns[name] for name in self.pattern_sequence]
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
         result = mixer.mix()
@@ -309,8 +333,9 @@ class Song(object):
 
 
 class Repl(cmd.Cmd):
-    def __init__(self, song):
-        self.song = song
+    def __init__(self, discard_unused_instruments=True):
+        self.song = Song()
+        self.discard_unused_instruments = discard_unused_instruments
         self.audio = pyaudio.PyAudio()
         super(Repl, self).__init__()
 
@@ -403,7 +428,10 @@ class Repl(cmd.Cmd):
 
     def do_mix(self, args):
         """mix and play all patterns of the song"""
-        output = tempfile.mktemp(".wav")
+        if not self.song.pattern_sequence:
+            print("Nothing to be mixed.")
+            return
+        output = "_temp_mix.wav"
         self.song.mix(output)
         mix = Sample(wave_file=output)
         print("Playing sound...")
@@ -418,24 +446,36 @@ class Repl(cmd.Cmd):
 
     def do_load(self, filename):
         """Load a new song file"""
-        raise NotImplementedError   # @todo
+        song = Song()
+        try:
+            song.read(filename, self.discard_unused_instruments)
+            self.song = song
+        except IOError as x:
+            print("ERROR:", x)
 
     def do_save(self, filename):
         """Save current song to file"""
-        raise NotImplementedError   # @todo
+        if not filename:
+            print("Give filename to save song to.")
+            return
+        if not filename.endswith(".ini"):
+            filename += ".ini"
+        self.song.write(filename)
 
 
 def main(songfile, outputfile=None, interactive=False):
-    song = Song()
-    song.read(songfile, discard_unused_instruments=not interactive)
-    repl = Repl(song)
+    discard_unused = not interactive
     if interactive:
+        repl = Repl(discard_unused_instruments=discard_unused)
+        repl.do_load(songfile)
         repl.cmdloop("Interactive Samplebox session. Type 'help' for help on commands.")
     else:
+        song = Song()
+        song.read(songfile, discard_unused_instruments=discard_unused)
         song.mix(outputfile)
         mix = Sample(wave_file=outputfile)
         print("Playing sound...")
-        repl.play_sample(mix)
+        Repl().play_sample(mix)
 
 
 def usage():
@@ -447,7 +487,6 @@ if __name__ == "__main__":
         usage()
     interactive = None
     if len(sys.argv) == 3:
-        print("ARGS", sys.argv, sys.argv[1:3])
         song_file, interactive = sys.argv[1:3]
         if song_file == "-i":
             song_file = interactive
