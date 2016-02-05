@@ -1,6 +1,12 @@
 """
 Sample mixer and sequencer meant to create rhythms. Inspired by the Roland TR-909.
-Written by Irmen de Jong (irmen@razorvine.net)
+Uses PyAudio (https://pypi.python.org/pypi/PyAudio) for playing sound.
+
+Sample mix rate is configured at 44.1 khz. You may want to change this if most of
+the samples you're using are of a different sample rate (such as 48Khz), to avoid
+the slight loss of quality due to resampling.
+
+Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 import sys
 import os
@@ -19,9 +25,9 @@ __all__ = ["Sample", "Mixer", "Song", "Repl"]
 
 class Sample(object):
     """
-    Audio sample data, usually normalized to a fixed set of parameters: 16 bit stereo 48000khz.
+    Audio sample data, usually normalized to a fixed set of parameters: 16 bit stereo 44.1 Khz
     """
-    norm_samplerate = 48000
+    norm_samplerate = 44100
     norm_nchannels = 2
     norm_sampwidth = 2
 
