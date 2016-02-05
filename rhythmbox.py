@@ -188,18 +188,34 @@ class Sample(object):
             other_frames = other.frames[:other.frame_idx(other_seconds)]
         else:
             other_frames = other.frames
-        required_length = start_frame_idx + len(other_frames)
-        if required_length > len(self.frames):
-            # we need to extend the current sample buffer to make room for the mixed sample at the end
-            self.frames += b"\0"*(required_length - len(self.frames))
-        pre = self.frames[:start_frame_idx]
-        to_mix = self.frames[start_frame_idx:start_frame_idx+len(other_frames)]
-        post = self.frames[start_frame_idx+len(other_frames):]
+        # Mix the frames. Unfortunately audioop requires splitting and copying the sample data, which is slow.
+        pre, to_mix, post = self._mix_split_frames(other_frames, start_frame_idx)
         self.frames = None  # allow for garbage collection
         mixed = audioop.add(to_mix, other_frames, self.sampwidth)
         del to_mix  # more garbage collection
-        self.frames = pre+mixed+post
+        self.frames = self._mix_join_frames(pre, mixed, post)
         return self
+
+    def _mix_join_frames(self, pre, mid, post):     # XXX slow due to copying
+        if post:
+            return pre + mid + post
+        elif mid:
+            return pre + mid
+        else:
+            return pre
+
+    def _mix_split_frames(self, other_frames, start_frame_idx):    # XXX slow due to copying
+        self._mix_grow_if_needed(start_frame_idx, len(other_frames))
+        pre = self.frames[:start_frame_idx]
+        to_mix = self.frames[start_frame_idx:start_frame_idx + len(other_frames)]
+        post = self.frames[start_frame_idx + len(other_frames):]
+        return pre, to_mix, post
+
+    def _mix_grow_if_needed(self, start_frame_idx, other_length):    # XXX slow due to copying
+        required_length = start_frame_idx + other_length
+        if required_length > len(self.frames):
+            # we need to extend the current sample buffer to make room for the mixed sample at the end
+            self.frames += b"\0" * (required_length - len(self.frames))
 
 
 class Mixer(object):
