@@ -1,6 +1,7 @@
 """
 Sample mixer and sequencer meant to create rhythms. Inspired by the Roland TR-909.
-Uses PyAudio (https://pypi.python.org/pypi/PyAudio) for playing sound.
+Uses PyAudio (https://pypi.python.org/pypi/PyAudio) for playing sound. On windows
+it can fall back to using the winsound module if pysound isn't available.
 
 Sample mix rate is configured at 44.1 khz. You may want to change this if most of
 the samples you're using are of a different sample rate (such as 48Khz), to avoid
@@ -14,7 +15,11 @@ import wave
 import audioop
 import time
 import contextlib
-import pyaudio
+try:
+    import pyaudio
+except ImportError:
+    pyaudio = None
+    import winsound
 import cmd
 if sys.version_info < (3, 0):
     raise RuntimeError("This module requires python 3.x")
@@ -87,12 +92,12 @@ class Sample(object):
     def normalize(self):
         assert not self.locked
         if self.samplerate != self.norm_samplerate:
-            # convert sample rate
+            # Convert sample rate. Note: resampling causes slight loss of sound quality.
             self.frames = audioop.ratecv(self.frames, self.sampwidth, self.nchannels, self.samplerate, self.norm_samplerate, None)[0]
             self.samplerate = self.norm_samplerate
         if self.sampwidth != self.norm_sampwidth:
             # Convert to 16 bit sample size.
-            # Note that Python 3.4+ is required to be able to convert from 24 bits sample sizes.
+            # Note that Python 3.4+ is required to support 24 bits sample sizes.
             self.frames = audioop.lin2lin(self.frames, self.sampwidth, self.norm_sampwidth)
             self.sampwidth = self.norm_sampwidth
         if self.nchannels == 1:
@@ -349,13 +354,17 @@ class Repl(cmd.Cmd):
     def __init__(self, discard_unused_instruments=False):
         self.song = Song()
         self.discard_unused_instruments = discard_unused_instruments
-        self.audio = pyaudio.PyAudio()
+        if pyaudio:
+            self.audio = pyaudio.PyAudio()
+        else:
+            self.audio = None
         super(Repl, self).__init__()
 
     def do_quit(self, args):
         """quits the session"""
         print("Bye.", args)
-        self.audio.terminate()
+        if self.audio:
+            self.audio.terminate()
         return True
 
     def do_bpm(self, bpm):
@@ -428,11 +437,18 @@ class Repl(cmd.Cmd):
     def play_sample(self, sample):
         if sample.sampwidth not in (2, 3):
             sample = sample.dup().make_16bit()
-        with contextlib.closing(self.audio.open(
-                format=self.audio.get_format_from_width(sample.sampwidth),
-                channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
-            stream.write(sample.frames)
-            time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+        if self.audio:
+            with contextlib.closing(self.audio.open(
+                    format=self.audio.get_format_from_width(sample.sampwidth),
+                    channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
+                stream.write(sample.frames)
+                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+        else:
+            # try to fallback to winsound (only works on windows)
+            sample_file = "__temp_sample.wav"
+            sample.write_wav(sample_file)
+            winsound.PlaySound(sample_file, winsound.SND_FILENAME)
+            os.remove(sample_file)
 
     def play_single_bar(self, sample, pattern):
         try:
@@ -447,7 +463,7 @@ class Repl(cmd.Cmd):
         if not self.song.pattern_sequence:
             print("Nothing to be mixed.")
             return
-        output = "_temp_mix.wav"
+        output = "__temp_mix.wav"
         self.song.mix(output)
         mix = Sample(wave_file=output)
         print("Playing sound...")
