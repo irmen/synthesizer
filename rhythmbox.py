@@ -285,29 +285,30 @@ class Song(object):
         self.instruments = {}
         self.sample_path = None
         self.output_path = None
-        self.bpm = 0
-        self.ticks = 0
+        self.bpm = 128
+        self.ticks = 4
         self.pattern_sequence = []
         self.patterns = {}
 
     def read(self, song_file, discard_unused_instruments=True):
         with open(song_file):
-            pass    # test for file existance
+            pass    # test for file existence
         print("Loading song...")
         cp = ConfigParser()
         cp.read(song_file)
         self.sample_path = cp['paths']['samples']
         self.output_path = cp['paths']['output']
-        self.bpm = cp['song'].getint('bpm')
-        self.ticks = cp['song'].getint('ticks')
         self.read_samples(cp['instruments'], self.sample_path)
-        self.read_patterns(cp, cp['song']['patterns'].split())
+        if 'song' in cp:
+            self.bpm = cp['song'].getint('bpm')
+            self.ticks = cp['song'].getint('ticks')
+            self.read_patterns(cp, cp['song']['patterns'].split())
         print("Done; {:d} instruments and {:d} patterns.".format(len(self.instruments), len(self.patterns)))
         unused_instruments = self.instruments.keys()
         for pattern_name in self.pattern_sequence:
             unused_instruments -= self.patterns[pattern_name].keys()
         if unused_instruments and discard_unused_instruments:
-            for instrument in unused_instruments:
+            for instrument in list(unused_instruments):
                 del self.instruments[instrument]
             print("Warning: there are unused instruments. I've unloaded them from memory.")
             print("The unused instruments are:", ", ".join(sorted(unused_instruments)))
@@ -354,7 +355,7 @@ class Song(object):
 
     def mix(self, output_filename):
         if not self.output_path or not self.pattern_sequence:
-            raise ValueError("There's nothing to be mixed; song has not yet been loaded.")
+            raise ValueError("There's nothing to be mixed; no song loaded or song has no patterns.")
         patterns = [self.patterns[name] for name in self.pattern_sequence]
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
         result = mixer.mix()
@@ -366,7 +367,11 @@ class Song(object):
 
 
 class Repl(cmd.Cmd):
-    """Interactive command line interface to load/record/save and play samples, patterns and whole tracks."""
+    """
+    Interactive command line interface to load/record/save and play samples, patterns and whole tracks.
+    Currently it has no way of defining and loading samples manually. This means you need to initialize
+    it with a track file containing at least the instruments (samples) that you will be using.
+    """
     def __init__(self, discard_unused_instruments=False):
         self.song = Song()
         self.discard_unused_instruments = discard_unused_instruments
@@ -488,10 +493,10 @@ class Repl(cmd.Cmd):
 
     def do_rec(self, args):
         """Record (or overwrite) a new sample (instrument) bar in a pattern.
-        Args: [pattern name] [sample] [bar(s)].
-        Omit bars to remove the sample from the pattern.
-        If a pattern with the name doesn't exist yet it will be added."""
-        args = args.split(maxsplit=3)
+Args: [pattern name] [sample] [bar(s)].
+Omit bars to remove the sample from the pattern.
+If a pattern with the name doesn't exist yet it will be added."""
+        args = args.split(maxsplit=2)
         if len(args) not in (2, 3):
             print("Wrong arguments. Use: patternname sample bar(s)")
             return
@@ -521,10 +526,7 @@ class Repl(cmd.Cmd):
                 self.print_pattern(pattern_name, self.song.patterns[pattern_name])
 
     def do_seq(self, names):
-        """
-        Print the sequence of patterns that form the current track,
-        or if you give a list of names: use that as the new pattern sequence.
-        """
+        """Print the sequence of patterns that form the current track, or if you give a list of names: use that as the new pattern sequence."""
         if not names:
             print("  ".join(self.song.pattern_sequence))
             return
@@ -552,20 +554,20 @@ class Repl(cmd.Cmd):
         if not filename.endswith(".ini"):
             filename += ".ini"
         if os.path.exists(filename):
-            print("Won't overwrite existing file '{:s}', choose another name.".format(filename))
-        else:
-            self.song.write(filename)
+            if input("File exists: '{:s}'. Overwrite y/n? ".format(filename)) not in ('y', 'yes'):
+                return
+        self.song.write(filename)
 
 
-def main(songfile, outputfile=None, interactive=False):
+def main(track_file, outputfile=None, interactive=False):
     discard_unused = not interactive
     if interactive:
         repl = Repl(discard_unused_instruments=discard_unused)
-        repl.do_load(songfile)
+        repl.do_load(track_file)
         repl.cmdloop("Interactive Samplebox session. Type 'help' for help on commands.")
     else:
         song = Song()
-        song.read(songfile, discard_unused_instruments=discard_unused)
+        song.read(track_file, discard_unused_instruments=discard_unused)
         song.mix(outputfile)
         mix = Sample(wave_file=outputfile)
         print("Playing sound...")
@@ -573,21 +575,27 @@ def main(songfile, outputfile=None, interactive=False):
 
 
 def usage():
-    print("Give track file as argument. Add -i parameter to enter interactive mode instead of mixing directly.")
+    print("Arguments:  [-i] trackfile.ini")
+    print("   -i = start interactive editing mode")
     raise SystemExit(1)
 
 if __name__ == "__main__":
     if len(sys.argv) not in (2, 3):
         usage()
-    interactive = None
-    if len(sys.argv) == 3:
-        song_file, interactive = sys.argv[1:3]
-        if song_file == "-i":
-            song_file = interactive
-        elif interactive != "-i":
+    track_file = None
+    interactive = False
+    if len(sys.argv) == 2:
+        if sys.argv[1] == "-i":
+            usage()  # need a trackfile as well to at least initialize the samples
+        else:
+            track_file = sys.argv[1]
+    elif len(sys.argv) == 3:
+        if sys.argv[1] != "-i":
             usage()
-        main(song_file, interactive=True)
+        interactive = True
+        track_file = sys.argv[2]
+    if interactive:
+        main(track_file, interactive=True)
     else:
-        song_file = sys.argv[1]
-        output_file = os.path.splitext(song_file)[0]+".wav"
-        main(song_file, output_file)
+        output_file = os.path.splitext(track_file)[0]+".wav"
+        main(track_file, output_file)
