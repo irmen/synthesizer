@@ -240,8 +240,12 @@ class Mixer(object):
         self.ticks = ticks
 
     def mix(self, verbose=True):
+        """
+        Mix all the patterns into a single result sample.
+        """
         if not self.patterns:
-            print("No patterns to mix, output is empty.")
+            if verbose:
+                print("No patterns to mix, output is empty.")
             return Sample()
         total_seconds = 0.0
         for p in self.patterns:
@@ -250,22 +254,10 @@ class Mixer(object):
         if verbose:
             print("Mixing {:d} patterns...".format(len(self.patterns)))
         mixed = Sample().make_32bit()
-        timestamp = 0.0
-        start_time = time.time()
-        total_nr_of_triggers = 0
-        for num, pattern in enumerate(self.patterns, start=1):
+        for index, timestamp, sample in self.mixed_samples():
             if verbose:
-                print("  pattern {:d}".format(num))
-            pattern = list(pattern.items())  # make it indexable
-            num_triggers = len(pattern[0][1])
-            for i in range(num_triggers):
-                for instrument, bars in pattern:
-                    if bars[i] not in ". ":
-                        sample = self.instruments[instrument]
-                        mixed.mix_at(timestamp, sample)
-                timestamp += 60.0 / self.bpm / self.ticks
-            total_nr_of_triggers += num_triggers
-        mixing_time = time.time()-start_time
+                print("\r{:3.0f} % ".format(timestamp/total_seconds*100), end="")
+            mixed.mix_at(timestamp, sample)
         # chop/extend to get to the precise total duration (in case of silence in the last bars etc)
         missing = total_seconds-mixed.duration
         if missing > 0:
@@ -273,11 +265,44 @@ class Mixer(object):
         elif missing < 0:
             mixed.cut(0, total_seconds)
         if verbose:
-            if mixing_time > 0:
-                print("Mix done ({:.2f} triggers/sec).".format(total_nr_of_triggers/mixing_time))
-            else:
-                print("Mix done.")
+            print("\rMix done.")
         return mixed
+
+    def mixed_triggers(self):
+        """
+        Generator for all triggers in chronological sequence.
+        Every element is a tuple: (trigger index, time offset (seconds), list of (instrumentname, sample tuples)
+        """
+        time_per_index = 60.0 / self.bpm / self.ticks
+        index = 0
+        for num, pattern in enumerate(self.patterns, start=1):
+            pattern = list(pattern.items())  # make it indexable
+            num_triggers = len(pattern[0][1])
+            for i in range(num_triggers):
+                triggers = []
+                for instrument, bars in pattern:
+                    if bars[i] not in ". ":
+                        sample = self.instruments[instrument]
+                        triggers.append((instrument, sample))
+                if triggers:
+                    yield index, time_per_index*index, triggers
+                index += 1
+
+    def mixed_samples(self):
+        """
+        Generator for all samples-to-mix.
+        Every element is a tuple: (trigger index, time offset (seconds), sample)
+        """
+        for index, timestamp, triggers in self.mixed_triggers():
+            if len(triggers) > 1:
+                # mix the triggers then yield the resulting sample
+                mixed = Sample().make_32bit()
+                for instrument, sample in triggers:
+                    mixed.mix_at(0, sample)
+                yield index, timestamp, mixed
+            else:
+                # simply yield the unmixed sample from the single trigger
+                yield index, timestamp, triggers[0][1]
 
 
 class Song(object):
@@ -364,6 +389,11 @@ class Song(object):
         result.write_wav(output_filename)
         print("Output is {:.2f} seconds, written to: {:s}".format(result.duration, output_filename))
         return result
+
+    def mixed_triggers(self):
+        patterns = [self.patterns[name] for name in self.pattern_sequence]
+        mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
+        yield from mixer.mixed_triggers()
 
 
 class Repl(cmd.Cmd):
@@ -570,8 +600,8 @@ def main(track_file, outputfile=None, interactive=False):
         song.read(track_file, discard_unused_instruments=discard_unused)
         song.mix(outputfile)
         mix = Sample(wave_file=outputfile)
-        print("Playing sound...")
-        Repl().play_sample(mix)
+        # XXX print("Playing sound...")
+        # XXX Repl().play_sample(mix)
 
 
 def usage():
