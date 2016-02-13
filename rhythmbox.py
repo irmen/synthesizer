@@ -301,16 +301,16 @@ class Mixer(object):
         mix_cache = {}  # we cache stuff to avoid repeated mixes of the same instruments
         for index, timestamp, triggers in self.mixed_triggers():
             if len(triggers) > 1:
-                instruments_key = tuple(sorted(instrument for instrument, _ in triggers))
+                # sort the samples to have the longest one as the first
+                # this allows us to allocate the target mix buffer efficiently
+                triggers = sorted(triggers, key=lambda t: t[1].duration, reverse=True)
+                instruments_key = tuple(instrument for instrument, _ in triggers)
                 if instruments_key in mix_cache:
                     yield index, timestamp, mix_cache[instruments_key]
                     continue
-                # find the longest sample and create a copy of that to mix the others into
-                longest_sample = max((s for _, s in triggers), key=lambda s: s.duration)
-                mixed = longest_sample.dup()
-                for instrument, sample in triggers:
-                    if sample is longest_sample:
-                        continue  # we started with this one, so don't mix it again
+                # duplicate the longest sample as target mix buffer, then mix the remaining samples into it
+                mixed = triggers[0][1].dup()
+                for _, sample in triggers[1:]:
                     mixed.mix(sample)
                 mixed.lock()
                 mix_cache[instruments_key] = mixed   # cache the mixed instruments sample
