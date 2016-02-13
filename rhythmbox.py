@@ -272,7 +272,7 @@ class Mixer(object):
         if verbose:
             print("Mixing {:d} patterns...".format(len(self.patterns)))
         mixed = Sample().make_32bit()
-        for index, timestamp, sample in self.mixed_samples():
+        for index, timestamp, sample in self.mixed_samples(tracker=False):
             if verbose:
                 print("\r{:3.0f} % ".format(timestamp/total_seconds*100), end="")
             mixed.mix_at(timestamp, sample)
@@ -331,7 +331,7 @@ class Mixer(object):
         mixed_duration += mixed.duration
         yield mixed
 
-    def mixed_triggers(self):
+    def mixed_triggers(self, tracker):
         """
         Generator for all triggers in chronological sequence.
         Every element is a tuple: (trigger index, time offset (seconds), list of (instrumentname, sample tuples)
@@ -350,18 +350,19 @@ class Mixer(object):
                         triggers.append((instrument, sample))
                         triggered_instruments.add(instrument)
                 if triggers:
-                    triggerdots = ['#' if instr in triggered_instruments else '.' for instr in self.instruments]
-                    print("\r{:3d} [{:3d}] ".format(index, pattern_nr), "".join(triggerdots), end="   ", flush=True)
+                    if tracker:
+                        triggerdots = ['#' if instr in triggered_instruments else '.' for instr in self.instruments]
+                        print("\r{:3d} [{:3d}] ".format(index, pattern_nr), "".join(triggerdots), end="   ", flush=True)
                     yield index, time_per_index*index, triggers
                 index += 1
 
-    def mixed_samples(self):
+    def mixed_samples(self, tracker=True):
         """
         Generator for all samples-to-mix.
         Every element is a tuple: (trigger index, time offset (seconds), sample)
         """
         mix_cache = {}  # we cache stuff to avoid repeated mixes of the same instruments
-        for index, timestamp, triggers in self.mixed_triggers():
+        for index, timestamp, triggers in self.mixed_triggers(tracker):
             if len(triggers) > 1:
                 # sort the samples to have the longest one as the first
                 # this allows us to allocate the target mix buffer efficiently
@@ -629,6 +630,17 @@ class Repl(cmd.Cmd):
         self.play_sample(mix)
         os.remove(output)
 
+    def do_stream(self, args):
+        """mix all patterns of the song in real time and stream the output"""
+        if not self.song.pattern_sequence:
+            print("Nothing to be mixed.")
+            return
+        print("Mixing and streaming...")
+        try:
+            self.play_samples(self.song.mix_generator())
+        except KeyboardInterrupt:
+            print("Stopped.")
+
     def do_rec(self, args):
         """Record (or overwrite) a new sample (instrument) bar in a pattern.
 Args: [pattern name] [sample] [bar(s)].
@@ -706,12 +718,16 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
-        Repl().play_samples(song.mix_generator())   # mix and stream output in real time
-        # XXX Use this to mix into one big output sample and then play that afterwards:
-        # song.mix(outputfile)
-        # mix = Sample(wave_file=outputfile)
-        # print("Playing sound...")
-        # Repl().play_sample(mix)
+        if pyaudio:
+            # mix and stream output in real time
+            Repl().play_samples(song.mix_generator())
+        else:
+            # pyaudio is needed to stream, fallback on mixing everything to a wav
+            print("(Sorry, you don't have pyaudio installed. Streaming audio is not possible.)")
+            song.mix(outputfile)
+            mix = Sample(wave_file=outputfile)
+            print("Playing sound...")
+            Repl().play_sample(mix)
 
 
 def usage():
