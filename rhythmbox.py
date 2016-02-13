@@ -591,7 +591,6 @@ class Repl(cmd.Cmd):
         if self.audio:
             with contextlib.closing(self.audio.open(
                     format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
-                print("Mixing and streaming...")
                 for sample in samples:
                     if sample.sampwidth != 2:
                         # We can't use automatic global max amplitude because we're streaming
@@ -720,6 +719,7 @@ def main(track_file, outputfile=None, interactive=False):
         song.read(track_file, discard_unused_instruments=discard_unused)
         if pyaudio:
             # mix and stream output in real time
+            print("Mixing and streaming...")
             Repl().play_samples(song.mix_generator())
         else:
             # pyaudio is needed to stream, fallback on mixing everything to a wav
