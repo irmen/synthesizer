@@ -338,16 +338,20 @@ class Mixer(object):
         """
         time_per_index = 60.0 / self.bpm / self.ticks
         index = 0
-        for num, pattern in enumerate(self.patterns, start=1):
+        for pattern_nr, pattern in enumerate(self.patterns, start=1):
             pattern = list(pattern.items())
             num_triggers = len(pattern[0][1])
             for i in range(num_triggers):
                 triggers = []
+                triggered_instruments = set()
                 for instrument, bars in pattern:
                     if bars[i] not in ". ":
                         sample = self.instruments[instrument]
                         triggers.append((instrument, sample))
+                        triggered_instruments.add(instrument)
                 if triggers:
+                    triggerdots = ['#' if instr in triggered_instruments else '.' for instr in self.instruments]
+                    print("\r{:3d} [{:3d}] ".format(index, pattern_nr), "".join(triggerdots), end="   ", flush=True)
                     yield index, time_per_index*index, triggers
                 index += 1
 
@@ -586,7 +590,7 @@ class Repl(cmd.Cmd):
         if self.audio:
             with contextlib.closing(self.audio.open(
                     format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
-                print("Mixing and streaming", end="", flush=True)
+                print("Mixing and streaming...")
                 for sample in samples:
                     if sample.sampwidth != 2:
                         # We can't use automatic global max amplitude because we're streaming
@@ -595,12 +599,11 @@ class Repl(cmd.Cmd):
                     assert sample.nchannels == 2
                     assert sample.samplerate == 44100
                     assert sample.sampwidth == 2
-                    print(".", end="", flush=True)
                     sample.write_frames(stream)
                 filler = b"\0\0\0\0"*stream.get_write_available()
                 stream.write(filler)
                 time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
-                print()
+                print("\r                          ")
         else:
             # winsound doesn't cut it when playing many small sample files...
             raise RuntimeError("Sorry but pyaudio cannot be found. You need it to play streaming audio output.")
@@ -703,13 +706,12 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
+        Repl().play_samples(song.mix_generator())   # mix and stream output in real time
         # XXX Use this to mix into one big output sample and then play that afterwards:
         # song.mix(outputfile)
         # mix = Sample(wave_file=outputfile)
         # print("Playing sound...")
         # Repl().play_sample(mix)
-        # XXX use this to mix and stream the output in real time instead:
-        Repl().play_samples(song.mix_generator())
 
 
 def usage():
