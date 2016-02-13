@@ -212,7 +212,8 @@ class Sample(object):
         self.__frames = self._mix_join_frames(pre, mixed, post)
         return self
 
-    def _mix_join_frames(self, pre, mid, post):     # XXX slow due to copying
+    # XXX slow due to copying (but only significant when not streaming)
+    def _mix_join_frames(self, pre, mid, post):
         if post:
             return pre + mid + post
         elif mid:
@@ -220,14 +221,16 @@ class Sample(object):
         else:
             return pre
 
-    def _mix_split_frames(self, other_frames_length, start_frame_idx):    # XXX slow due to copying
+    # XXX slow due to copying (but only significant when not streaming)
+    def _mix_split_frames(self, other_frames_length, start_frame_idx):
         self._mix_grow_if_needed(start_frame_idx, other_frames_length)
         pre = self.__frames[:start_frame_idx]
         to_mix = self.__frames[start_frame_idx:start_frame_idx + other_frames_length]
         post = self.__frames[start_frame_idx + other_frames_length:]
         return pre, to_mix, post
 
-    def _mix_grow_if_needed(self, start_frame_idx, other_length):    # XXX slow due to copying
+    # XXX slow due to copying (but only significant when not streaming)
+    def _mix_grow_if_needed(self, start_frame_idx, other_length):
         required_length = start_frame_idx + other_length
         if required_length > len(self.__frames):
             # we need to extend the current sample buffer to make room for the mixed sample at the end
@@ -587,8 +590,8 @@ class Repl(cmd.Cmd):
                 for sample in samples:
                     if sample.sampwidth != 2:
                         # We can't use automatic global max amplitude because we're streaming
-                        # dozens of samples individually. So I chose some fixed amplification value instead.
-                        sample = sample.amplify(32000).make_16bit(False)
+                        # the samples individually. So I chose some fixed amplification value instead.
+                        sample = sample.amplify(26000).make_16bit(False)
                     assert sample.nchannels == 2
                     assert sample.samplerate == 44100
                     assert sample.sampwidth == 2
@@ -700,11 +703,12 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
+        # XXX Use this to mix into one big output sample and then play that afterwards:
         # song.mix(outputfile)
         # mix = Sample(wave_file=outputfile)
         # print("Playing sound...")
         # Repl().play_sample(mix)
-        # XXX use this to stream the output:
+        # XXX use this to mix and stream the output in real time instead:
         Repl().play_samples(song.mix_generator())
 
 
