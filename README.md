@@ -70,4 +70,4 @@ To load your track file and start the interactive command line interface:
 
 ...then type ``help`` to see what commands are available.
 
-
+A few example tracks are provided (track1.ini, track2.ini, track3.ini) - try them out!
