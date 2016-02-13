@@ -20,6 +20,18 @@ On windows you can even run it without having pyaudio installed (it will use win
 You assemble rhythm samples into bars and patterns, which are then mixed.
 Samples have to be in .wav format but can be anything that the Python wave module understands. 
 The 'track' files are in a simple .ini format and can be edited with any text editor.
+Most of the file should be self explanatory but here are a few tips:
+
+- Song bpm means beats per minute, which translates in how many *bars* are played per minute.
+  If you put one kick/bass drum trigger in one bar, it exactly hits the specified number of beats per minute.
+- Song ticks means how many *ticks* (or *triggers*) are in one bar. More ticks means more resolution. Nice for fast hi-hats.
+- A *bar* is a sequence of instrument *ticks* (or *triggers*) where '.' means nothing is played at that instant,
+  and another character such as 'x' means that the sample is played at that instant.
+- you can separate bars with whitespace for easier readability
+- pattern names are prefixed with ``pattern.`` when writing their section (ini file limitation, you can't nest things)
+- patterns can contain one or more bars per instrument (so you can have long and short patterns). However inside
+  a pattern every instrument has to have the same number of bars.
+  
 
 Here is a very simple example of a track file:
 
@@ -70,4 +82,8 @@ To load your track file and start the interactive command line interface:
 
 ...then type ``help`` to see what commands are available.
 
-A few example tracks are provided (track1.ini, track2.ini, track3.ini) - try them out!
+A few example tracks are provided, try them out!
+
+- track1.ini  - a short jungle-ish fragment
+- track2.ini  - a somewhat longer classic rhythm loop, I guess it's in 4/4 time
+- track3.ini  - an experiment with a few liquid drum'n'bass type patterns
