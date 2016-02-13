@@ -92,7 +92,7 @@ class Sample(object):
             out.setparams((self.nchannels, self.sampwidth, self.samplerate, 0, "NONE", "not compressed"))
             out.writeframes(self.__frames)
 
-    def write_stream(self, stream):
+    def write_frames(self, stream):
         stream.write(self.__frames)
 
     def normalize(self):
@@ -160,6 +160,16 @@ class Sample(object):
         if end != len(self.__frames):
             self.__frames = self.__frames[start:end]
         return self
+
+    def cutoff(self, duration):
+        assert not self.locked
+        end = self.frame_idx(duration)
+        if end != len(self.__frames):
+            chopped = self.dup()
+            chopped.__frames = self.__frames[end:]
+            self.__frames = self.__frames[:end]
+            return chopped
+        return None
 
     def append(self, seconds):
         assert not self.locked
@@ -272,6 +282,52 @@ class Mixer(object):
         if verbose:
             print("\rMix done.")
         return mixed
+
+    def mix_generator(self):
+        """
+        Returns a generator that produces samples that are the chronological
+        chunks of the final output mix. This avoids having to mix it into one big
+        output mix sample.
+        """
+        if not self.patterns:
+            yield Sample()
+            return
+        total_seconds = 0.0
+        for p in self.patterns:
+            bar = next(iter(p.values()))
+            total_seconds += len(bar) * 60.0 / self.bpm / self.ticks
+        mixed_duration = 0.0
+        samples = self.mixed_samples()
+        # get the first sample
+        index, previous_timestamp, sample = next(samples)
+        mixed = Sample().make_32bit()
+        mixed.mix_at(previous_timestamp, sample)
+        # continue mixing the following samples
+        for index, timestamp, sample in samples:
+            trigger_duration = timestamp-previous_timestamp
+            overflow = None
+            if mixed.duration < trigger_duration:
+                # fill with some silence to reach the next sample position
+                mixed.append(trigger_duration-mixed.duration)
+            elif mixed.duration > trigger_duration:
+                # chop off the sound that extends into the next sample position
+                # keep this overflow and mix it later!
+                # XXX the audio still seems to stutter when using this, not sure why
+                overflow = mixed.cutoff(trigger_duration)
+            mixed_duration += mixed.duration
+            yield mixed
+            mixed = overflow if overflow else Sample().make_32bit()
+            mixed.mix(sample)
+            previous_timestamp = timestamp
+        # output the last remaining sample and extend it to the end of the duration if needed
+        timestamp = total_seconds
+        trigger_duration = timestamp-previous_timestamp
+        if mixed.duration < trigger_duration:
+            mixed.append(trigger_duration-mixed.duration)
+        elif mixed.duration > trigger_duration:
+            mixed.cut(0, trigger_duration)
+        mixed_duration += mixed.duration
+        yield mixed
 
     def mixed_triggers(self):
         """
@@ -410,6 +466,11 @@ class Song(object):
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
         yield from mixer.mixed_triggers()
 
+    def mix_generator(self):
+        patterns = [self.patterns[name] for name in self.pattern_sequence]
+        mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
+        yield from mixer.mix_generator()
+
 
 class Repl(cmd.Cmd):
     """
@@ -516,6 +577,33 @@ class Repl(cmd.Cmd):
             winsound.PlaySound(sample_file, winsound.SND_FILENAME)
             os.remove(sample_file)
 
+    def play_samples(self, samples):
+        """play all the samples immediately after each other."""
+        if self.audio:
+            with contextlib.closing(self.audio.open(
+                    format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
+                print("streaming samples", end="", flush=True)  # XXX
+                for sample in samples:
+                    if sample.sampwidth != 2:
+                        sample = sample.make_16bit()
+                    assert sample.nchannels == 2
+                    assert sample.samplerate == 44100
+                    assert sample.sampwidth == 2
+                    print(".", end="", flush=True)  # XXX
+                    sample.write_frames(stream)
+                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+                print()
+        else:
+            # try to fallback to winsound (only works on windows)
+            sample_file = "__temp_sample.wav"
+            for sample in samples:
+                if sample.sampwidth not in (2, 3):
+                    sample = sample.make_16bit()
+                sample.write_wav(sample_file)
+                winsound.PlaySound(sample_file, winsound.SND_FILENAME)
+                os.remove(sample_file)
+
+
     def play_single_bar(self, sample, pattern):
         try:
             m = Mixer([{"sample": pattern}], self.song.bpm, self.song.ticks, {"sample": sample})
@@ -613,10 +701,12 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
-        song.mix(outputfile)
-        mix = Sample(wave_file=outputfile)
-        # XXX print("Playing sound...")
-        # XXX Repl().play_sample(mix)
+        #song.mix(outputfile)
+        #mix = Sample(wave_file=outputfile)
+        #print("Playing sound...")
+        #Repl().play_sample(mix)
+        # XXX use this to stream the output:
+        Repl().play_samples(song.mix_generator())
 
 
 def usage():
