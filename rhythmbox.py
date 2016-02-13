@@ -31,6 +31,8 @@ __all__ = ["Sample", "Mixer", "Song", "Repl"]
 class Sample(object):
     """
     Audio sample data, usually normalized to a fixed set of parameters: 16 bit stereo 44.1 Khz
+    To avoid easy mistakes and problems, it is not possible to directly access the audio sample frames.
+    All operations that manipulate the sample frames are implemented as methods on the object.
     """
     norm_samplerate = 44100
     norm_nchannels = 2
@@ -45,7 +47,7 @@ class Sample(object):
             self.samplerate = self.norm_samplerate
             self.nchannels = self.norm_nchannels
             self.sampwidth = self.norm_sampwidth
-            self.frames = frames
+            self.__frames = frames
             self.filename = None
         if duration > 0:
             if len(frames) > 0:
@@ -53,11 +55,12 @@ class Sample(object):
             self.append(duration)
 
     def dup(self):
-        copy = Sample(self.frames)
+        copy = Sample(self.__frames)
         copy.sampwidth = self.sampwidth
         copy.samplerate = self.samplerate
         copy.nchannels = self.nchannels
         copy.filename = self.filename
+        copy.locked = False
         return copy
 
     def lock(self):
@@ -66,7 +69,7 @@ class Sample(object):
 
     @property
     def duration(self):
-        return len(self.frames) / self.samplerate / self.sampwidth / self.nchannels
+        return len(self.__frames) / self.samplerate / self.sampwidth / self.nchannels
 
     def frame_idx(self, seconds):
         return self.nchannels*self.sampwidth*int(self.samplerate*seconds)
@@ -78,7 +81,7 @@ class Sample(object):
                 raise IOError("only supports sample sizes of 2, 3 or 4 bytes")
             if not 1 <= w.getnchannels() <= 2:
                 raise IOError("only supports mono or stereo channels")
-            self.frames = w.readframes(w.getnframes())
+            self.__frames = w.readframes(w.getnframes())
             self.nchannels = w.getnchannels()
             self.samplerate = w.getframerate()
             self.sampwidth = w.getsampwidth()
@@ -87,35 +90,38 @@ class Sample(object):
     def write_wav(self, file):
         with contextlib.closing(wave.open(file, "wb")) as out:
             out.setparams((self.nchannels, self.sampwidth, self.samplerate, 0, "NONE", "not compressed"))
-            out.writeframes(self.frames)
+            out.writeframes(self.__frames)
+
+    def write_stream(self, stream):
+        stream.write(self.__frames)
 
     def normalize(self):
         assert not self.locked
         if self.samplerate != self.norm_samplerate:
             # Convert sample rate. Note: resampling causes slight loss of sound quality.
-            self.frames = audioop.ratecv(self.frames, self.sampwidth, self.nchannels, self.samplerate, self.norm_samplerate, None)[0]
+            self.__frames = audioop.ratecv(self.__frames, self.sampwidth, self.nchannels, self.samplerate, self.norm_samplerate, None)[0]
             self.samplerate = self.norm_samplerate
         if self.sampwidth != self.norm_sampwidth:
             # Convert to 16 bit sample size.
             # Note that Python 3.4+ is required to support 24 bits sample sizes.
-            self.frames = audioop.lin2lin(self.frames, self.sampwidth, self.norm_sampwidth)
+            self.__frames = audioop.lin2lin(self.__frames, self.sampwidth, self.norm_sampwidth)
             self.sampwidth = self.norm_sampwidth
         if self.nchannels == 1:
             # convert to stereo
-            self.frames = audioop.tostereo(self.frames, self.sampwidth, 1, 1)
+            self.__frames = audioop.tostereo(self.__frames, self.sampwidth, 1, 1)
             self.nchannels = 2
         return self
 
     def make_32bit(self, scale_amplitude=True):
         assert not self.locked
-        self.frames = self.get_32bit_frames(scale_amplitude)
+        self.__frames = self.get_32bit_frames(scale_amplitude)
         self.sampwidth = 4
         return self
 
     def get_32bit_frames(self, scale_amplitude=True):
         if self.sampwidth == 4:
-            return self.frames
-        frames = audioop.lin2lin(self.frames, self.sampwidth, 4)
+            return self.__frames
+        frames = audioop.lin2lin(self.__frames, self.sampwidth, 4)
         if not scale_amplitude:
             # we need to scale back the sample amplitude to fit back into 16 bit range
             factor = 1.0/2**(8*abs(self.sampwidth-4))
@@ -128,22 +134,22 @@ class Sample(object):
         if maximize_amplitude:
             self.amplify_max()
         if self.sampwidth > 2:
-            self.frames = audioop.lin2lin(self.frames, self.sampwidth, 2)
+            self.__frames = audioop.lin2lin(self.__frames, self.sampwidth, 2)
             self.sampwidth = 2
         return self
 
     def amplify_max(self):
         assert not self.locked
-        max_amp = audioop.max(self.frames, self.sampwidth)
+        max_amp = audioop.max(self.__frames, self.sampwidth)
         max_target = 2 ** (8 * self.sampwidth - 1) - 2
         if max_amp > 0:
             factor = max_target/max_amp
-            self.frames = audioop.mul(self.frames, self.sampwidth, factor)
+            self.__frames = audioop.mul(self.__frames, self.sampwidth, factor)
         return self
 
     def amplify(self, factor):
         assert not self.locked
-        self.frames = audioop.mul(self.frames, self.sampwidth, factor)
+        self.__frames = audioop.mul(self.__frames, self.sampwidth, factor)
         return self
 
     def cut(self, start_seconds, end_seconds):
@@ -151,31 +157,31 @@ class Sample(object):
         assert end_seconds > start_seconds
         start = self.frame_idx(start_seconds)
         end = self.frame_idx(end_seconds)
-        if end != len(self.frames):
-            self.frames = self.frames[start:end]
+        if end != len(self.__frames):
+            self.__frames = self.__frames[start:end]
         return self
 
     def append(self, seconds):
         assert not self.locked
         required_extra = self.frame_idx(seconds)
-        self.frames += b"\0"*required_extra
+        self.__frames += b"\0"*required_extra
 
     def mix(self, other, other_seconds=None, pad_shortest=True):
         assert not self.locked
         assert self.sampwidth == other.sampwidth
         assert self.samplerate == other.samplerate
         assert self.nchannels == other.nchannels
-        frames1 = self.frames
+        frames1 = self.__frames
         if other_seconds:
-            frames2 = other.frames[:other.frame_idx(other_seconds)]
+            frames2 = other.__frames[:other.frame_idx(other_seconds)]
         else:
-            frames2 = other.frames
+            frames2 = other.__frames
         if pad_shortest:
             if len(frames1) < len(frames2):
                 frames1 += b"\0"*(len(frames2)-len(frames1))
             elif len(frames2) < len(frames1):
                 frames2 += b"\0"*(len(frames1)-len(frames2))
-        self.frames = audioop.add(frames1, frames2, self.sampwidth)
+        self.__frames = audioop.add(frames1, frames2, self.sampwidth)
         return self
 
     def mix_at(self, seconds, other, other_seconds=None):
@@ -185,15 +191,15 @@ class Sample(object):
         assert self.nchannels == other.nchannels
         start_frame_idx = self.frame_idx(seconds)
         if other_seconds:
-            other_frames = other.frames[:other.frame_idx(other_seconds)]
+            other_frames = other.__frames[:other.frame_idx(other_seconds)]
         else:
-            other_frames = other.frames
+            other_frames = other.__frames
         # Mix the frames. Unfortunately audioop requires splitting and copying the sample data, which is slow.
-        pre, to_mix, post = self._mix_split_frames(other_frames, start_frame_idx)
-        self.frames = None  # allow for garbage collection
+        pre, to_mix, post = self._mix_split_frames(len(other_frames), start_frame_idx)
+        self.__frames = None  # allow for garbage collection
         mixed = audioop.add(to_mix, other_frames, self.sampwidth)
         del to_mix  # more garbage collection
-        self.frames = self._mix_join_frames(pre, mixed, post)
+        self.__frames = self._mix_join_frames(pre, mixed, post)
         return self
 
     def _mix_join_frames(self, pre, mid, post):     # XXX slow due to copying
@@ -204,24 +210,23 @@ class Sample(object):
         else:
             return pre
 
-    def _mix_split_frames(self, other_frames, start_frame_idx):    # XXX slow due to copying
-        self._mix_grow_if_needed(start_frame_idx, len(other_frames))
-        pre = self.frames[:start_frame_idx]
-        to_mix = self.frames[start_frame_idx:start_frame_idx + len(other_frames)]
-        post = self.frames[start_frame_idx + len(other_frames):]
+    def _mix_split_frames(self, other_frames_length, start_frame_idx):    # XXX slow due to copying
+        self._mix_grow_if_needed(start_frame_idx, other_frames_length)
+        pre = self.__frames[:start_frame_idx]
+        to_mix = self.__frames[start_frame_idx:start_frame_idx + other_frames_length]
+        post = self.__frames[start_frame_idx + other_frames_length:]
         return pre, to_mix, post
 
     def _mix_grow_if_needed(self, start_frame_idx, other_length):    # XXX slow due to copying
         required_length = start_frame_idx + other_length
-        if required_length > len(self.frames):
+        if required_length > len(self.__frames):
             # we need to extend the current sample buffer to make room for the mixed sample at the end
-            self.frames += b"\0" * (required_length - len(self.frames))
+            self.__frames += b"\0" * (required_length - len(self.__frames))
 
 
 class Mixer(object):
     """
-    Mixes a set of ascii-bar tracks using the given sample instruments,
-    into a resulting big sample.
+    Mixes a set of ascii-bar tracks using the given sample instruments, into a resulting big sample.
     """
     def __init__(self, patterns, bpm, ticks, instruments):
         for p in patterns:
@@ -276,7 +281,7 @@ class Mixer(object):
         time_per_index = 60.0 / self.bpm / self.ticks
         index = 0
         for num, pattern in enumerate(self.patterns, start=1):
-            pattern = list(pattern.items())  # make it indexable
+            pattern = list(pattern.items())
             num_triggers = len(pattern[0][1])
             for i in range(num_triggers):
                 triggers = []
@@ -293,12 +298,22 @@ class Mixer(object):
         Generator for all samples-to-mix.
         Every element is a tuple: (trigger index, time offset (seconds), sample)
         """
+        mix_cache = {}  # we cache stuff to avoid repeated mixes of the same instruments
         for index, timestamp, triggers in self.mixed_triggers():
             if len(triggers) > 1:
-                # mix the triggers then yield the resulting sample
-                mixed = Sample().make_32bit()
+                instruments_key = tuple(sorted(instrument for instrument, _ in triggers))
+                if instruments_key in mix_cache:
+                    yield index, timestamp, mix_cache[instruments_key]
+                    continue
+                # find the longest sample and create a copy of that to mix the others into
+                longest_sample = max((s for _, s in triggers), key=lambda s: s.duration)
+                mixed = longest_sample.dup()
                 for instrument, sample in triggers:
-                    mixed.mix_at(0, sample)
+                    if sample is longest_sample:
+                        continue  # we started with this one, so don't mix it again
+                    mixed.mix(sample)
+                mixed.lock()
+                mix_cache[instruments_key] = mixed   # cache the mixed instruments sample
                 yield index, timestamp, mixed
             else:
                 # simply yield the unmixed sample from the single trigger
@@ -492,7 +507,7 @@ class Repl(cmd.Cmd):
             with contextlib.closing(self.audio.open(
                     format=self.audio.get_format_from_width(sample.sampwidth),
                     channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
-                stream.write(sample.frames)
+                sample.write_frames(stream)
                 time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
         else:
             # try to fallback to winsound (only works on windows)
