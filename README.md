@@ -82,7 +82,7 @@ To load your track file and start the interactive command line interface:
 
 ...then type ``help`` to see what commands are available.
 
-A few example tracks are provided, try them out!
+A few example tracks are provided, try them out!  (pre-mixed output can be found in the example_mixes folder)
 
 - track1.ini  - a short jungle-ish fragment
 - track2.ini  - a somewhat longer classic rhythm loop, I guess it's in 4/4 time
