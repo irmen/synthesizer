@@ -87,8 +87,8 @@ class Sample(object):
             self.sampwidth = w.getsampwidth()
             return self
 
-    def write_wav(self, file):
-        with contextlib.closing(wave.open(file, "wb")) as out:
+    def write_wav(self, file_or_stream):
+        with contextlib.closing(wave.open(file_or_stream, "wb")) as out:
             out.setparams((self.nchannels, self.sampwidth, self.samplerate, 0, "NONE", "not compressed"))
             out.writeframes(self.__frames)
 
@@ -312,7 +312,6 @@ class Mixer(object):
             elif mixed.duration > trigger_duration:
                 # chop off the sound that extends into the next sample position
                 # keep this overflow and mix it later!
-                # XXX the audio still seems to stutter when using this, not sure why
                 overflow = mixed.cutoff(trigger_duration)
             mixed_duration += mixed.duration
             yield mixed
@@ -569,6 +568,8 @@ class Repl(cmd.Cmd):
                     format=self.audio.get_format_from_width(sample.sampwidth),
                     channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
                 sample.write_frames(stream)
+                filler = b"\0"*sample.sampwidth*sample.nchannels*stream.get_write_available()
+                stream.write(filler)
                 time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
         else:
             # try to fallback to winsound (only works on windows)
@@ -582,26 +583,24 @@ class Repl(cmd.Cmd):
         if self.audio:
             with contextlib.closing(self.audio.open(
                     format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
-                print("streaming samples", end="", flush=True)  # XXX
+                print("Mixing and streaming", end="", flush=True)
                 for sample in samples:
                     if sample.sampwidth != 2:
-                        sample = sample.make_16bit()
+                        # We can't use automatic global max amplitude because we're streaming
+                        # dozens of samples individually. So I chose some fixed amplification value instead.
+                        sample = sample.amplify(32000).make_16bit(False)
                     assert sample.nchannels == 2
                     assert sample.samplerate == 44100
                     assert sample.sampwidth == 2
-                    print(".", end="", flush=True)  # XXX
+                    print(".", end="", flush=True)
                     sample.write_frames(stream)
+                filler = b"\0\0\0\0"*stream.get_write_available()
+                stream.write(filler)
                 time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
                 print()
         else:
-            # try to fallback to winsound (only works on windows)
-            sample_file = "__temp_sample.wav"
-            for sample in samples:
-                if sample.sampwidth not in (2, 3):
-                    sample = sample.make_16bit()
-                sample.write_wav(sample_file)
-                winsound.PlaySound(sample_file, winsound.SND_FILENAME)
-                os.remove(sample_file)
+            # winsound doesn't cut it when playing many small sample files...
+            raise RuntimeError("Sorry but pyaudio cannot be found. You need it to play streaming audio output.")
 
 
     def play_single_bar(self, sample, pattern):
@@ -701,10 +700,10 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
-        #song.mix(outputfile)
-        #mix = Sample(wave_file=outputfile)
-        #print("Playing sound...")
-        #Repl().play_sample(mix)
+        # song.mix(outputfile)
+        # mix = Sample(wave_file=outputfile)
+        # print("Playing sound...")
+        # Repl().play_sample(mix)
         # XXX use this to stream the output:
         Repl().play_samples(song.mix_generator())
 
