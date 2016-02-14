@@ -87,3 +87,8 @@ A few example tracks are provided, try them out!  (pre-mixed output can be found
 - track1.ini  - a short jungle-ish fragment
 - track2.ini  - a somewhat longer classic rhythm loop, I guess it's in 4/4 time
 - track3.ini  - an experiment with a few liquid drum'n'bass type patterns
+
+
+### multimedia application? not this one
+If you're looking for the GNOME multimedia application [rhythmbox](https://github.com/GNOME/rhythmbox), this is not it.
+This simple python script is in no way shape or form pretending to be such a thing. Have a look [here](https://wiki.gnome.org/Apps/Rhythmbox) instead.
