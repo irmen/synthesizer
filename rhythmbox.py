@@ -32,90 +32,118 @@ class Sample(object):
     """
     Audio sample data, usually normalized to a fixed set of parameters: 16 bit stereo 44.1 Khz
     To avoid easy mistakes and problems, it is not possible to directly access the audio sample frames.
-    All operations that manipulate the sample frames are implemented as methods on the object.
+    All operations that manipulate the sample frames and properties are implemented as methods on the object.
     """
     norm_samplerate = 44100
     norm_nchannels = 2
     norm_sampwidth = 2
 
     def __init__(self, frames=b"", wave_file=None, duration=0):
-        self.locked = False
+        self.__locked = False
         if wave_file:
             self.load_wav(wave_file)
-            self.filename = wave_file
+            self.__filename = wave_file
         else:
-            self.samplerate = self.norm_samplerate
-            self.nchannels = self.norm_nchannels
-            self.sampwidth = self.norm_sampwidth
+            self.__samplerate = self.norm_samplerate
+            self.__nchannels = self.norm_nchannels
+            self.__sampwidth = self.norm_sampwidth
             self.__frames = frames
-            self.filename = None
+            self.__filename = None
         if duration > 0:
             if len(frames) > 0:
                 raise ValueError("cannot specify a duration if frames are provided")
             self.append(duration)
 
-    def dup(self):
-        copy = Sample(self.__frames)
-        copy.sampwidth = self.sampwidth
-        copy.samplerate = self.samplerate
-        copy.nchannels = self.nchannels
-        copy.filename = self.filename
-        copy.locked = False
-        return copy
+    @property
+    def sampwidth(self): return self.__sampwidth
 
-    def lock(self):
-        self.locked = True
-        return self
+    @property
+    def samplerate(self): return self.__samplerate
+
+    @property
+    def nchannels(self): return self.__nchannels
+
+    @property
+    def filename(self): return self.__filename
 
     @property
     def duration(self):
-        return len(self.__frames) / self.samplerate / self.sampwidth / self.nchannels
+        return len(self.__frames) / self.__samplerate / self.__sampwidth / self.__nchannels
+
+    def dup(self):
+        copy = Sample(self.__frames)
+        copy.__sampwidth = self.__sampwidth
+        copy.__samplerate = self.__samplerate
+        copy.__nchannels = self.__nchannels
+        copy.__filename = self.__filename
+        copy.__locked = False
+        return copy
+
+    def lock(self):
+        self.__locked = True
+        return self
 
     def frame_idx(self, seconds):
         return self.nchannels*self.sampwidth*int(self.samplerate*seconds)
 
     def load_wav(self, file):
-        assert not self.locked
-        with contextlib.closing(wave.open(file)) as w:
+        assert not self.__locked
+        with wave.open(file) as w:
             if not 2 <= w.getsampwidth() <= 4:
                 raise IOError("only supports sample sizes of 2, 3 or 4 bytes")
             if not 1 <= w.getnchannels() <= 2:
                 raise IOError("only supports mono or stereo channels")
             self.__frames = w.readframes(w.getnframes())
-            self.nchannels = w.getnchannels()
-            self.samplerate = w.getframerate()
-            self.sampwidth = w.getsampwidth()
+            self.__nchannels = w.getnchannels()
+            self.__samplerate = w.getframerate()
+            self.__sampwidth = w.getsampwidth()
             return self
 
     def write_wav(self, file_or_stream):
-        with contextlib.closing(wave.open(file_or_stream, "wb")) as out:
+        with wave.open(file_or_stream, "wb") as out:
             out.setparams((self.nchannels, self.sampwidth, self.samplerate, 0, "NONE", "not compressed"))
             out.writeframes(self.__frames)
+
+    @classmethod
+    def wave_write_begin(cls, filename, first_sample):
+        out = wave.open(filename, "wb")
+        out.setparams((first_sample.nchannels, first_sample.sampwidth, first_sample.samplerate, 0, "NONE", "not compressed"))
+        out.writeframesraw(first_sample.__frames)
+        return out
+
+    @classmethod
+    def wave_write_append(cls, out, sample):
+        out.writeframesraw(sample.__frames)
+
+    @classmethod
+    def wave_write_end(cls, out):
+        out.writeframes(b"")  # make sure the updated header gets written
+        out.close()
 
     def write_frames(self, stream):
         stream.write(self.__frames)
 
     def normalize(self):
-        assert not self.locked
+        assert not self.__locked
         if self.samplerate != self.norm_samplerate:
             # Convert sample rate. Note: resampling causes slight loss of sound quality.
             self.__frames = audioop.ratecv(self.__frames, self.sampwidth, self.nchannels, self.samplerate, self.norm_samplerate, None)[0]
-            self.samplerate = self.norm_samplerate
+            self.__samplerate = self.norm_samplerate
         if self.sampwidth != self.norm_sampwidth:
             # Convert to 16 bit sample size.
             # Note that Python 3.4+ is required to support 24 bits sample sizes.
             self.__frames = audioop.lin2lin(self.__frames, self.sampwidth, self.norm_sampwidth)
-            self.sampwidth = self.norm_sampwidth
+            self.__sampwidth = self.norm_sampwidth
         if self.nchannels == 1:
             # convert to stereo
             self.__frames = audioop.tostereo(self.__frames, self.sampwidth, 1, 1)
-            self.nchannels = 2
+            self.__nchannels = 2
         return self
 
     def make_32bit(self, scale_amplitude=True):
-        assert not self.locked
+        assert not self.__locked
         self.__frames = self.get_32bit_frames(scale_amplitude)
-        self.sampwidth = 4
+        self.__sampwidth = 4
         return self
 
     def get_32bit_frames(self, scale_amplitude=True):
@@ -129,17 +157,17 @@ class Sample(object):
         return frames
 
     def make_16bit(self, maximize_amplitude=True):
-        assert not self.locked
+        assert not self.__locked
         assert self.sampwidth >= 2
         if maximize_amplitude:
             self.amplify_max()
         if self.sampwidth > 2:
             self.__frames = audioop.lin2lin(self.__frames, self.sampwidth, 2)
-            self.sampwidth = 2
+            self.__sampwidth = 2
         return self
 
     def amplify_max(self):
-        assert not self.locked
+        assert not self.__locked
         max_amp = audioop.max(self.__frames, self.sampwidth)
         max_target = 2 ** (8 * self.sampwidth - 1) - 2
         if max_amp > 0:
@@ -148,12 +176,12 @@ class Sample(object):
         return self
 
     def amplify(self, factor):
-        assert not self.locked
+        assert not self.__locked
         self.__frames = audioop.mul(self.__frames, self.sampwidth, factor)
         return self
 
     def cut(self, start_seconds, end_seconds):
-        assert not self.locked
+        assert not self.__locked
         assert end_seconds > start_seconds
         start = self.frame_idx(start_seconds)
         end = self.frame_idx(end_seconds)
@@ -162,7 +190,7 @@ class Sample(object):
         return self
 
     def cutoff(self, duration):
-        assert not self.locked
+        assert not self.__locked
         end = self.frame_idx(duration)
         if end != len(self.__frames):
             chopped = self.dup()
@@ -172,12 +200,12 @@ class Sample(object):
         return None
 
     def append(self, seconds):
-        assert not self.locked
+        assert not self.__locked
         required_extra = self.frame_idx(seconds)
         self.__frames += b"\0"*required_extra
 
     def mix(self, other, other_seconds=None, pad_shortest=True):
-        assert not self.locked
+        assert not self.__locked
         assert self.sampwidth == other.sampwidth
         assert self.samplerate == other.samplerate
         assert self.nchannels == other.nchannels
@@ -195,7 +223,7 @@ class Sample(object):
         return self
 
     def mix_at(self, seconds, other, other_seconds=None):
-        assert not self.locked
+        assert not self.__locked
         assert self.sampwidth == other.sampwidth
         assert self.samplerate == other.samplerate
         assert self.nchannels == other.nchannels
@@ -214,12 +242,7 @@ class Sample(object):
 
     # XXX slow due to copying (but only significant when not streaming)
     def _mix_join_frames(self, pre, mid, post):
-        if post:
-            return pre + mid + post
-        elif mid:
-            return pre + mid
-        else:
-            return pre
+        return pre + mid + post
 
     # XXX slow due to copying (but only significant when not streaming)
     def _mix_split_frames(self, other_frames_length, start_frame_idx):
@@ -591,23 +614,34 @@ class Repl(cmd.Cmd):
         if self.audio:
             with contextlib.closing(self.audio.open(
                     format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
-                for sample in samples:
-                    if sample.sampwidth != 2:
-                        # We can't use automatic global max amplitude because we're streaming
-                        # the samples individually. So I chose some fixed amplification value instead.
-                        sample = sample.amplify(26000).make_16bit(False)
-                    assert sample.nchannels == 2
-                    assert sample.samplerate == 44100
-                    assert sample.sampwidth == 2
+                for sample in self.normalized_samples(samples, 26000):
                     sample.write_frames(stream)
                 filler = b"\0\0\0\0"*stream.get_write_available()
                 stream.write(filler)
                 time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
-                print("\r                          ")
         else:
             # winsound doesn't cut it when playing many small sample files...
             raise RuntimeError("Sorry but pyaudio cannot be found. You need it to play streaming audio output.")
 
+    def stream_to_file(self, filename, samples):
+        samples = self.normalized_samples(samples, 26000)
+        sample = next(samples)
+        with Sample.wave_write_begin(filename, sample) as out:
+            for sample in samples:
+                Sample.wave_write_append(out, sample)
+            Sample.wave_write_end(out)
+
+    def normalized_samples(self, samples, global_amplification=26000):
+        for sample in samples:
+            if sample.sampwidth != 2:
+                # We can't use automatic global max amplitude because we're streaming
+                # the samples individually. So use a fixed amplification value instead
+                # that will be used to amplify all samples in stream by the same amount.
+                sample = sample.amplify(global_amplification).make_16bit(False)
+            assert sample.nchannels == 2
+            assert sample.samplerate == 44100
+            assert sample.sampwidth == 2
+            yield sample
 
     def play_single_bar(self, sample, pattern):
         try:
@@ -630,13 +664,25 @@ class Repl(cmd.Cmd):
         os.remove(output)
 
     def do_stream(self, args):
-        """mix all patterns of the song in real time and stream the output"""
+        """
+        mix all patterns of the song and stream the output to your speakers in real-time,
+        or to an output file if you give a filename argument.
+        This is the fastest and most efficient way of generating the output mix because
+        it uses very little memory and avoids large buffer copying.
+        """
         if not self.song.pattern_sequence:
             print("Nothing to be mixed.")
             return
-        print("Mixing and streaming...")
+        if args:
+            filename = args.strip()
+            print("Mixing and streaming to output file '{0}'...".format(filename))
+            self.stream_to_file(filename, self.song.mix_generator())
+            print("\r                          ")
+            return
+        print("Mixing and streaming to speakers...")
         try:
             self.play_samples(self.song.mix_generator())
+            print("\r                          ")
         except KeyboardInterrupt:
             print("Stopped.")
 
