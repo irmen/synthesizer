@@ -1,5 +1,6 @@
 from rhythmbox import Sample
 from math import sin, pi, floor
+import random
 import array
 import sys
 import audioop
@@ -85,20 +86,39 @@ class Wavesynth:
             samples.append(int(scale*y))
         return self._to_sample(samples, samplewidth, samplerate)
 
+    def pulse(self, frequency, duration, width=500, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_sampwidth, amplitude=1.0):
+        raise NotImplementedError
+
+    def white_noise(self, duration, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_sampwidth, amplitude=1.0):
+        samples = self._get_array(samplewidth)
+        scale = amplitude*(2**(samplewidth*8-1)-1)
+        for t in range(int(duration*samplerate)):
+            samples.append(random.randint(-scale, scale))
+        return self._to_sample(samples, samplewidth, samplerate)
+
+    def key_freq(self, key_number):
+        """
+        Return the note frequency for the given piano key number.
+        C4 is key 40 and A4 is key 49 (=440 hz).
+        https://en.wikipedia.org/wiki/Piano_key_frequencies
+        """
+        return 2**((key_number-49)/12) * 440.0
+
 
 def demo():
     synth = Wavesynth()
+    waves = [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth, synth.pulse]
     from rhythmbox import Repl
     r = Repl()
-    waves = [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth]
     for wave in waves:
         print(wave.__name__)
-        freq = 110
-        for i in range(5):
-            sample = wave(freq, duration=0.5)
-            print("   {:d} hz".format(freq))
+        start_key = 40   # C4
+        for pianokey in range(start_key, start_key+13):    # full octave + the next C
+            freq = synth.key_freq(pianokey)
+            print("   {:f} hz".format(freq))
+            sample = wave(freq, duration=0.2)
             r.play_sample(sample)
-            freq *= 2
+
 
 if __name__ == "__main__":
     demo()
