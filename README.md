@@ -15,6 +15,12 @@ as it is produced in real time.
 Apart from [pyaudio](http://people.csail.mit.edu/hubert/pyaudio/) which is used for audio output, no other custom libraries are required.
 On windows you can even run it without having pyaudio installed (it will use winsound, but you won't be able to stream).
 
+# synth
+
+There's also a simple waveform synthesizer (``synth.py``) that can generate different wave form samples:
+sine, triangle, sawtooth, square and white noise.
+
+
 ## how it works
 
 You assemble rhythm samples into bars and patterns, which are then mixed.

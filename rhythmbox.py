@@ -1,18 +1,9 @@
-"""
-Sample mixer and sequencer meant to create rhythms. Inspired by the Roland TR-909.
-Uses PyAudio (https://pypi.python.org/pypi/PyAudio) for playing sound. On windows
-it can fall back to using the winsound module if pysound isn't available.
 
-Sample mix rate is configured at 44.1 khz. You may want to change this if most of
-the samples you're using are of a different sample rate (such as 48Khz), to avoid
-the slight loss of quality due to resampling.
-
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
-"""
 import sys
 import os
 import wave
 import audioop
+import array
 import time
 import contextlib
 try:
@@ -186,7 +177,7 @@ class Sample:
         self.__frames = audioop.mul(self.__frames, self.sampwidth, factor)
         return self
 
-    def cut(self, start_seconds, end_seconds):
+    def clip(self, start_seconds, end_seconds):
         assert not self.__locked
         assert end_seconds > start_seconds
         start = self.frame_idx(start_seconds)
@@ -195,9 +186,10 @@ class Sample:
             self.__frames = self.__frames[start:end]
         return self
 
-    def cutoff(self, duration):
+    def clip_end(self, clip_seconds):
+        """Clips the sample in two parts, keep the first and return the chopped off bit at the end."""
         assert not self.__locked
-        end = self.frame_idx(duration)
+        end = self.frame_idx(clip_seconds)
         if end != len(self.__frames):
             chopped = self.dup()
             chopped.__frames = self.__frames[end:]
@@ -209,6 +201,58 @@ class Sample:
         assert not self.__locked
         required_extra = self.frame_idx(seconds)
         self.__frames += b"\0"*required_extra
+
+    def fadeout(self, seconds):
+        """Fade the end of the sample out to zero volume in the given time."""
+        assert not self.__locked
+        if self.__sampwidth == 1:
+            faded = array.array('b')
+        elif self.__sampwidth == 2:
+            faded = array.array('h')
+        elif self.__sampwidth == 4:
+            faded = array.array('l')
+        else:
+            raise ValueError("can only fade sample widths 1, 2 and 4")
+        seconds = min(seconds, self.duration)
+        i = self.frame_idx(self.duration-seconds)
+        begin = self.__frames[:i]
+        end = self.__frames[i:]  # we fade this chunk
+        numsamples = len(end)/self.__sampwidth
+        for i in range(int(numsamples)):
+            amplitude = 1-(i/numsamples)
+            s = audioop.getsample(end, self.__sampwidth, i)
+            faded.append(int(s*amplitude))
+        end = faded.tobytes()
+        if sys.byteorder == "big":
+            end = audioop.byteswap(bytes, end)
+        self.__frames = begin + end
+        return self
+
+    def fadein(self, seconds):
+        """Fade the start of the sample in from zero volume in the given time."""
+        assert not self.__locked
+        if self.__sampwidth == 1:
+            faded = array.array('b')
+        elif self.__sampwidth == 2:
+            faded = array.array('h')
+        elif self.__sampwidth == 4:
+            faded = array.array('l')
+        else:
+            raise ValueError("can only fade sample widths 1, 2 and 4")
+        seconds = min(seconds, self.duration)
+        i = self.frame_idx(seconds)
+        begin = self.__frames[:i]  # we fade this chunk
+        end = self.__frames[i:]
+        numsamples = len(begin)/self.__sampwidth
+        for i in range(int(numsamples)):
+            amplitude = i/numsamples
+            s = audioop.getsample(begin, self.__sampwidth, i)
+            faded.append(int(s*amplitude))
+        begin = faded.tobytes()
+        if sys.byteorder == "big":
+            begin = audioop.byteswap(bytes, begin)
+        self.__frames = begin + end
+        return self
 
     def mix(self, other, other_seconds=None, pad_shortest=True):
         assert not self.__locked
@@ -310,7 +354,7 @@ class Mixer:
         if missing > 0:
             mixed.append(missing)
         elif missing < 0:
-            mixed.cut(0, total_seconds)
+            mixed.clip(0, total_seconds)
         if verbose:
             print("\rMix done.")
         return mixed
@@ -344,7 +388,7 @@ class Mixer:
             elif mixed.duration > trigger_duration:
                 # chop off the sound that extends into the next sample position
                 # keep this overflow and mix it later!
-                overflow = mixed.cutoff(trigger_duration)
+                overflow = mixed.clip_end(trigger_duration)
             mixed_duration += mixed.duration
             yield mixed
             mixed = overflow if overflow else Sample().make_32bit()
@@ -356,7 +400,7 @@ class Mixer:
         if mixed.duration < trigger_duration:
             mixed.append(trigger_duration-mixed.duration)
         elif mixed.duration > trigger_duration:
-            mixed.cut(0, trigger_duration)
+            mixed.clip(0, trigger_duration)
         mixed_duration += mixed.duration
         yield mixed
 
