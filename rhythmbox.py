@@ -28,7 +28,7 @@ from configparser import ConfigParser
 __all__ = ["Sample", "Mixer", "Song", "Repl"]
 
 
-class Sample(object):
+class Sample:
     """
     Audio sample data, usually normalized to a fixed set of parameters: 16 bit stereo 44.1 Khz
     To avoid easy mistakes and problems, it is not possible to directly access the audio sample frames.
@@ -38,7 +38,7 @@ class Sample(object):
     norm_nchannels = 2
     norm_sampwidth = 2
 
-    def __init__(self, frames=b"", wave_file=None, duration=0):
+    def __init__(self, wave_file=None):
         self.__locked = False
         if wave_file:
             self.load_wav(wave_file)
@@ -47,12 +47,17 @@ class Sample(object):
             self.__samplerate = self.norm_samplerate
             self.__nchannels = self.norm_nchannels
             self.__sampwidth = self.norm_sampwidth
-            self.__frames = frames
+            self.__frames = b""
             self.__filename = None
-        if duration > 0:
-            if len(frames) > 0:
-                raise ValueError("cannot specify a duration if frames are provided")
-            self.append(duration)
+
+    @classmethod
+    def from_raw_frames(cls, frames, samplewidth, samplerate, numchannels):
+        s = cls()
+        s.__frames = frames
+        s.__samplerate = samplerate
+        s.__sampwidth = samplewidth
+        s.__nchannels = numchannels
+        return s
 
     @property
     def sampwidth(self): return self.__sampwidth
@@ -71,7 +76,8 @@ class Sample(object):
         return len(self.__frames) / self.__samplerate / self.__sampwidth / self.__nchannels
 
     def dup(self):
-        copy = Sample(self.__frames)
+        copy = Sample()
+        copy.__frames = self.__frames
         copy.__sampwidth = self.__sampwidth
         copy.__samplerate = self.__samplerate
         copy.__nchannels = self.__nchannels
@@ -260,7 +266,7 @@ class Sample(object):
             self.__frames += b"\0" * (required_length - len(self.__frames))
 
 
-class Mixer(object):
+class Mixer:
     """
     Mixes a set of ascii-bar tracks using the given sample instruments, into a resulting big sample.
     """
@@ -406,7 +412,7 @@ class Mixer(object):
                 yield index, timestamp, triggers[0][1]
 
 
-class Song(object):
+class Song:
     def __init__(self):
         self.instruments = {}
         self.sample_path = None
