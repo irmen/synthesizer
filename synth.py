@@ -1,7 +1,7 @@
 """
 Sample waveform synthesizer.
 Creates some simple waveform samples with adjustable parameters:
-sine, triangle, square, sawtooth and white noise.
+sine, triangle, square, sawtooth, pulse, and white noise.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
@@ -16,13 +16,13 @@ from collections import OrderedDict
 __all__ = ["key_freq", "Wavesynth"]
 
 
-def key_freq(key_number):
+def key_freq(key_number, a4=440.0):
     """
     Return the note frequency for the given piano key number.
     C4 is key 40 and A4 is key 49 (=440 hz).
     https://en.wikipedia.org/wiki/Piano_key_frequencies
     """
-    return 2**((key_number-49)/12) * 440.0
+    return 2**((key_number-49)/12) * a4
 
 # some note frequencies for the 3rd, 4th and 5th octaves
 octave_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -143,49 +143,59 @@ class Wavesynth:
 
 def demo_tones():
     synth = Wavesynth()
-    from rhythmbox import Repl
-    r = Repl()
+    from pyaudio import PyAudio
+    audio = PyAudio()
+    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
+                        channels=1, rate=synth.samplerate, output=True)
     for wave in [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth]:
         print(wave.__name__)
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
-            sample = wave(freq, duration=0.2)
-            r.play_sample(synth.to_sample(sample).fadeout(0.1))
+            sample = wave(freq, duration=0.4)
+            sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
+            sample.write_frames(stream)
     print("pulse")
     for note, freq in notes4.items():
         print("   {:f} hz".format(freq))
-        sample = synth.pulse(freq, 0.1, duration=0.2)
-        r.play_sample(synth.to_sample(sample).fadeout(0.1))
+        sample = synth.pulse(freq, 0.1, duration=0.4)
+        sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
+        sample.write_frames(stream)
     print("noise")
     sample = synth.white_noise(duration=1.5)
-    r.play_sample(synth.to_sample(sample).fadeout(0.5))
+    sample = synth.to_sample(sample).fadeout(0.5).fadein(0.1)
+    sample.write_frames(stream)
+    stream.close()
 
 
 def demo_song():
     synth = Wavesynth()
-    from rhythmbox import Repl
     import time
-    r = Repl()
     print("Synthesizing tones...")
     notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
-    tempo = 0.2
-    quarter_notes = {note: synth.to_sample(synth.sine(notes[note], tempo)).fadeout(0.1) for note in notes}
-    half_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*2)).fadeout(0.1) for note in notes}
-    full_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*4)).fadeout(0.1) for note in notes}
-    song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; ; ; "\
-        "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; "
+    tempo = 0.3
+    quarter_notes = {note: synth.to_sample(synth.sine(notes[note], tempo)).fadeout(0.1).fadein(0.02) for note in notes}
+    half_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*2)).fadeout(0.1).fadein(0.02) for note in notes}
+    full_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*4)).fadeout(0.1).fadein(0.02) for note in notes}
+    song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
+        "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
+    from pyaudio import PyAudio
+    audio = PyAudio()
+    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
+                        channels=1, rate=synth.samplerate, output=True)
     for note in song.split():
-        print(note, end="  ", flush=True)
         if note == ";":
-            time.sleep(tempo)
+            print()
+            time.sleep(tempo*2)
             continue
+        print(note, end="  ", flush=True) 
         if note.endswith(".."):
             sample = full_notes[note[:-2]]
         elif note.endswith("."):
             sample = half_notes[note[:-1]]
         else:
             sample = quarter_notes[note]
-        r.play_sample(sample)
+        sample.write_frames(stream)
+    stream.close()
     print()
 
 

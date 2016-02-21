@@ -815,8 +815,9 @@ def main(track_file, outputfile=None, interactive=False):
         song.read(track_file, discard_unused_instruments=discard_unused)
         if pyaudio:
             # mix and stream output in real time
-            print("Mixing and streaming...")
+            print("Mixing and streaming to speakers...")
             Repl().play_samples(song.mix_generator())
+            print("\r                          ")
         else:
             # pyaudio is needed to stream, fallback on mixing everything to a wav
             print("(Sorry, you don't have pyaudio installed. Streaming audio is not possible.)")
