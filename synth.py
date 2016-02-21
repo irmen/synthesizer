@@ -59,6 +59,7 @@ class Wavesynth:
         return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, 1).fadeout(0.1)
 
     def sine(self, frequency, duration, amplitude=1.0):
+        assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
         rate = self.samplerate/frequency/2.0/pi
@@ -68,19 +69,19 @@ class Wavesynth:
 
     def square(self, frequency, duration, amplitude=1.0):
         """Generate a perfect square wave [max/-max]"""
+        assert 0 <= amplitude <= 1.0
         samples = self._get_array()
-        scale = int(amplitude*(2**(self.samplewidth*8-1)-1))
-        rate = self.samplerate/frequency
+        scale = int(0.8*amplitude*(2**(self.samplewidth*8-1)-1))
+        width = self.samplerate/frequency/2
         for t in range(int(duration*self.samplerate)):
-            x = t/rate
-            y = 2*floor(x)-floor(x*2)+1
-            samples.append(y*scale)
+            samples.append(-scale if int(t/width) % 2 else scale)
         return samples
 
-    def squareh(self, frequency, duration, num_harmonics=10, amplitude=1.0):
+    def squareh(self, frequency, duration, num_harmonics=12, amplitude=1.0):
         """Generate a square wave based on harmonic sine waves (more natural)"""
+        assert 0 <= amplitude <= 1.0
         samples = self._get_array()
-        scale = int(amplitude*(2**(self.samplewidth*8-1)-1))
+        scale = amplitude*(2**(self.samplewidth*8-1)-1)
         f = frequency/self.samplerate
         for t in range(int(duration*self.samplerate)):
             h = 0.0
@@ -91,14 +92,13 @@ class Wavesynth:
             # Formula says 4/pi but that only works on infinite series.
             # When dealing with a non infinite number of harmonics, the signal
             # can get 'off the scale' and needs to be clamped. We compensate
-            # a little by not using 4/pi but 3.7/pi to reduce the number of clamps needed.
+            # a little by not using 4/pi but just 1, to reduce the number of clamps needed.
             # (clamping will distort the signal)
-            y = int(3.7/pi*h*scale)
-            y = max(min(y, scale), -scale)
-            samples.append(y)
+            samples.append(int(h*scale))
         return samples
 
     def triangle(self, frequency, duration, amplitude=1.0):
+        assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
         p = self.samplerate/frequency
@@ -108,18 +108,32 @@ class Wavesynth:
         return samples
 
     def sawtooth(self, frequency, duration, amplitude=1.0):
+        assert 0 <= amplitude <= 1.0
         samples = self._get_array()
-        scale = amplitude*(2**(self.samplewidth*8-1)-1)
+        scale = 0.8*amplitude*(2**(self.samplewidth*8-1)-1)
         a = self.samplerate/frequency
         for t in range(int(duration*self.samplerate)):
             y = 2*(t/a - floor(0.5+t/a))
             samples.append(int(scale*y))
         return samples
 
-    def pulse(self, frequency, duration, width=500, amplitude=1.0):
-        raise NotImplementedError  # XXX to be done
+    def pulse(self, frequency, width, duration, amplitude=1.0):
+        assert 0 <= amplitude <= 1.0
+        assert 0 < width <= 0.5
+        samples = self._get_array()
+        wave_width = self.samplerate/frequency
+        pulse_width = wave_width * width
+        scale = int(0.8*amplitude*(2**(self.samplewidth*8-1)-1))
+        for t in range(int(duration*self.samplerate)):
+            x = t % wave_width
+            if x < pulse_width:
+                samples.append(scale)
+            else:
+                samples.append(-scale)
+        return samples
 
     def white_noise(self, duration, amplitude=1.0):
+        assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
         for t in range(int(duration*self.samplerate)):
@@ -127,20 +141,27 @@ class Wavesynth:
         return samples
 
 
-def demo():
+def demo_tones():
     synth = Wavesynth()
-    waves = [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth, synth.pulse]
     from rhythmbox import Repl
     r = Repl()
-    for wave in waves:
+    for wave in [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth]:
         print(wave.__name__)
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
             sample = wave(freq, duration=0.2)
-            r.play_sample(synth.to_sample(sample))
+            r.play_sample(synth.to_sample(sample).fadeout(0.1))
+    print("pulse")
+    for note, freq in notes4.items():
+        print("   {:f} hz".format(freq))
+        sample = synth.pulse(freq, 0.1, duration=0.2)
+        r.play_sample(synth.to_sample(sample).fadeout(0.1))
+    print("noise")
+    sample = synth.white_noise(duration=1.5)
+    r.play_sample(synth.to_sample(sample).fadeout(0.5))
 
 
-def demo2():
+def demo_song():
     synth = Wavesynth()
     from rhythmbox import Repl
     import time
@@ -148,12 +169,12 @@ def demo2():
     print("Synthesizing tones...")
     notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
     tempo = 0.2
-    quarter_notes = {note: synth.to_sample(synth.triangle(notes[note], tempo)) for note in notes}
-    half_notes = {note: synth.to_sample(synth.triangle(notes[note], tempo*2)) for note in notes}
-    full_notes = {note: synth.to_sample(synth.triangle(notes[note], tempo*4)) for note in notes}
+    quarter_notes = {note: synth.to_sample(synth.sine(notes[note], tempo)).fadeout(0.1) for note in notes}
+    half_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*2)).fadeout(0.1) for note in notes}
+    full_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*4)).fadeout(0.1) for note in notes}
     song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; ; ; "\
-        "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ".split()
-    for note in song:
+        "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; "
+    for note in song.split():
         print(note, end="  ", flush=True)
         if note == ";":
             time.sleep(tempo)
@@ -168,6 +189,26 @@ def demo2():
     print()
 
 
+def demo_plot():
+    from matplotlib import pyplot as plot
+    synth=Wavesynth(samplerate=1000)
+    freq = 4
+    s = synth.sawtooth(freq, duration=1)
+    plot.plot(s)
+    s = synth.sine(freq, duration=1)
+    plot.plot(s)
+    s = synth.triangle(freq, duration=1)
+    plot.plot(s)
+    s = synth.square(freq, duration=1)
+    plot.plot(s)
+    s = synth.squareh(freq, duration=1)
+    plot.plot(s)
+    s = synth.pulse(freq, 0.2, duration=1)
+    plot.plot(s)
+    plot.show()
+
+
 if __name__ == "__main__":
-    demo2()
-    demo()
+    # demo_plot()
+    # demo_tones()
+    demo_song()
