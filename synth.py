@@ -11,7 +11,6 @@ import random
 import array
 import sys
 import audioop
-from collections import OrderedDict
 
 __all__ = ["key_freq", "Wavesynth"]
 
@@ -23,12 +22,6 @@ def key_freq(key_number, a4=440.0):
     https://en.wikipedia.org/wiki/Piano_key_frequencies
     """
     return 2**((key_number-49)/12) * a4
-
-# some note frequencies for the 3rd, 4th and 5th octaves
-octave_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-notes3 = OrderedDict((note, key_freq(28+i)) for i, note in enumerate(octave_notes))
-notes4 = OrderedDict((note, key_freq(40+i)) for i, note in enumerate(octave_notes))
-notes5 = OrderedDict((note, key_freq(52+i)) for i, note in enumerate(octave_notes))
 
 
 class Wavesynth:
@@ -135,90 +128,7 @@ class Wavesynth:
     def white_noise(self, duration, amplitude=1.0):
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
-        scale = amplitude*(2**(self.samplewidth*8-1)-1)
+        scale = int(amplitude*(2**(self.samplewidth*8-1)-1))
         for t in range(int(duration*self.samplerate)):
             samples.append(random.randint(-scale, scale))
         return samples
-
-
-def demo_tones():
-    synth = Wavesynth()
-    from pyaudio import PyAudio
-    audio = PyAudio()
-    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
-                        channels=1, rate=synth.samplerate, output=True)
-    for wave in [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth]:
-        print(wave.__name__)
-        for note, freq in notes4.items():
-            print("   {:f} hz".format(freq))
-            sample = wave(freq, duration=0.4)
-            sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
-            sample.write_frames(stream)
-    print("pulse")
-    for note, freq in notes4.items():
-        print("   {:f} hz".format(freq))
-        sample = synth.pulse(freq, 0.1, duration=0.4)
-        sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
-        sample.write_frames(stream)
-    print("noise")
-    sample = synth.white_noise(duration=1.5)
-    sample = synth.to_sample(sample).fadeout(0.5).fadein(0.1)
-    sample.write_frames(stream)
-    stream.close()
-
-
-def demo_song():
-    synth = Wavesynth()
-    import time
-    print("Synthesizing tones...")
-    notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
-    tempo = 0.3
-    quarter_notes = {note: synth.to_sample(synth.sine(notes[note], tempo)).fadeout(0.1).fadein(0.02) for note in notes}
-    half_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*2)).fadeout(0.1).fadein(0.02) for note in notes}
-    full_notes = {note: synth.to_sample(synth.sine(notes[note], tempo*4)).fadeout(0.1).fadein(0.02) for note in notes}
-    song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
-        "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
-    from pyaudio import PyAudio
-    audio = PyAudio()
-    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
-                        channels=1, rate=synth.samplerate, output=True)
-    for note in song.split():
-        if note == ";":
-            print()
-            time.sleep(tempo*2)
-            continue
-        print(note, end="  ", flush=True) 
-        if note.endswith(".."):
-            sample = full_notes[note[:-2]]
-        elif note.endswith("."):
-            sample = half_notes[note[:-1]]
-        else:
-            sample = quarter_notes[note]
-        sample.write_frames(stream)
-    stream.close()
-    print()
-
-
-def demo_plot():
-    from matplotlib import pyplot as plot
-    synth=Wavesynth(samplerate=1000)
-    freq = 4
-    s = synth.sawtooth(freq, duration=1)
-    plot.plot(s)
-    s = synth.sine(freq, duration=1)
-    plot.plot(s)
-    s = synth.triangle(freq, duration=1)
-    plot.plot(s)
-    s = synth.square(freq, duration=1)
-    plot.plot(s)
-    s = synth.squareh(freq, duration=1)
-    plot.plot(s)
-    s = synth.pulse(freq, 0.2, duration=1)
-    plot.plot(s)
-    plot.show()
-
-
-if __name__ == "__main__":
-    # demo_plot()
-    # demo_tones()
-    demo_song()
