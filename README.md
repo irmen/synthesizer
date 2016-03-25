@@ -43,11 +43,10 @@ Here is a very simple example of a track file:
 
 ```ini
 [paths]
-# where to find the sample files and where to write output mix file
+# where to find the sample files
 samples = samples/
-output = ./
 
-[instruments]
+[samples]
 # list your samples here
 kick7 = biab_kick_7.wav
 snare2 = biab_sn_2.wav

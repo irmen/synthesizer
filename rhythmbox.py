@@ -460,7 +460,6 @@ class Song:
     def __init__(self):
         self.instruments = {}
         self.sample_path = None
-        self.output_path = None
         self.bpm = 128
         self.ticks = 4
         self.pattern_sequence = []
@@ -472,13 +471,12 @@ class Song:
         print("Loading song...")
         cp = ConfigParser()
         cp.read(song_file)
-        self.sample_path = cp['paths']['samples']
-        self.output_path = cp['paths']['output']
-        self.read_samples(cp['instruments'], self.sample_path)
-        if 'song' in cp:
-            self.bpm = cp['song'].getint('bpm')
-            self.ticks = cp['song'].getint('ticks')
-            self.read_patterns(cp, cp['song']['patterns'].split())
+        self.sample_path = cp["paths"]["samples"]
+        self.read_samples(cp["samples"], self.sample_path)
+        if "song" in cp:
+            self.bpm = cp["song"].getint("bpm")
+            self.ticks = cp["song"].getint("ticks")
+            self.read_patterns(cp, cp["song"]["patterns"].split())
         print("Done; {:d} instruments and {:d} patterns.".format(len(self.instruments), len(self.patterns)))
         unused_instruments = self.instruments.keys()
         for pattern_name in self.pattern_sequence:
@@ -517,11 +515,11 @@ class Song:
     def write(self, output_filename):
         import collections
         cp = ConfigParser(dict_type=collections.OrderedDict)
-        cp["paths"] = {"samples": self.sample_path, "output": self.output_path}
+        cp["paths"] = {"samples": self.sample_path}
         cp["song"] = {"bpm": self.bpm, "ticks": self.ticks, "patterns": " ".join(self.pattern_sequence)}
-        cp["instruments"] = {}
+        cp["samples"] = {}
         for name, sample in sorted(self.instruments.items()):
-            cp["instruments"][name] = os.path.basename(sample.filename)
+            cp["samples"][name] = os.path.basename(sample.filename)
         for name, pattern in sorted(self.patterns.items()):
             # Note: the layout of the patterns is not optimized for human viewing. You may want to edit it afterwards.
             cp["pattern."+name] = collections.OrderedDict(sorted(pattern.items()))
@@ -530,12 +528,11 @@ class Song:
         print("Saved to '{:s}'.".format(output_filename))
 
     def mix(self, output_filename):
-        if not self.output_path or not self.pattern_sequence:
+        if not self.pattern_sequence:
             raise ValueError("There's nothing to be mixed; no song loaded or song has no patterns.")
         patterns = [self.patterns[name] for name in self.pattern_sequence]
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
         result = mixer.mix()
-        output_filename = os.path.join(self.output_path, output_filename)
         result.make_16bit()
         result.write_wav(output_filename)
         print("Output is {:.2f} seconds, written to: {:s}".format(result.duration, output_filename))
