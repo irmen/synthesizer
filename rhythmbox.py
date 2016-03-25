@@ -30,6 +30,7 @@ class Sample:
     norm_sampwidth = 2
 
     def __init__(self, wave_file=None):
+        """Creates a new empty sample, or loads it from a wav file."""
         self.__locked = False
         if wave_file:
             self.load_wav(wave_file)
@@ -43,6 +44,7 @@ class Sample:
 
     @classmethod
     def from_raw_frames(cls, frames, samplewidth, samplerate, numchannels):
+        """Creates a new sample directly from the raw sample data."""
         s = cls()
         s.__frames = frames
         s.__samplerate = samplerate
@@ -66,26 +68,30 @@ class Sample:
     def duration(self):
         return len(self.__frames) / self.__samplerate / self.__sampwidth / self.__nchannels
 
-    def dup(self):
-        copy = Sample()
-        copy.__frames = self.__frames
-        copy.__sampwidth = self.__sampwidth
-        copy.__samplerate = self.__samplerate
-        copy.__nchannels = self.__nchannels
-        copy.__filename = self.__filename
-        copy.__locked = False
-        return copy
+    def copy(self):
+        """Returns a copy of the sample (unlocked)."""
+        cpy = Sample()
+        cpy.__frames = self.__frames
+        cpy.__sampwidth = self.__sampwidth
+        cpy.__samplerate = self.__samplerate
+        cpy.__nchannels = self.__nchannels
+        cpy.__filename = self.__filename
+        cpy.__locked = False
+        return cpy
 
     def lock(self):
+        """Lock the sample against modifications."""
         self.__locked = True
         return self
 
     def frame_idx(self, seconds):
+        """Calculate the raw frame index for the sample at the given timestamp."""
         return self.nchannels*self.sampwidth*int(self.samplerate*seconds)
 
-    def load_wav(self, file):
+    def load_wav(self, file_or_stream):
+        """Loads sample data from the wav file. You can use a filename or a stream object."""
         assert not self.__locked
-        with wave.open(file) as w:
+        with wave.open(file_or_stream) as w:
             if not 2 <= w.getsampwidth() <= 4:
                 raise IOError("only supports sample sizes of 2, 3 or 4 bytes")
             if not 1 <= w.getnchannels() <= 2:
@@ -97,12 +103,17 @@ class Sample:
             return self
 
     def write_wav(self, file_or_stream):
+        """Write a wav file with the current sample data. You can use a filename or a stream object."""
         with wave.open(file_or_stream, "wb") as out:
             out.setparams((self.nchannels, self.sampwidth, self.samplerate, 0, "NONE", "not compressed"))
             out.writeframes(self.__frames)
 
     @classmethod
     def wave_write_begin(cls, filename, first_sample):
+        """
+        Part of the sample stream output api: begin writing a sample to an output file.
+        Returns the open file for future writing.
+        """
         out = wave.open(filename, "wb")
         out.setparams((first_sample.nchannels, first_sample.sampwidth, first_sample.samplerate, 0, "NONE", "not compressed"))
         out.writeframesraw(first_sample.__frames)
@@ -110,17 +121,24 @@ class Sample:
 
     @classmethod
     def wave_write_append(cls, out, sample):
+        """Part of the sample stream output api: write more sample data to an open output stream."""
         out.writeframesraw(sample.__frames)
 
     @classmethod
     def wave_write_end(cls, out):
+        """Part of the sample stream output api: finalize and close the open output stream."""
         out.writeframes(b"")  # make sure the updated header gets written
         out.close()
 
     def write_frames(self, stream):
+        """Write the raw sample data to the output stream."""
         stream.write(self.__frames)
 
     def normalize(self):
+        """
+        Normalize the sample, meaning: convert it to the default samplerate, sample width and number of channels.
+        When mixing samples, they should all have the same properties, and this method is ideal to make sure of that.
+        """
         assert not self.__locked
         if self.samplerate != self.norm_samplerate:
             # Convert sample rate. Note: resampling causes slight loss of sound quality.
@@ -138,22 +156,34 @@ class Sample:
         return self
 
     def make_32bit(self, scale_amplitude=True):
+        """
+        Convert to 32 bit integer sample width, usually also scaling the amplitude to fit in the new 32 bits range.
+        Not scaling the amplitude means that the sample values will remain in their original range (usually 16 bit).
+        This is ideal to create sample value headroom to mix multiple samples together without clipping or overflow issues.
+        Usually after mixing you will convert back to 16 bits using maximized amplitude to have no quality loss.
+        """
         assert not self.__locked
         self.__frames = self.get_32bit_frames(scale_amplitude)
         self.__sampwidth = 4
         return self
 
     def get_32bit_frames(self, scale_amplitude=True):
+        """Returns the raw sample frames scaled to 32 bits. See make_32bit method for more info."""
         if self.sampwidth == 4:
             return self.__frames
         frames = audioop.lin2lin(self.__frames, self.sampwidth, 4)
         if not scale_amplitude:
-            # we need to scale back the sample amplitude to fit back into 16 bit range
+            # we need to scale back the sample amplitude to fit back into 24/16/8 bit range
             factor = 1.0/2**(8*abs(self.sampwidth-4))
             frames = audioop.mul(frames, 4, factor)
         return frames
 
     def make_16bit(self, maximize_amplitude=True):
+        """
+        Convert to 16 bit sample width, usually by using a maximized amplification factor to
+        scale into the full 16 bit range without clipping or overflow.
+        This is used for example to downscale a 32 bits mixed sample back into 16 bit width.
+        """
         assert not self.__locked
         assert self.sampwidth >= 2
         if maximize_amplitude:
@@ -164,6 +194,7 @@ class Sample:
         return self
 
     def amplify_max(self):
+        """Amplify the sample to maximum volume without clipping or overflow happening."""
         assert not self.__locked
         max_amp = audioop.max(self.__frames, self.sampwidth)
         max_target = 2 ** (8 * self.sampwidth - 1) - 2
@@ -173,11 +204,24 @@ class Sample:
         return self
 
     def amplify(self, factor):
+        """Amplifies (multiplies) the sample by the given factor. May cause clipping/overflow if factor is too large."""
         assert not self.__locked
         self.__frames = audioop.mul(self.__frames, self.sampwidth, factor)
         return self
 
+    def at_volume(self, volume):
+        """
+        Returns a copy of the sample at the given volume level 0-1, leaves original untouched.
+        This is a special method (next to amplify) because often the same sample will be used
+        at different volume levels, and it is cumbersome to drag copies around for every volume desired.
+        This also enables you to use this on locked samples.
+        """
+        cpy = self.copy()
+        cpy.amplify(volume)
+        return cpy
+
     def clip(self, start_seconds, end_seconds):
+        """Keep only a given clip from the sample."""
         assert not self.__locked
         assert end_seconds > start_seconds
         start = self.frame_idx(start_seconds)
@@ -186,21 +230,25 @@ class Sample:
             self.__frames = self.__frames[start:end]
         return self
 
-    def clip_end(self, clip_seconds):
-        """Clips the sample in two parts, keep the first and return the chopped off bit at the end."""
+    def split(self, seconds):
+        """Splits the sample in two parts, keep the first and return the chopped off bit at the end."""
         assert not self.__locked
-        end = self.frame_idx(clip_seconds)
+        end = self.frame_idx(seconds)
         if end != len(self.__frames):
-            chopped = self.dup()
+            chopped = self.copy()
             chopped.__frames = self.__frames[end:]
             self.__frames = self.__frames[:end]
             return chopped
         return None
 
-    def append(self, seconds):
+    def add_silence(self, seconds, at_start=False):
+        """Add silence at the end (or at the start)"""
         assert not self.__locked
         required_extra = self.frame_idx(seconds)
-        self.__frames += b"\0"*required_extra
+        if at_start:
+            self.__frames = b"\0"*required_extra + self.__frames
+        else:
+            self.__frames += b"\0"*required_extra
 
     def fadeout(self, seconds):
         """Fade the end of the sample out to zero volume in the given time."""
@@ -254,7 +302,66 @@ class Sample:
         self.__frames = begin + end
         return self
 
+    def reverse(self):
+        """Reverse the sound."""
+        assert not self.__locked
+        self.__frames = audioop.reverse(self.__frames, self.__sampwidth)
+        return self
+
+    def invert(self):
+        """Invert every sample value around 0."""
+        return self.amplify(-1)
+
+    def bias(self, bias):
+        """Add a bias constant to each sample value."""
+        assert not self.__locked
+        self.__frames = audioop.bias(self.__frames, self.__sampwidth, bias)
+        return self
+
+    def mono(self, left_factor=1.0, right_factor=1.0):
+        """Make the sample mono (1-channel) applying the given left/right channel factors when downmixing"""
+        assert not self.__locked
+        if self.__nchannels == 1:
+            return self
+        if self.__nchannels == 2:
+            self.__frames = audioop.tomono(self.__frames, self.__sampwidth, left_factor, right_factor)
+            self.__nchannels = 1
+            return self
+        raise ValueError("sample must be stereo or mono already")
+
+    def stereo(self, left_factor=1.0, right_factor=1.0):
+        """Turn a mono sample into a stereo one with given factors/amplitudes for left and right channels"""
+        assert not self.__locked
+        if self.__nchannels == 2:
+            return self
+        if self.__nchannels == 1:
+            self.__frames = audioop.tostereo(self.__frames, self.__sampwidth, left_factor, right_factor)
+            self.__nchannels = 2
+            return self
+        raise ValueError("sample must be mono or stereo already")
+
+    def echo(self, seconds, amount, delay, decay):
+        """
+        Adds a given number of echos into the sample taking the last given number of seconds of the sample.
+        The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead)
+        """
+        assert not self.__locked
+        if amount > 0:
+            seconds = max(0, self.duration - seconds)
+            echo = self.copy()
+            echo.__frames = self.__frames[self.frame_idx(seconds):]
+            for _ in range(amount):
+                seconds += delay
+                echo.amplify(decay)
+                self.mix_at(seconds, echo)
+        return self
+
     def mix(self, other, other_seconds=None, pad_shortest=True):
+        """
+        Mix another sample into the current sample.
+        You can limit the length taken from the other sample.
+        When pad_shortest is False, no sample length adjustment is done.
+        """
         assert not self.__locked
         assert self.sampwidth == other.sampwidth
         assert self.samplerate == other.samplerate
@@ -273,6 +380,10 @@ class Sample:
         return self
 
     def mix_at(self, seconds, other, other_seconds=None):
+        """
+        Mix another sample into the current sample at a specific time point.
+        You can limit the length taken from the other sample.
+        """
         assert not self.__locked
         assert self.sampwidth == other.sampwidth
         assert self.samplerate == other.samplerate
@@ -352,7 +463,7 @@ class Mixer:
         # chop/extend to get to the precise total duration (in case of silence in the last bars etc)
         missing = total_seconds-mixed.duration
         if missing > 0:
-            mixed.append(missing)
+            mixed.add_silence(missing)
         elif missing < 0:
             mixed.clip(0, total_seconds)
         if verbose:
@@ -384,11 +495,11 @@ class Mixer:
             overflow = None
             if mixed.duration < trigger_duration:
                 # fill with some silence to reach the next sample position
-                mixed.append(trigger_duration-mixed.duration)
+                mixed.add_silence(trigger_duration - mixed.duration)
             elif mixed.duration > trigger_duration:
                 # chop off the sound that extends into the next sample position
                 # keep this overflow and mix it later!
-                overflow = mixed.clip_end(trigger_duration)
+                overflow = mixed.split(trigger_duration)
             mixed_duration += mixed.duration
             yield mixed
             mixed = overflow if overflow else Sample().make_32bit()
@@ -398,7 +509,7 @@ class Mixer:
         timestamp = total_seconds
         trigger_duration = timestamp-previous_timestamp
         if mixed.duration < trigger_duration:
-            mixed.append(trigger_duration-mixed.duration)
+            mixed.add_silence(trigger_duration - mixed.duration)
         elif mixed.duration > trigger_duration:
             mixed.clip(0, trigger_duration)
         mixed_duration += mixed.duration
@@ -445,7 +556,7 @@ class Mixer:
                     yield index, timestamp, mix_cache[instruments_key]
                     continue
                 # duplicate the longest sample as target mix buffer, then mix the remaining samples into it
-                mixed = triggers[0][1].dup()
+                mixed = triggers[0][1].copy()
                 for _, sample in triggers[1:]:
                     mixed.mix(sample)
                 mixed.lock()
@@ -640,7 +751,7 @@ class Repl(cmd.Cmd):
 
     def play_sample(self, sample):
         if sample.sampwidth not in (2, 3):
-            sample = sample.dup().make_16bit()
+            sample = sample.copy().make_16bit()
         if self.audio:
             with contextlib.closing(self.audio.open(
                     format=self.audio.get_format_from_width(sample.sampwidth),
