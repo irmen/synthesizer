@@ -1,6 +1,5 @@
 import time
-import audioop
-from pyaudio import PyAudio
+from rhythmbox import Output
 from synth import Wavesynth, key_freq
 from collections import OrderedDict
 
@@ -17,27 +16,24 @@ notes7 = OrderedDict((note, key_freq(76+i)) for i, note in enumerate(octave_note
 
 def demo_tones():
     synth = Wavesynth()
-    audio = PyAudio()
-    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
-                        channels=1, rate=synth.samplerate, output=True)
-    for wave in [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth]:
-        print(wave.__name__)
+    with Output() as out:
+        for wave in [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth]:
+            print(wave.__name__)
+            for note, freq in notes4.items():
+                print("   {:f} hz".format(freq))
+                sample = wave(freq, duration=0.4)
+                sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
+                out.play_sample(sample)
+        print("pulse")
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
-            sample = wave(freq, duration=0.4)
+            sample = synth.pulse(freq, 0.1, duration=0.4)
             sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
-            sample.write_frames(stream)
-    print("pulse")
-    for note, freq in notes4.items():
-        print("   {:f} hz".format(freq))
-        sample = synth.pulse(freq, 0.1, duration=0.4)
-        sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
-        sample.write_frames(stream)
-    print("noise")
-    sample = synth.white_noise(duration=1.5)
-    sample = synth.to_sample(sample).fadeout(0.5).fadein(0.1)
-    sample.write_frames(stream)
-    stream.close()
+            out.play_sample(sample)
+        print("noise")
+        sample = synth.white_noise(duration=1.5)
+        sample = synth.to_sample(sample).fadeout(0.5).fadein(0.1)
+        out.play_sample(sample)
 
 
 def demo_song():
@@ -50,6 +46,7 @@ def demo_song():
     full_notes = {note: synth.to_sample(synth.triangle(notes[note], tempo*4)).fadeout(0.1).fadein(0.02) for note in notes}
     song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
         "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
+    from pyaudio import PyAudio
     audio = PyAudio()
     stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
                         channels=1, rate=synth.samplerate, output=True)
@@ -106,22 +103,19 @@ def demo_plot():
 
 def bass_tones():
     synth = Wavesynth()
-    audio = PyAudio()
-    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
-                        channels=1, rate=synth.samplerate, output=True)
-    for note, freq in notes2.items():
-        print(note, freq)
-        duration = 2
-        a_sin1 = synth.triangle(freq, duration=duration, amplitude=0.2)
-        a_sin2 = synth.sine(freq*1.03, duration=duration, amplitude=0.4)
-        a_sin3 = synth.sine(freq*0.95, duration=duration, amplitude=0.3)
-        s_sin1 = synth.to_sample(a_sin1)
-        s_sin2 = synth.to_sample(a_sin2)
-        s_sin3 = synth.to_sample(a_sin3)
-        s_sin1.mix(s_sin2).mix(s_sin3)
-        s_sin1.amplify_max().fadeout(0.2).fadein(0.1)
-        s_sin1.write_frames(stream)
-    stream.close()
+    with Output() as out:
+        for note, freq in notes2.items():
+            print(note, freq)
+            duration = 2
+            a_sin1 = synth.triangle(freq, duration=duration, amplitude=0.2)
+            a_sin2 = synth.sine(freq*1.03, duration=duration, amplitude=0.4)
+            a_sin3 = synth.sine(freq*0.95, duration=duration, amplitude=0.3)
+            s_sin1 = synth.to_sample(a_sin1)
+            s_sin2 = synth.to_sample(a_sin2)
+            s_sin3 = synth.to_sample(a_sin3)
+            s_sin1.mix(s_sin2).mix(s_sin3)
+            s_sin1.amplify_max().fadeout(0.2).fadein(0.1)
+            out.play_sample(s_sin1)
 
 
 def modulate():
@@ -135,11 +129,21 @@ def modulate():
     s1.modulate(m)
     plot.plot(s1.get_frame_array())
     plot.show()
-    audio = PyAudio()
-    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
-                        channels=1, rate=synth.samplerate, output=True)
-    s1.write_frames(stream)
-    stream.close()
+    with Output() as out:
+        out.play_sample(s1)
+
+
+def envelope():
+    from matplotlib import pyplot as plot
+    synth = Wavesynth()
+    freq = 220
+    s = synth.triangle(freq, duration=1)
+    s = synth.to_sample(s, False)
+    s.envelope(0.05, 0.1, 0.6, 0.3)
+    plot.plot(s.get_frame_array())
+    plot.show()
+    with Output() as out:
+        out.play_sample(s)
 
 
 if __name__ == "__main__":
@@ -148,3 +152,4 @@ if __name__ == "__main__":
     demo_song()
     # bass_tones()
     # modulate()
+    # envelope()

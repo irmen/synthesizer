@@ -278,7 +278,6 @@ class Sample:
 
     def fadeout(self, seconds, target_volume=0.0):
         """Fade the end of the sample out to the target volume (usually zero) in the given time."""
-        # @TODO use target_volume...
         assert not self.__locked
         if self.__sampwidth == 1:
             faded = array.array('b')
@@ -293,8 +292,9 @@ class Sample:
         begin = self.__frames[:i]
         end = self.__frames[i:]  # we fade this chunk
         numsamples = len(end)/self.__sampwidth
+        decrease = 1-target_volume
         for i in range(int(numsamples)):
-            amplitude = 1-(i/numsamples)
+            amplitude = 1-(i/numsamples)*decrease
             s = audioop.getsample(end, self.__sampwidth, i)
             faded.append(int(s*amplitude))
         end = faded.tobytes()
@@ -305,7 +305,6 @@ class Sample:
 
     def fadein(self, seconds, start_volume=0.0):
         """Fade the start of the sample in from the starting volume (usually zero) in the given time."""
-        # @TODO use start_volume...
         assert not self.__locked
         if self.__sampwidth == 1:
             faded = array.array('b')
@@ -320,8 +319,9 @@ class Sample:
         begin = self.__frames[:i]  # we fade this chunk
         end = self.__frames[i:]
         numsamples = len(begin)/self.__sampwidth
+        increase = 1-start_volume
         for i in range(int(numsamples)):
-            amplitude = i/numsamples
+            amplitude = i*increase/numsamples+start_volume
             s = audioop.getsample(begin, self.__sampwidth, i)
             faded.append(int(s*amplitude))
         begin = faded.tobytes()
