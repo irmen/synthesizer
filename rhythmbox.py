@@ -23,6 +23,8 @@ class Sample:
     Audio sample data, usually normalized to a fixed set of parameters: 16 bit stereo 44.1 Khz
     To avoid easy mistakes and problems, it is not possible to directly access the audio sample frames.
     All operations that manipulate the sample frames and properties are implemented as methods on the object.
+    Most of them modify the sample in place (if it's not locked) and return the sample object,
+    so you can easily chain several operations.
     """
     norm_samplerate = 44100
     norm_nchannels = 2
@@ -253,7 +255,7 @@ class Sample:
             chopped.__frames = self.__frames[end:]
             self.__frames = self.__frames[:end]
             return chopped
-        return None
+        return Sample.from_raw_frames(b"", self.__sampwidth, self.__samplerate, self.__nchannels)
 
     def add_silence(self, seconds, at_start=False):
         """Add silence at the end (or at the start)"""
@@ -263,9 +265,20 @@ class Sample:
             self.__frames = b"\0"*required_extra + self.__frames
         else:
             self.__frames += b"\0"*required_extra
+        return self
 
-    def fadeout(self, seconds):
-        """Fade the end of the sample out to zero volume in the given time."""
+    def join(self, other):
+        """Add another sample at the end of the current one. The other sample must have the same properties."""
+        assert not self.__locked
+        assert self.sampwidth == other.sampwidth
+        assert self.samplerate == other.samplerate
+        assert self.nchannels == other.nchannels
+        self.__frames += other.__frames
+        return self
+
+    def fadeout(self, seconds, target_volume=0.0):
+        """Fade the end of the sample out to the target volume (usually zero) in the given time."""
+        # @TODO use target_volume...
         assert not self.__locked
         if self.__sampwidth == 1:
             faded = array.array('b')
@@ -290,8 +303,9 @@ class Sample:
         self.__frames = begin + end
         return self
 
-    def fadein(self, seconds):
-        """Fade the start of the sample in from zero volume in the given time."""
+    def fadein(self, seconds, start_volume=0.0):
+        """Fade the start of the sample in from the starting volume (usually zero) in the given time."""
+        # @TODO use start_volume...
         assert not self.__locked
         if self.__sampwidth == 1:
             faded = array.array('b')
@@ -396,6 +410,23 @@ class Sample:
                 self.mix_at(seconds, echo)
         return self
 
+    def envelope(self, attack, decay, sustainlevel, release):
+        """Apply an ADSR volume envelope. A,D,R are in seconds, Sustainlevel is a factor."""
+        assert attack >= 0 and decay >= 0 and release >= 0
+        assert 0 <= sustainlevel <= 1
+        D = self.split(attack)   # self = A
+        S = D.split(decay)
+        if sustainlevel < 1:
+            S.amplify(sustainlevel)   # apply the sustain level to S now so that R gets it as well
+        R = S.split(S.duration - release)
+        if attack > 0:
+            self.fadein(attack)
+        if decay > 0:
+            D.fadeout(decay, sustainlevel)
+        if release > 0:
+            R.fadeout(release)
+        self.join(D).join(S).join(R)
+
     def mix(self, other, other_seconds=None, pad_shortest=True):
         """
         Mix another sample into the current sample.
@@ -441,20 +472,20 @@ class Sample:
         self.__frames = self._mix_join_frames(pre, mixed, post)
         return self
 
-    # XXX slow due to copying (but only significant when not streaming)
     def _mix_join_frames(self, pre, mid, post):
+        # warning: slow due to copying (but only significant when not streaming)
         return pre + mid + post
 
-    # XXX slow due to copying (but only significant when not streaming)
     def _mix_split_frames(self, other_frames_length, start_frame_idx):
+        # warning: slow due to copying (but only significant when not streaming)
         self._mix_grow_if_needed(start_frame_idx, other_frames_length)
         pre = self.__frames[:start_frame_idx]
         to_mix = self.__frames[start_frame_idx:start_frame_idx + other_frames_length]
         post = self.__frames[start_frame_idx + other_frames_length:]
         return pre, to_mix, post
 
-    # XXX slow due to copying (but only significant when not streaming)
     def _mix_grow_if_needed(self, start_frame_idx, other_length):
+        # warning: slow due to copying (but only significant when not streaming)
         required_length = start_frame_idx + other_length
         if required_length > len(self.__frames):
             # we need to extend the current sample buffer to make room for the mixed sample at the end
@@ -700,6 +731,78 @@ class Song:
         yield from mixer.mix_generator()
 
 
+class Output:
+    """Plays samples to audio output device."""
+    def __init__(self):
+        if pyaudio:
+            self.audio = pyaudio.PyAudio()
+        else:
+            self.audio = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, xtype, value, traceback):
+        self.close()
+
+    def close(self):
+        if self.audio:
+            self.audio.terminate()
+            self.audio = None
+
+    def play_sample(self, sample):
+        if sample.sampwidth not in (2, 3):
+            sample = sample.copy().make_16bit()
+        if self.audio:
+            with contextlib.closing(self.audio.open(
+                    format=self.audio.get_format_from_width(sample.sampwidth),
+                    channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
+                sample.write_frames(stream)
+                filler = b"\0"*sample.sampwidth*sample.nchannels*stream.get_write_available()
+                stream.write(filler)
+                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+        else:
+            # try to fallback to winsound (only works on windows)
+            sample_file = "__temp_sample.wav"
+            sample.write_wav(sample_file)
+            winsound.PlaySound(sample_file, winsound.SND_FILENAME)
+            os.remove(sample_file)
+
+    def play_samples(self, samples):
+        """play all the samples immediately after each other."""
+        if self.audio:
+            with contextlib.closing(self.audio.open(
+                    format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
+                for sample in self.normalized_samples(samples, 26000):
+                    sample.write_frames(stream)
+                filler = b"\0\0\0\0"*stream.get_write_available()
+                stream.write(filler)
+                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+        else:
+            # winsound doesn't cut it when playing many small sample files...
+            raise RuntimeError("Sorry but pyaudio is not installed. You need it to play streaming audio output.")
+
+    def normalized_samples(self, samples, global_amplification=26000):
+        for sample in samples:
+            if sample.sampwidth != 2:
+                # We can't use automatic global max amplitude because we're streaming
+                # the samples individually. So use a fixed amplification value instead
+                # that will be used to amplify all samples in stream by the same amount.
+                sample = sample.amplify(global_amplification).make_16bit(False)
+            assert sample.nchannels == 2
+            assert sample.samplerate == 44100
+            assert sample.sampwidth == 2
+            yield sample
+
+    def stream_to_file(self, filename, samples):
+        samples = self.normalized_samples(samples, 26000)
+        sample = next(samples)
+        with Sample.wave_write_begin(filename, sample) as out:
+            for sample in samples:
+                Sample.wave_write_append(out, sample)
+            Sample.wave_write_end(out)
+
+
 class Repl(cmd.Cmd):
     """
     Interactive command line interface to load/record/save and play samples, patterns and whole tracks.
@@ -709,17 +812,13 @@ class Repl(cmd.Cmd):
     def __init__(self, discard_unused_instruments=False):
         self.song = Song()
         self.discard_unused_instruments = discard_unused_instruments
-        if pyaudio:
-            self.audio = pyaudio.PyAudio()
-        else:
-            self.audio = None
+        self.out = Output()
         super(Repl, self).__init__()
 
     def do_quit(self, args):
         """quits the session"""
         print("Bye.", args)
-        if self.audio:
-            self.audio.terminate()
+        self.out.close()
         return True
 
     def do_bpm(self, bpm):
@@ -766,7 +865,7 @@ class Repl(cmd.Cmd):
         try:
             m = Mixer(patterns, self.song.bpm, self.song.ticks, self.song.instruments)
             result = m.mix(verbose=len(patterns) > 1)
-            self.play_sample(result)
+            self.out.play_sample(result)
         except ValueError as x:
             print("ERROR:", x)
 
@@ -787,65 +886,13 @@ class Repl(cmd.Cmd):
         if pattern:
             self.play_single_bar(sample, pattern)
         else:
-            self.play_sample(sample)
-
-    def play_sample(self, sample):
-        if sample.sampwidth not in (2, 3):
-            sample = sample.copy().make_16bit()
-        if self.audio:
-            with contextlib.closing(self.audio.open(
-                    format=self.audio.get_format_from_width(sample.sampwidth),
-                    channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
-                sample.write_frames(stream)
-                filler = b"\0"*sample.sampwidth*sample.nchannels*stream.get_write_available()
-                stream.write(filler)
-                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
-        else:
-            # try to fallback to winsound (only works on windows)
-            sample_file = "__temp_sample.wav"
-            sample.write_wav(sample_file)
-            winsound.PlaySound(sample_file, winsound.SND_FILENAME)
-            os.remove(sample_file)
-
-    def play_samples(self, samples):
-        """play all the samples immediately after each other."""
-        if self.audio:
-            with contextlib.closing(self.audio.open(
-                    format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
-                for sample in self.normalized_samples(samples, 26000):
-                    sample.write_frames(stream)
-                filler = b"\0\0\0\0"*stream.get_write_available()
-                stream.write(filler)
-                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
-        else:
-            # winsound doesn't cut it when playing many small sample files...
-            raise RuntimeError("Sorry but pyaudio cannot be found. You need it to play streaming audio output.")
-
-    def stream_to_file(self, filename, samples):
-        samples = self.normalized_samples(samples, 26000)
-        sample = next(samples)
-        with Sample.wave_write_begin(filename, sample) as out:
-            for sample in samples:
-                Sample.wave_write_append(out, sample)
-            Sample.wave_write_end(out)
-
-    def normalized_samples(self, samples, global_amplification=26000):
-        for sample in samples:
-            if sample.sampwidth != 2:
-                # We can't use automatic global max amplitude because we're streaming
-                # the samples individually. So use a fixed amplification value instead
-                # that will be used to amplify all samples in stream by the same amount.
-                sample = sample.amplify(global_amplification).make_16bit(False)
-            assert sample.nchannels == 2
-            assert sample.samplerate == 44100
-            assert sample.sampwidth == 2
-            yield sample
+            self.out.play_sample(sample)
 
     def play_single_bar(self, sample, pattern):
         try:
             m = Mixer([{"sample": pattern}], self.song.bpm, self.song.ticks, {"sample": sample})
             result = m.mix(verbose=False)
-            self.play_sample(result)
+            self.out.play_sample(result)
         except ValueError as x:
             print("ERROR:", x)
 
@@ -858,7 +905,7 @@ class Repl(cmd.Cmd):
         self.song.mix(output)
         mix = Sample(wave_file=output)
         print("Playing sound...")
-        self.play_sample(mix)
+        self.out.play_sample(mix)
         os.remove(output)
 
     def do_stream(self, args):
@@ -874,12 +921,12 @@ class Repl(cmd.Cmd):
         if args:
             filename = args.strip()
             print("Mixing and streaming to output file '{0}'...".format(filename))
-            self.stream_to_file(filename, self.song.mix_generator())
+            self.out.stream_to_file(filename, self.song.mix_generator())
             print("\r                          ")
             return
         print("Mixing and streaming to speakers...")
         try:
-            self.play_samples(self.song.mix_generator())
+            self.out.play_samples(self.song.mix_generator())
             print("\r                          ")
         except KeyboardInterrupt:
             print("Stopped.")
@@ -919,7 +966,10 @@ If a pattern with the name doesn't exist yet it will be added."""
                 self.print_pattern(pattern_name, self.song.patterns[pattern_name])
 
     def do_seq(self, names):
-        """Print the sequence of patterns that form the current track, or if you give a list of names: use that as the new pattern sequence."""
+        """
+        Print the sequence of patterns that form the current track,
+        or if you give a list of names: use that as the new pattern sequence.
+        """
         if not names:
             print("  ".join(self.song.pattern_sequence))
             return
@@ -964,7 +1014,8 @@ def main(track_file, outputfile=None, interactive=False):
         if pyaudio:
             # mix and stream output in real time
             print("Mixing and streaming to speakers...")
-            Repl().play_samples(song.mix_generator())
+            with Output() as out:
+                out.play_samples(song.mix_generator())
             print("\r                          ")
         else:
             # pyaudio is needed to stream, fallback on mixing everything to a wav
@@ -972,7 +1023,8 @@ def main(track_file, outputfile=None, interactive=False):
             song.mix(outputfile)
             mix = Sample(wave_file=outputfile)
             print("Playing sound...")
-            Repl().play_sample(mix)
+            with Output() as out:
+                out.play_sample(mix)
 
 
 def usage():
