@@ -51,32 +51,35 @@ class Wavesynth:
             frames = audioop.byteswap(bytes, self.samplewidth)
         return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, 1).fadeout(0.1)
 
-    def sine(self, frequency, duration, amplitude=1.0):
+    def sine(self, frequency, duration, amplitude=1.0, phase=0.0):
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
         rate = self.samplerate/frequency/2.0/pi
-        for t in range(int(duration*self.samplerate)):
+        phase = int(phase*pi*rate*2)
+        for t in range(phase, phase+int(duration*self.samplerate)):
             samples.append(int(sin(t/rate)*scale))
         return samples
 
-    def square(self, frequency, duration, amplitude=1.0):
+    def square(self, frequency, duration, amplitude=1.0, phase=0.0):
         """Generate a perfect square wave [max/-max]"""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = int(0.8*amplitude*(2**(self.samplewidth*8-1)-1))
         width = self.samplerate/frequency/2
-        for t in range(int(duration*self.samplerate)):
+        phase = int(phase*width*2)
+        for t in range(phase, phase+int(duration*self.samplerate)):
             samples.append(-scale if int(t/width) % 2 else scale)
         return samples
 
-    def squareh(self, frequency, duration, num_harmonics=12, amplitude=1.0):
+    def squareh(self, frequency, duration, num_harmonics=12, amplitude=1.0, phase=0.0):
         """Generate a square wave based on harmonic sine waves (more natural)"""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
         f = frequency/self.samplerate
-        for t in range(int(duration*self.samplerate)):
+        phase = int(phase/f)
+        for t in range(phase, phase+int(duration*self.samplerate)):
             h = 0.0
             q = 2*pi*f*t
             for k in range(1, num_harmonics+1):
@@ -90,34 +93,37 @@ class Wavesynth:
             samples.append(int(h*scale))
         return samples
 
-    def triangle(self, frequency, duration, amplitude=1.0):
+    def triangle(self, frequency, duration, amplitude=1.0, phase=0.0):
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
         p = self.samplerate/frequency
-        for t in range(int(duration*self.samplerate)):
+        phase = int(phase*p)
+        for t in range(phase, phase+int(duration*self.samplerate)):
             y = 4*amplitude/p*(abs((t+p*0.75) % p - p/2)-p/4)
             samples.append(int(scale*y))
         return samples
 
-    def sawtooth(self, frequency, duration, amplitude=1.0):
+    def sawtooth(self, frequency, duration, amplitude=1.0, phase=0.0):
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 0.8*amplitude*(2**(self.samplewidth*8-1)-1)
         a = self.samplerate/frequency
-        for t in range(int(duration*self.samplerate)):
+        phase = int(phase*a)
+        for t in range(phase, phase+int(duration*self.samplerate)):
             y = 2*(t/a - floor(0.5+t/a))
             samples.append(int(scale*y))
         return samples
 
-    def pulse(self, frequency, width, duration, amplitude=1.0):
+    def pulse(self, frequency, width, duration, amplitude=1.0, phase=0.0):
         assert 0 <= amplitude <= 1.0
         assert 0 < width <= 0.5
         samples = self._get_array()
         wave_width = self.samplerate/frequency
         pulse_width = wave_width * width
         scale = int(0.8*amplitude*(2**(self.samplewidth*8-1)-1))
-        for t in range(int(duration*self.samplerate)):
+        phase = int(phase*wave_width)
+        for t in range(phase, phase+int(duration*self.samplerate)):
             x = t % wave_width
             if x < pulse_width:
                 samples.append(scale)
