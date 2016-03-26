@@ -1,4 +1,3 @@
-
 import sys
 import os
 import wave
@@ -67,6 +66,21 @@ class Sample:
     @property
     def duration(self):
         return len(self.__frames) / self.__samplerate / self.__sampwidth / self.__nchannels
+
+    def __len__(self):
+        """returns the number of sample frames"""
+        return len(self.__frames) // self.__sampwidth // self.__nchannels
+
+    def get_frame_array(self):
+        """Returns the sample values as array. Warning: this can copy large amounts of data."""
+        if self.__sampwidth == 1:
+            return array.array('b', self.__frames)
+        elif self.__sampwidth == 2:
+            return array.array('h', self.__frames)
+        elif self.__sampwidth == 4:
+            return array.array('l', self.__frames)
+        else:
+            raise ValueError("can only fade sample widths 1, 2 and 4")
 
     def copy(self):
         """Returns a copy of the sample (unlocked)."""
@@ -272,7 +286,7 @@ class Sample:
             faded.append(int(s*amplitude))
         end = faded.tobytes()
         if sys.byteorder == "big":
-            end = audioop.byteswap(bytes, end)
+            end = audioop.byteswap(end, self.__sampwidth)
         self.__frames = begin + end
         return self
 
@@ -298,8 +312,34 @@ class Sample:
             faded.append(int(s*amplitude))
         begin = faded.tobytes()
         if sys.byteorder == "big":
-            begin = audioop.byteswap(bytes, begin)
+            begin = audioop.byteswap(begin, self.__sampwidth)
         self.__frames = begin + end
+        return self
+
+    def modulate(self, modulator):
+        """
+        Perform amplitude modulation by another waveform (which will be cycled).
+        The maximum amplitude of the modulator waveform is scaled to be 1.0 so no overflow/clipping will occur.
+        """
+        assert not self.__locked
+        if self.__sampwidth == 1:
+            frames = array.array('b', self.__frames)
+        elif self.__sampwidth == 2:
+            frames = array.array('h', self.__frames)
+        elif self.__sampwidth == 4:
+            frames = array.array('l', self.__frames)
+        else:
+            raise ValueError("can only modulate sample widths 1, 2 and 4")
+        if isinstance(modulator, Sample):
+            modulator = modulator.get_frame_array()
+        factor = 1.0/max(modulator)
+        import itertools
+        modulator = itertools.cycle(modulator)
+        for i in range(len(frames)):
+            frames[i] = int(frames[i] * next(modulator) * factor)
+        self.__frames = frames.tobytes()
+        if sys.byteorder == "big":
+            self.__frames = audioop.byteswap(self.__frames, self.__sampwidth)
         return self
 
     def reverse(self):

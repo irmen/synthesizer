@@ -45,11 +45,11 @@ class Wavesynth:
         else:
             raise ValueError("only samplewidth sizes 1, 2 and 4 are supported")
 
-    def to_sample(self, sample_array):
+    def to_sample(self, sample_array, fadeout=True):
         frames = sample_array.tobytes()
         if sys.byteorder == "big":
             frames = audioop.byteswap(bytes, self.samplewidth)
-        return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, 1).fadeout(0.1)
+        return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, 1).fadeout(0.1 if fadeout else 0)
 
     def sine(self, frequency, duration, amplitude=1.0, phase=0.0):
         assert 0 <= amplitude <= 1.0

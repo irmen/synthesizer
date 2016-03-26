@@ -1,4 +1,5 @@
 import time
+import audioop
 from pyaudio import PyAudio
 from synth import Wavesynth, key_freq
 from collections import OrderedDict
@@ -123,9 +124,27 @@ def bass_tones():
     stream.close()
 
 
+def modulate():
+    from matplotlib import pyplot as plot
+    synth = Wavesynth()
+    freq = 110
+    s1 = synth.triangle(freq, duration=2)
+    m = synth.sine(1, duration=2)
+    s1 = synth.to_sample(s1, False)
+    m = synth.to_sample(m, False).get_frame_array()
+    s1.modulate(m)
+    plot.plot(s1.get_frame_array())
+    plot.show()
+    audio = PyAudio()
+    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
+                        channels=1, rate=synth.samplerate, output=True)
+    s1.write_frames(stream)
+    stream.close()
+
+
 if __name__ == "__main__":
     # demo_plot()
     # demo_tones()
     demo_song()
     # bass_tones()
-
+    # modulate()
