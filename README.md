@@ -18,7 +18,7 @@ On windows you can even run it without having pyaudio installed (it will use win
 # synth
 
 There's also a simple waveform synthesizer (``synth.py``) that can generate different wave form samples:
-sine, triangle, sawtooth, square and white noise.
+sine, triangle, sawtooth, square, harmonics and white noise. It also has limited Frequency Modulation support using LFOs.
 
 
 ## how it works

@@ -146,10 +146,25 @@ def envelope():
         out.play_sample(s)
 
 
+def fm():
+    synth = Wavesynth()
+    lfo = synth.LFO()
+    with Output() as out:
+        lfo1 = lfo.sine(13.2152, amplitude=0.1)
+        s1 = synth.sine(110, duration=3, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        out.play_sample(s1)
+        lfo2 = lfo.sine(45, amplitude=0.3)
+        s2 = synth.sine(220, duration=3.5, fmlfo=lfo2)
+        s2 = synth.to_sample(s2)
+        out.play_sample(s2)
+
+
 if __name__ == "__main__":
     # demo_plot()
     # demo_tones()
-    demo_song()
+    # demo_song()
     # bass_tones()
     # modulate_amp()
     # envelope()
+    fm()

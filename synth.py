@@ -51,14 +51,19 @@ class Wavesynth:
             frames = audioop.byteswap(bytes, self.samplewidth)
         return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, 1).fadeout(0.1 if fadeout else 0)
 
-    def sine(self, frequency, duration, amplitude=1.0, phase=0.0):
+    def sine(self, frequency, duration, amplitude=1.0, phase=0.0, fmlfo=None):
+        """Simple sine wave. Optionally FM using a supplied LFO."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
         rate = self.samplerate/frequency/2.0/pi
         phase = int(phase*pi*rate*2)
-        for t in range(phase, phase+int(duration*self.samplerate)):
-            samples.append(int(sin(t/rate)*scale))
+        if fmlfo:
+            for t in range(phase, phase+int(duration*self.samplerate)):
+                samples.append(int(sin(t/rate*fmlfo(t))*scale))
+        else:
+            for t in range(phase, phase+int(duration*self.samplerate)):
+                samples.append(int(sin(t/rate)*scale))
         return samples
 
     def square(self, frequency, duration, amplitude=1.0, phase=0.0):
@@ -85,6 +90,7 @@ class Wavesynth:
         return self.harmonics(frequency, duration, num_harmonics, amplitude, phase, only_odd=True)
 
     def triangle(self, frequency, duration, amplitude=1.0, phase=0.0):
+        """Perfect triangle waveform (not using harmonics)."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = amplitude*(2**(self.samplewidth*8-1)-1)
@@ -96,6 +102,7 @@ class Wavesynth:
         return samples
 
     def sawtooth(self, frequency, duration, amplitude=1.0, phase=0.0):
+        """Perfect sawtooth waveform (not using harmonics)."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 0.8*amplitude*(2**(self.samplewidth*8-1)-1)
@@ -107,6 +114,7 @@ class Wavesynth:
         return samples
 
     def pulse(self, frequency, width, duration, amplitude=1.0, phase=0.0):
+        """Perfect pulse waveform (not using harmonics)."""
         assert 0 <= amplitude <= 1.0
         assert 0 < width <= 0.5
         samples = self._get_array()
@@ -123,6 +131,7 @@ class Wavesynth:
         return samples
 
     def white_noise(self, duration, amplitude=1.0):
+        """White noise (randomness) waveform."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = int(amplitude*(2**(self.samplewidth*8-1)-1))
@@ -152,3 +161,20 @@ class Wavesynth:
                     h += sin(q*k)/k/2
             samples.append(int(h*scale))
         return samples
+
+    def LFO(self):
+        return LFO(self.samplerate)
+
+
+# @TODO add support to apply an ADSR envelope to the LFOs output
+class LFO:
+    """Low Frequency Oscillator."""
+    def __init__(self, samplerate=Sample.norm_samplerate):
+        self.samplerate = samplerate
+
+    def sine(self, frequency, amplitude=1.0, phase=0.0):
+        """Returns Sine wave LFO function: t=>sin(t)"""
+        assert 0 <= amplitude <= 1.0
+        rate = self.samplerate/frequency/2.0/pi
+        phase = phase*pi*2
+        return lambda t: sin(t/rate+phase)*amplitude
