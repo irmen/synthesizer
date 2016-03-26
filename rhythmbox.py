@@ -1,3 +1,14 @@
+"""
+Sample mixer and sequencer meant to create rhythms. Inspired by the Roland TR-909.
+Uses PyAudio (https://pypi.python.org/pypi/PyAudio) for playing sound. On windows
+it can fall back to using the winsound module if pysound isn't available.
+
+Sample mix rate is configured at 44.1 khz. You may want to change this if most of
+the samples you're using are of a different sample rate (such as 48Khz), to avoid
+the slight loss of quality due to resampling.
+
+Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+"""
 import sys
 import os
 import wave
@@ -330,7 +341,7 @@ class Sample:
         self.__frames = begin + end
         return self
 
-    def modulate(self, modulator):
+    def modulate_amp(self, modulator):
         """
         Perform amplitude modulation by another waveform (which will be cycled).
         The maximum amplitude of the modulator waveform is scaled to be 1.0 so no overflow/clipping will occur.
@@ -639,6 +650,9 @@ class Mixer:
 
 
 class Song:
+    """
+    Represents a set of instruments, patterns and bars that make up a 'song'.
+    """
     def __init__(self):
         self.instruments = {}
         self.sample_path = None
@@ -648,6 +662,7 @@ class Song:
         self.patterns = {}
 
     def read(self, song_file, discard_unused_instruments=True):
+        """Read a song from a saved file."""
         with open(song_file):
             pass    # test for file existence
         print("Loading song...")
@@ -666,15 +681,17 @@ class Song:
         if unused_instruments and discard_unused_instruments:
             for instrument in list(unused_instruments):
                 del self.instruments[instrument]
-            print("Warning: there are unused instruments. I've unloaded them from memory.")
+            print("Warning: there are unused instruments. They have been unloaded to save memory, and can safely be removed from the song file.")
             print("The unused instruments are:", ", ".join(sorted(unused_instruments)))
 
     def read_samples(self, instruments, samples_path):
+        """Reads the sample files for the instruments."""
         self.instruments = {}
         for name, file in sorted(instruments.items()):
             self.instruments[name] = Sample(wave_file=os.path.join(samples_path, file)).normalize().make_32bit(scale_amplitude=False).lock()
 
     def read_patterns(self, songdef, names):
+        """Reads and parses the pattern specs from the song."""
         self.pattern_sequence = []
         self.patterns = {}
         for name in names:
@@ -695,6 +712,7 @@ class Song:
             self.pattern_sequence.append(name)
 
     def write(self, output_filename):
+        """Save the song definitions to an output file."""
         import collections
         cp = ConfigParser(dict_type=collections.OrderedDict)
         cp["paths"] = {"samples": self.sample_path}
@@ -710,6 +728,7 @@ class Song:
         print("Saved to '{:s}'.".format(output_filename))
 
     def mix(self, output_filename):
+        """Mix the song into a resulting mix sample."""
         if not self.pattern_sequence:
             raise ValueError("There's nothing to be mixed; no song loaded or song has no patterns.")
         patterns = [self.patterns[name] for name in self.pattern_sequence]
@@ -721,11 +740,19 @@ class Song:
         return result
 
     def mixed_triggers(self):
+        """
+        Generator that produces all the instrument triggers needed to mix/stream the song.
+        Shortcut for Mixer.mixed_triggers, see there for more details.
+        """
         patterns = [self.patterns[name] for name in self.pattern_sequence]
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
         yield from mixer.mixed_triggers()
 
     def mix_generator(self):
+        """
+        Generator that produces samples that together form the mixed song.
+        Shortcut for Mixer.mix_generator(), see there for more details.
+        """
         patterns = [self.patterns[name] for name in self.pattern_sequence]
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
         yield from mixer.mix_generator()
@@ -751,6 +778,7 @@ class Output:
             self.audio = None
 
     def play_sample(self, sample):
+        """Play a single sample."""
         if sample.sampwidth not in (2, 3):
             sample = sample.copy().make_16bit()
         if self.audio:
@@ -769,7 +797,7 @@ class Output:
             os.remove(sample_file)
 
     def play_samples(self, samples):
-        """play all the samples immediately after each other."""
+        """Plays all the given samples immediately after each other, with no pauses."""
         if self.audio:
             with contextlib.closing(self.audio.open(
                     format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
@@ -783,18 +811,22 @@ class Output:
             raise RuntimeError("Sorry but pyaudio is not installed. You need it to play streaming audio output.")
 
     def normalized_samples(self, samples, global_amplification=26000):
+        """Generator that produces samples normalized to 16 bit using a single amplification value for all."""
         for sample in samples:
             if sample.sampwidth != 2:
                 # We can't use automatic global max amplitude because we're streaming
                 # the samples individually. So use a fixed amplification value instead
                 # that will be used to amplify all samples in stream by the same amount.
                 sample = sample.amplify(global_amplification).make_16bit(False)
+            if sample.nchannels == 1:
+                sample.stereo()
             assert sample.nchannels == 2
             assert sample.samplerate == 44100
             assert sample.sampwidth == 2
             yield sample
 
     def stream_to_file(self, filename, samples):
+        """Saves the samples after each other into one single output wav file."""
         samples = self.normalized_samples(samples, 26000)
         sample = next(samples)
         with Sample.wave_write_begin(filename, sample) as out:

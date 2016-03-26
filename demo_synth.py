@@ -118,7 +118,7 @@ def bass_tones():
             out.play_sample(s_sin1)
 
 
-def modulate():
+def modulate_amp():
     from matplotlib import pyplot as plot
     synth = Wavesynth()
     freq = 110
@@ -126,7 +126,7 @@ def modulate():
     m = synth.sine(1, duration=2)
     s1 = synth.to_sample(s1, False)
     m = synth.to_sample(m, False).get_frame_array()
-    s1.modulate(m)
+    s1.modulate_amp(m)
     plot.plot(s1.get_frame_array())
     plot.show()
     with Output() as out:
@@ -151,5 +151,5 @@ if __name__ == "__main__":
     # demo_tones()
     demo_song()
     # bass_tones()
-    # modulate()
+    # modulate_amp()
     # envelope()

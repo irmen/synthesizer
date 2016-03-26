@@ -1,7 +1,7 @@
 """
 Sample waveform synthesizer.
 Creates some simple waveform samples with adjustable parameters:
-sine, triangle, square, sawtooth, pulse, and white noise.
+sine, triangle, square, sawtooth, pulse, harmonics, and white noise.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
@@ -26,8 +26,8 @@ def key_freq(key_number, a4=440.0):
 
 class Wavesynth:
     """
-    Simple waveform sample synthesizer. Can generate various wave forms:
-    sine, square (perfect or with harmonics), triangle and sawtooth.
+    Simple waveform sample synthesizer. Can generate various wave forms based on simple math:
+    sine, square (perfect or with harmonics), triangle, sawtooth, harmonics, white noise.
     """
     def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_sampwidth):
         if samplewidth not in (1, 2, 4):
@@ -80,26 +80,9 @@ class Wavesynth:
         """
         Generate a square wave based on harmonic sine waves (more natural sounding than pure square)
         It is a lot slower to generate than square because it has to add many individual sine waves.
-        Ref: https://en.wikipedia.org/wiki/Square_wave
+        It's done by adding only odd-integer harmonics, see https://en.wikipedia.org/wiki/Square_wave
         """
-        assert 0 <= amplitude <= 1.0
-        samples = self._get_array()
-        scale = amplitude*(2**(self.samplewidth*8-1)-1)
-        f = frequency/self.samplerate
-        phase = int(phase/f)
-        for t in range(phase, phase+int(duration*self.samplerate)):
-            h = 0.0
-            q = 2*pi*f*t
-            for k in range(1, num_harmonics+1):
-                m = 2*k-1
-                h += sin(q*m)/m
-            # Formula says 4/pi but that only works on infinite series.
-            # When dealing with a non infinite number of harmonics, the signal
-            # can get 'off the scale' and needs to be clamped. We compensate
-            # a little by not using 4/pi but just 1, to reduce the number of clamps needed.
-            # (clamping will distort the signal)
-            samples.append(int(h*scale))
-        return samples
+        return self.harmonics(frequency, duration, num_harmonics, amplitude, phase, only_odd=True)
 
     def triangle(self, frequency, duration, amplitude=1.0, phase=0.0):
         assert 0 <= amplitude <= 1.0
@@ -145,4 +128,27 @@ class Wavesynth:
         scale = int(amplitude*(2**(self.samplewidth*8-1)-1))
         for t in range(int(duration*self.samplerate)):
             samples.append(random.randint(-scale, scale))
+        return samples
+
+    def harmonics(self, frequency, duration, num_harmonics, amplitude=1.0, phase=0.0, only_even=False, only_odd=False):
+        """Makes a waveform based on harmonics. This is slow because many sine waves are added together."""
+        assert 0 <= amplitude <= 1.0
+        samples = self._get_array()
+        scale = amplitude*(2**(self.samplewidth*8-1)-1)
+        f = frequency/self.samplerate
+        phase = int(phase/f)
+        for t in range(phase, phase+int(duration*self.samplerate)):
+            h = 0.0
+            q = 2*pi*f*t
+            if only_odd:
+                for k in range(1, 2*num_harmonics, 2):
+                    h += sin(q*k)/k
+            elif only_even:
+                h += sin(q)*0.7  # always include harmonic #1 as base
+                for k in range(2, 2*num_harmonics, 2):
+                    h += sin(q*k)/k
+            else:
+                for k in range(1, 1+num_harmonics):
+                    h += sin(q*k)/k/2
+            samples.append(int(h*scale))
         return samples
