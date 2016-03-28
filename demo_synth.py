@@ -1,6 +1,6 @@
 import time
 from rhythmbox import Output
-from synth import Wavesynth, key_freq
+from synth import Wavesynth, key_freq, Oscillator
 from collections import OrderedDict
 
 # some note frequencies for octaves 1 to 7
@@ -150,21 +150,42 @@ def fm():
     synth = Wavesynth()
     lfo = synth.LFO()
     with Output() as out:
-        lfo1 = lfo.sine(13.2152, amplitude=0.1)
-        s1 = synth.sine(110, duration=3, fmlfo=lfo1)
+        lfo1 = lfo.sine(55, amplitude=0.05)
+        s1 = synth.sine(220, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
-        lfo2 = lfo.sine(45, amplitude=0.3)
+        lfo1 = lfo.sine(55, amplitude=0.1)
+        s1 = synth.sine(220, duration=3, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        out.play_sample(s1)
+        lfo1 = lfo.sine(55, amplitude=0.15)
+        s1 = synth.sine(220, duration=3, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        out.play_sample(s1)
+        lfo2 = lfo.triangle(5, amplitude=0.2)
         s2 = synth.sine(220, duration=3.5, fmlfo=lfo2)
         s2 = synth.to_sample(s2)
         out.play_sample(s2)
 
 
+def lfo():
+    from matplotlib import pyplot as plot
+    lfo = Oscillator(1000)
+    l2 = lfo.square_h(4)
+    plot.subplot(2,1,1)
+    plot.plot([next(l2) for _ in range(1000)])
+    l3 = lfo.triangle(4)
+    plot.subplot(2,1,2)
+    plot.plot([next(l3) for _ in range(1000)])
+    plot.show()
+
+
 if __name__ == "__main__":
-    # demo_plot()
-    # demo_tones()
-    # demo_song()
-    # bass_tones()
-    # modulate_amp()
-    # envelope()
-    fm()
+    #demo_plot()
+    #demo_tones()
+    demo_song()
+    #bass_tones()
+    #modulate_amp()
+    #envelope()
+    #fm()
+    #lfo()

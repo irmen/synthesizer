@@ -34,6 +34,7 @@ class Wavesynth:
             raise ValueError("only samplewidth sizes 1, 2 and 4 are supported")
         self.samplerate = samplerate
         self.samplewidth = samplewidth
+        # self.oscillator = Oscillator(self.samplerate)
 
     def _get_array(self):
         if self.samplewidth == 1:
@@ -60,7 +61,7 @@ class Wavesynth:
         phase = int(phase*pi*rate*2)
         if fmlfo:
             for t in range(phase, phase+int(duration*self.samplerate)):
-                samples.append(int(sin(t/rate*fmlfo(t))*scale))
+                samples.append(int(sin((t+t*next(fmlfo))/rate)*scale))
         else:
             for t in range(phase, phase+int(duration*self.samplerate)):
                 samples.append(int(sin(t/rate)*scale))
@@ -163,18 +164,101 @@ class Wavesynth:
         return samples
 
     def LFO(self):
-        return LFO(self.samplerate)
+        return Oscillator(self.samplerate)
 
 
 # @TODO add support to apply an ADSR envelope to the LFOs output
-class LFO:
-    """Low Frequency Oscillator."""
+class Oscillator:
+    """Oscillator that produces generators for several types of waveforms."""
     def __init__(self, samplerate=Sample.norm_samplerate):
         self.samplerate = samplerate
 
-    def sine(self, frequency, amplitude=1.0, phase=0.0):
-        """Returns Sine wave LFO function: t=>sin(t)"""
-        assert 0 <= amplitude <= 1.0
-        rate = self.samplerate/frequency/2.0/pi
-        phase = phase*pi*2
-        return lambda t: sin(t/rate+phase)*amplitude
+    def sine(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a sine wave"""
+        rate = self.samplerate/frequency
+        increment = 1/rate*2*pi
+        t = phase*2*pi
+        while True:
+            yield sin(t)*amplitude+bias
+            t += increment
+
+    def triangle(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a perfect triangle wave (not using harmonics)."""
+        rate = self.samplerate/frequency
+        t = int(phase*rate)
+        while True:
+            yield 4*amplitude/rate*(abs((t+rate*0.75) % rate - rate/2)-rate/4)+bias
+            t += 1
+
+    def square(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a perfect square wave [max/-max] (not using harmonics)."""
+        width = self.samplerate/frequency/2
+        t = phase*2
+        increment = 1/width
+        while True:
+            yield (-amplitude if int(t) % 2 else amplitude)+bias
+            t += increment
+
+    def square_h(self, frequency, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0):
+        """
+        Returns a generator that produces a square wave based on harmonic sine waves.
+        It is a lot heavier to generate than square because it has to add many individual sine waves.
+        It's done by adding only odd-integer harmonics, see https://en.wikipedia.org/wiki/Square_wave
+        """
+        return self.harmonics(frequency, num_harmonics, amplitude, phase, bias, only_odd=True)
+
+    def sawtooth(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a perfect sawtooth waveform (not using harmonics)."""
+        rate = self.samplerate/frequency
+        increment = 1/rate
+        t = phase
+        while True:
+            yield bias+amplitude*2*(t - floor(0.5+t))
+            t += increment
+
+    def sawtooth_h(self, frequency, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0):
+        """
+        Returns a generator that produces a sawtooth wave based on harmonic sine waves.
+        It is a lot heavier to generate than square because it has to add many individual sine waves.
+        It's done by adding all harmonics, see https://en.wikipedia.org/wiki/Sawtooth_wave
+        """
+        for y in self.harmonics(frequency, num_harmonics, amplitude, phase+0.5, bias):
+            yield bias-y+bias
+
+    def pulse(self, frequency, width, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a perfect pulse waveform (not using harmonics)."""
+        assert 0 < width <= 0.5
+        wave_width = self.samplerate/frequency
+        pulse_width = wave_width * width
+        t = int(phase*wave_width)
+        while True:
+            yield (amplitude if t % wave_width < pulse_width else -amplitude)+bias
+            t += 1
+
+    def harmonics(self, frequency, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False):
+        """
+        Returns a generator that produces a waveform based on harmonics.
+        This is computationally intensive because many sine waves are added together.
+        """
+        f = frequency/self.samplerate
+        t = phase
+        while True:
+            h = 0.0
+            q = 2*pi*t
+            if only_odd:
+                for k in range(1, 2*num_harmonics, 2):
+                    h += sin(q*k)/k
+            elif only_even:
+                h += sin(q)*0.7  # always include harmonic #1 as base
+                for k in range(2, 2*num_harmonics, 2):
+                    h += sin(q*k)/k
+            else:
+                for k in range(1, 1+num_harmonics):
+                    h += sin(q*k)/k/2
+            yield h*amplitude + bias
+            t += f
+
+    def white_noise(self, amplitude=1.0, bias=0.0):
+        """Returns a generator that produces white noise (randomness) waveform."""
+        while True:
+            yield random.uniform(-amplitude, amplitude) + bias
