@@ -1,10 +1,12 @@
 """
 Sample waveform synthesizer.
-Creates some simple waveform samples with adjustable parameters:
-sine, triangle, square, sawtooth, pulse, harmonics, and white noise.
+Creates some simple waveform samples with adjustable parameters.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
+# @TODO the FM logic isn't quite correct it needs to compensate the phase change:
+# see http://stackoverflow.com/questions/3089832/sine-wave-glissando-from-one-pitch-to-another-in-numpy
+# and http://stackoverflow.com/questions/28185219/generating-vibrato-sine-wave
 from rhythmbox import Sample
 from math import sin, pi, floor
 import random

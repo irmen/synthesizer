@@ -146,9 +146,12 @@ def envelope():
 def fm():
     synth = Wavesynth()
     with Output() as out:
-        freq = 220
+        freq = 880
         lfo1 = synth.oscillator.sine(5, amplitude=0.05)
         s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
+        from matplotlib import pyplot as plot
+        plot.specgram(s1, Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
+        plot.show()
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
         lfo1 = synth.oscillator.sine(6, amplitude=0.1)
