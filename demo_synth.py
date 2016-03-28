@@ -44,12 +44,12 @@ def demo_tones():
 
 def demo_song():
     synth = Wavesynth()
-    print("Synthesizing tones...")
     notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
     tempo = 0.3
     def instrument(freq, duration):
         a = synth.harmonics(freq, duration, num_harmonics=4, amplitude=0.8, only_even=True)
         return synth.to_sample(a).envelope(0.05, 0.2, 0.8, 0.5)
+    print("Synthesizing tones...")
     quarter_notes = {note: instrument(notes[note], tempo) for note in notes}
     half_notes = {note: instrument(notes[note], tempo*2) for note in notes}
     full_notes = {note: instrument(notes[note], tempo*4) for note in notes}
@@ -146,22 +146,23 @@ def envelope():
 def fm():
     synth = Wavesynth()
     with Output() as out:
-        lfo1 = synth.oscillator.sine(55, amplitude=0.05)
-        s1 = synth.sine(220, duration=3, fmlfo=lfo1)
+        freq = 220
+        lfo1 = synth.oscillator.sine(5, amplitude=0.05)
+        s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
-        lfo1 = synth.oscillator.sine(55, amplitude=0.1)
-        s1 = synth.sine(220, duration=3, fmlfo=lfo1)
+        lfo1 = synth.oscillator.sine(6, amplitude=0.1)
+        s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
-        lfo1 = synth.oscillator.sine(55, amplitude=0.15)
-        s1 = synth.sine(220, duration=3, fmlfo=lfo1)
+        lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
+        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
-        lfo2 = synth.oscillator.triangle(5, amplitude=0.2)
-        s2 = synth.sine(220, duration=3.5, fmlfo=lfo2)
-        s2 = synth.to_sample(s2)
-        out.play_sample(s2)
+        lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
+        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        out.play_sample(s1)
 
 
 def oscillator():
@@ -179,9 +180,9 @@ def oscillator():
 if __name__ == "__main__":
     #demo_plot()
     #demo_tones()
-    demo_song()
+    #demo_song()
     #bass_tones()
     #modulate_amp()
     #envelope()
-    #fm()
-    oscillator()
+    fm()
+    #oscillator()
