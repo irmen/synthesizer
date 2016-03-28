@@ -64,6 +64,14 @@ class Sample:
         s.__nchannels = numchannels
         return s
 
+    @classmethod
+    def from_array(cls, array, samplerate, numchannels):
+        samplewidth = array.itemsize
+        frames = array.tobytes()
+        if sys.byteorder == "big":
+            frames = audioop.byteswap(frames, samplewidth)
+        return Sample.from_raw_frames(frames, samplewidth, samplerate, numchannels)
+
     @property
     def sampwidth(self): return self.__sampwidth
 
@@ -437,6 +445,7 @@ class Sample:
         if release > 0:
             R.fadeout(release)
         self.join(D).join(S).join(R)
+        return self
 
     def mix(self, other, other_seconds=None, pad_shortest=True):
         """

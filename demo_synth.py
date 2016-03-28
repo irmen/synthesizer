@@ -17,22 +17,28 @@ notes7 = OrderedDict((note, key_freq(76+i)) for i, note in enumerate(octave_note
 def demo_tones():
     synth = Wavesynth()
     with Output() as out:
-        for wave in [synth.squareh, synth.square, synth.sine, synth.triangle, synth.sawtooth]:
+        for wave in [synth.square_h, synth.square, synth.sine, synth.triangle, synth.sawtooth, synth.sawtooth_h]:
             print(wave.__name__)
             for note, freq in notes4.items():
                 print("   {:f} hz".format(freq))
                 sample = wave(freq, duration=0.4)
-                sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
+                sample = synth.to_sample(sample).fadein(0.02)
                 out.play_sample(sample)
         print("pulse")
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
             sample = synth.pulse(freq, 0.1, duration=0.4)
-            sample = synth.to_sample(sample).fadeout(0.1).fadein(0.02)
+            sample = synth.to_sample(sample).fadein(0.02)
+            out.play_sample(sample)
+        print("harmonics (only even)")
+        for note, freq in notes3.items():
+            print("   {:f} hz".format(freq))
+            sample = synth.harmonics(freq, duration=0.4, num_harmonics=5, only_odd=True)
+            sample = synth.to_sample(sample).fadein(0.02)
             out.play_sample(sample)
         print("noise")
         sample = synth.white_noise(duration=1.5)
-        sample = synth.to_sample(sample).fadeout(0.5).fadein(0.1)
+        sample = synth.to_sample(sample).fadein(0.1)
         out.play_sample(sample)
 
 
@@ -41,9 +47,12 @@ def demo_song():
     print("Synthesizing tones...")
     notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
     tempo = 0.3
-    quarter_notes = {note: synth.to_sample(synth.triangle(notes[note], tempo)).fadeout(0.1).fadein(0.02) for note in notes}
-    half_notes = {note: synth.to_sample(synth.triangle(notes[note], tempo*2)).fadeout(0.1).fadein(0.02) for note in notes}
-    full_notes = {note: synth.to_sample(synth.triangle(notes[note], tempo*4)).fadeout(0.1).fadein(0.02) for note in notes}
+    def instrument(freq, duration):
+        a = synth.harmonics(freq, duration, num_harmonics=4, amplitude=0.8, only_even=True)
+        return synth.to_sample(a).envelope(0.05, 0.2, 0.8, 0.5)
+    quarter_notes = {note: instrument(notes[note], tempo) for note in notes}
+    half_notes = {note: instrument(notes[note], tempo*2) for note in notes}
+    full_notes = {note: instrument(notes[note], tempo*4) for note in notes}
     song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
         "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
     from pyaudio import PyAudio
@@ -76,28 +85,16 @@ def demo_plot():
     freq = 4
     s = synth.sawtooth(freq, duration=1)
     plot.plot(s)
-    # s = synth.sawtooth(freq, duration=1, phase=5)
-    # plot.plot(s)
     s = synth.sine(freq, duration=1)
     plot.plot(s)
-    # s = synth.sine(freq, duration=1, phase=0.1)
-    # plot.plot(s)
     s = synth.triangle(freq, duration=1)
     plot.plot(s)
-    # s = synth.triangle(freq, duration=1, phase=0.25)
-    # plot.plot(s)
     s = synth.square(freq, duration=1)
     plot.plot(s)
-    # s = synth.square(freq, duration=1, phase=0.25)
-    # plot.plot(s)
-    s = synth.squareh(freq, duration=1)
+    s = synth.square_h(freq, duration=1)
     plot.plot(s)
-    # s = synth.squareh(freq, duration=1, phase=0.5)
-    # plot.plot(s)
     s = synth.pulse(freq, 0.2, duration=1)
     plot.plot(s)
-    # s = synth.pulse(freq, 0.2, duration=1, phase=0.5)
-    # plot.plot(s)
     plot.show()
 
 
@@ -148,33 +145,32 @@ def envelope():
 
 def fm():
     synth = Wavesynth()
-    lfo = synth.LFO()
     with Output() as out:
-        lfo1 = lfo.sine(55, amplitude=0.05)
+        lfo1 = synth.oscillator.sine(55, amplitude=0.05)
         s1 = synth.sine(220, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
-        lfo1 = lfo.sine(55, amplitude=0.1)
+        lfo1 = synth.oscillator.sine(55, amplitude=0.1)
         s1 = synth.sine(220, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
-        lfo1 = lfo.sine(55, amplitude=0.15)
+        lfo1 = synth.oscillator.sine(55, amplitude=0.15)
         s1 = synth.sine(220, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
         out.play_sample(s1)
-        lfo2 = lfo.triangle(5, amplitude=0.2)
+        lfo2 = synth.oscillator.triangle(5, amplitude=0.2)
         s2 = synth.sine(220, duration=3.5, fmlfo=lfo2)
         s2 = synth.to_sample(s2)
         out.play_sample(s2)
 
 
-def lfo():
+def oscillator():
     from matplotlib import pyplot as plot
     lfo = Oscillator(1000)
     l2 = lfo.square_h(4)
     plot.subplot(2,1,1)
     plot.plot([next(l2) for _ in range(1000)])
-    l3 = lfo.triangle(4)
+    l3 = lfo.harmonics(4, 8, only_even=True)
     plot.subplot(2,1,2)
     plot.plot([next(l3) for _ in range(1000)])
     plot.show()
@@ -188,4 +184,4 @@ if __name__ == "__main__":
     #modulate_amp()
     #envelope()
     #fm()
-    #lfo()
+    oscillator()
