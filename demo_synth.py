@@ -1,5 +1,5 @@
 import time
-from rhythmbox import Output
+from rhythmbox import Output, Sample
 from synth import Wavesynth, key_freq, Oscillator
 from collections import OrderedDict
 
@@ -193,13 +193,57 @@ def oscillator():
     plot.show()
 
 
+def test_lfo_fmfix():
+    from matplotlib import pyplot as plot
+    samplerate = 1000
+    duration = 1
+    frequency = 20
+    bias = 100
+    amplitude = 100
+    phase = 0.4
+    lfo = Oscillator(samplerate)
+    s1_osc = lfo.sine(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=None)
+    s_no_fm = []
+    for _ in range(samplerate*duration):
+        s_no_fm.append(next(s1_osc))
+    fm = lfo.sine(2, amplitude=0.9)
+    s1 = lfo.sine_fm_correct_array(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    fm = lfo.sine(2, amplitude=0.9)
+    s2 = lfo.sine_fm_correct_array_optimized(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    plot.figure(figsize=(20, 12))
+    plot.subplot(411)
+    plot.ylabel("Sine no FM")
+    plot.plot(s_no_fm)
+    plot.subplot(412)
+    plot.ylabel("Sine FM good")
+    plot.plot(s1)
+    plot.subplot(413)
+    plot.ylabel("Sine FM optimized")
+    plot.plot(s2)
+    plot.subplot(414)
+    plot.ylabel("Combined")
+    plot.plot(s1)
+    plot.plot(s2)
+    plot.show()
+    # play some sound as well to hear it:
+    lfo = Oscillator(22050)
+    fm = lfo.sine(440/100, amplitude=0.5)
+    s = lfo.sine_fm_correct_array_optimized(440, duration=4, amplitude=30000, fmlfo=fm)
+    import array
+    a=array.array('h', [int(y) for y in s])
+    s = Sample.from_array(a, 22050, 1)
+    with Output() as out:
+        out.play_sample(s)
+
+
 if __name__ == "__main__":
     # demo_plot()
     # demo_tones()
-    demo_song()
+    # demo_song()
     # mixed_bass_tones()
     # modulate_amp()
     # envelope()
     # fm()
     # oscillator()
     # pwm()
+    test_lfo_fmfix()

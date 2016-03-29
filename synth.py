@@ -167,6 +167,37 @@ class Oscillator:
                 yield sin(t)*amplitude+bias
                 t += increment
 
+    def sine_fm_correct_array(self, frequency, duration, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+        """XXX sine wave generator with correct FM using phase correction"""
+        samples = []
+        fmlfo = fmlfo or iter(int, 1)
+        phase_correction = 0
+        freq_previous = frequency
+        for t in range(int(duration*self.samplerate)):
+            t /= self.samplerate
+            fm = next(fmlfo)
+            fm_freq = frequency * (1+fm)
+            phase_correction += (freq_previous-fm_freq)*2*pi*t
+            freq_previous = fm_freq
+            y = sin(2*pi*t*fm_freq+phase_correction+phase*2*pi)
+            samples.append(y*amplitude+bias)
+        return samples
+
+    def sine_fm_correct_array_optimized(self, frequency, duration, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+        """XXX sine wave generator with correct FM using phase correction, optimized version (TODO)"""
+        samples = []
+        fmlfo = fmlfo or iter(int, 1)
+        phase_correction = phase
+        freq_previous = frequency
+        for t in range(int(duration*self.samplerate)):
+            t /= self.samplerate
+            freq = frequency * (1+next(fmlfo))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            y = sin(2*pi*(t*freq+phase_correction))*amplitude+bias
+            samples.append(y)
+        return samples
+
     def triangle(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect triangle wave (not using harmonics)."""
         rate = self.samplerate/frequency
@@ -232,12 +263,17 @@ class Oscillator:
         wave_width = self.samplerate/frequency
         pulse_width = wave_width * width
         t = int(phase*wave_width)
-        fmlfo = fmlfo or iter(int, 1)   # endless zeros if no fm
         pwlfo = pwlfo or iter(int, 1)   # endless zeros if no pwm
-        while True:
-            pw = pulse_width * (1+next(pwlfo))
-            yield (amplitude if (t+t*next(fmlfo)) % wave_width < pw else -amplitude)+bias
-            t += 1
+        if fmlfo:
+            while True:
+                pw = pulse_width * (1+next(pwlfo))
+                yield (amplitude if (t+t*next(fmlfo)) % wave_width < pw else -amplitude)+bias
+                t += 1
+        else:
+            while True:
+                pw = pulse_width * (1+next(pwlfo))
+                yield (amplitude if t % wave_width < pw else -amplitude)+bias
+                t += 1
 
     def harmonics(self, frequency, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
         """
