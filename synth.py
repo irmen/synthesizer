@@ -115,13 +115,13 @@ class Wavesynth:
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def pulse(self, frequency, width, duration, amplitude=0.8, phase=0.0, fmlfo=None):
-        """Perfect pulse waveform (not using harmonics)."""
+    def pulse(self, frequency, width, duration, amplitude=0.8, phase=0.0, fmlfo=None, pwlfo=None):
+        """Perfect pulse waveform (not using harmonics). Optional FM and/or Pulse-width modulation."""
         assert 0 <= amplitude <= 1.0
         assert 0 < width <= 0.5
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.pulse(frequency, width, amplitude, phase, fmlfo=fmlfo)
+        waveform = self.oscillator.pulse(frequency, width, amplitude, phase, fmlfo=fmlfo, pwlfo=pwlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
@@ -223,20 +223,21 @@ class Oscillator:
         for y in self.harmonics(frequency, num_harmonics, amplitude, phase+0.5, bias, fmlfo=fmlfo):
             yield bias-y+bias
 
-    def pulse(self, frequency, width, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
-        """Returns a generator that produces a perfect pulse waveform (not using harmonics)."""
+    def pulse(self, frequency, width, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None, pwlfo=None):
+        """
+        Returns a generator that produces a perfect pulse waveform (not using harmonics).
+        Optional FM and/or Pulse-width modulation.
+        """
         assert 0 < width <= 0.5
         wave_width = self.samplerate/frequency
         pulse_width = wave_width * width
         t = int(phase*wave_width)
-        if fmlfo:
-            while True:
-                yield (amplitude if (t+t*next(fmlfo)) % wave_width < pulse_width else -amplitude)+bias
-                t += 1
-        else:
-            while True:
-                yield (amplitude if t % wave_width < pulse_width else -amplitude)+bias
-                t += 1
+        fmlfo = fmlfo or iter(int, 1)   # endless zeros if no fm
+        pwlfo = pwlfo or iter(int, 1)   # endless zeros if no pwm
+        while True:
+            pw = pulse_width * (1+next(pwlfo))
+            yield (amplitude if (t+t*next(fmlfo)) % wave_width < pw else -amplitude)+bias
+            t += 1
 
     def harmonics(self, frequency, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
         """

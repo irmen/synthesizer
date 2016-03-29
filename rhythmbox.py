@@ -16,6 +16,7 @@ import audioop
 import array
 import time
 import contextlib
+from configparser import ConfigParser
 try:
     import pyaudio
 except ImportError:
@@ -24,7 +25,6 @@ except ImportError:
 import cmd
 if sys.version_info < (3, 0):
     raise RuntimeError("This module requires python 3.x")
-from configparser import ConfigParser
 
 __all__ = ["Sample", "Mixer", "Song", "Repl"]
 

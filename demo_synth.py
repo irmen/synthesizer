@@ -46,9 +46,11 @@ def demo_song():
     synth = Wavesynth()
     notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
     tempo = 0.3
+
     def instrument(freq, duration):
         a = synth.harmonics(freq, duration, num_harmonics=4, amplitude=0.8, only_even=True)
         return synth.to_sample(a).envelope(0.05, 0.2, 0.8, 0.5)
+
     print("Synthesizing tones...")
     quarter_notes = {note: instrument(notes[note], tempo) for note in notes}
     half_notes = {note: instrument(notes[note], tempo*2) for note in notes}
@@ -61,7 +63,7 @@ def demo_song():
                         channels=1, rate=synth.samplerate, output=True)
     for note in song.split():
         if note == ";":
-            filler = b"\0"*sample.sampwidth*sample.nchannels*stream.get_write_available()
+            filler = b"\0"*synth.samplewidth*stream.get_write_available()
             stream.write(filler)
             time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
             print()
@@ -98,12 +100,12 @@ def demo_plot():
     plot.show()
 
 
-def bass_tones():
+def mixed_bass_tones():
     synth = Wavesynth()
     with Output() as out:
         for note, freq in notes2.items():
             print(note, freq)
-            duration = 2
+            duration = 1
             a_sin1 = synth.triangle(freq, duration=duration, amplitude=0.2)
             a_sin2 = synth.sine(freq*1.03, duration=duration, amplitude=0.4)
             a_sin3 = synth.sine(freq*0.95, duration=duration, amplitude=0.3)
@@ -168,24 +170,36 @@ def fm():
         out.play_sample(s1)
 
 
+def pwm():
+    synth = Wavesynth()
+    with Output() as out:
+        freq = 110
+        lfo1 = synth.oscillator.sine(220/33, amplitude=0.05)
+        lfo2 = synth.oscillator.sine(0.5, amplitude=0.99)
+        s1 = synth.pulse(freq, width=0.4, duration=4, fmlfo=lfo1, pwlfo=lfo2)
+        s1 = synth.to_sample(s1)
+        out.play_sample(s1)
+
+
 def oscillator():
     from matplotlib import pyplot as plot
     lfo = Oscillator(1000)
     l2 = lfo.square_h(4)
-    plot.subplot(2,1,1)
+    plot.subplot(2, 1, 1)
     plot.plot([next(l2) for _ in range(1000)])
     l3 = lfo.harmonics(4, 8, only_even=True)
-    plot.subplot(2,1,2)
+    plot.subplot(2, 1, 2)
     plot.plot([next(l3) for _ in range(1000)])
     plot.show()
 
 
 if __name__ == "__main__":
-    #demo_plot()
-    #demo_tones()
-    #demo_song()
-    #bass_tones()
-    #modulate_amp()
-    #envelope()
-    fm()
-    #oscillator()
+    # demo_plot()
+    # demo_tones()
+    demo_song()
+    # mixed_bass_tones()
+    # modulate_amp()
+    # envelope()
+    # fm()
+    # oscillator()
+    # pwm()
