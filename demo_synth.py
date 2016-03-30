@@ -202,36 +202,39 @@ def test_lfo_fmfix():
     amplitude = 100
     phase = 0.4
     lfo = Oscillator(samplerate)
-    s1_osc = lfo.sine(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=None)
-    s_no_fm = []
+    fm = lfo.sine(2, amplitude=0.9)
+    s1_osc = lfo.sine(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    s_orig = []
     for _ in range(samplerate*duration):
-        s_no_fm.append(next(s1_osc))
+        s_orig.append(next(s1_osc))
     fm = lfo.sine(2, amplitude=0.9)
-    s1 = lfo.sine_fm_correct_array(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
-    fm = lfo.sine(2, amplitude=0.9)
-    s2 = lfo.sine_fm_correct_array_optimized(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
-    plot.figure(figsize=(20, 12))
-    plot.subplot(411)
-    plot.ylabel("Sine no FM")
-    plot.plot(s_no_fm)
-    plot.subplot(412)
-    plot.ylabel("Sine FM good")
-    plot.plot(s1)
-    plot.subplot(413)
-    plot.ylabel("Sine FM optimized")
-    plot.plot(s2)
-    plot.subplot(414)
-    plot.ylabel("Combined")
-    plot.plot(s1)
-    plot.plot(s2)
+    # s1 = lfo.sine_fm_correct_array(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    # fm = lfo.sine(2, amplitude=0.9)
+    # s2 = lfo.sine_fm_correct_array_optimized(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    plot.figure(figsize=(20, 5))
+    # plot.subplot(411)
+    plot.ylabel("Sine FM orig. Gen.")
+    plot.plot(s_orig)
+    # plot.subplot(412)
+    # plot.ylabel("Sine FM good")
+    # plot.plot(s1)
+    # plot.subplot(413)
+    # plot.ylabel("Sine FM optimized")
+    # plot.plot(s2)
+    # plot.subplot(414)
+    # plot.ylabel("Combined")
+    # plot.plot(s1)
+    # plot.plot(s2)
     plot.show()
     # play some sound as well to hear it:
-    lfo = Oscillator(22050)
+    samplerate = 22050
+    duration = 4
+    lfo = Oscillator(samplerate)
     fm = lfo.sine(440/100, amplitude=0.5)
-    s = lfo.sine_fm_correct_array_optimized(440, duration=4, amplitude=30000, fmlfo=fm)
+    s = lfo.sine(440, amplitude=30000, fmlfo=fm)
     import array
-    a=array.array('h', [int(y) for y in s])
-    s = Sample.from_array(a, 22050, 1)
+    a = array.array('h', [int(next(s)) for _ in range(samplerate*duration)])
+    s = Sample.from_array(a, samplerate, 1)
     with Output() as out:
         out.play_sample(s)
 
