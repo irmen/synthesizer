@@ -23,23 +23,23 @@ def demo_tones():
                 print("   {:f} hz".format(freq))
                 sample = wave(freq, duration=0.4)
                 sample = synth.to_sample(sample).fadein(0.02)
-                out.play_sample(sample)
+                out.play_sample(sample, async=False)
         print("pulse")
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
             sample = synth.pulse(freq, 0.1, duration=0.4)
             sample = synth.to_sample(sample).fadein(0.02)
-            out.play_sample(sample)
+            out.play_sample(sample, async=False)
         print("harmonics (only even)")
         for note, freq in notes3.items():
             print("   {:f} hz".format(freq))
             sample = synth.harmonics(freq, duration=0.4, num_harmonics=5, only_odd=True)
             sample = synth.to_sample(sample).fadein(0.02)
-            out.play_sample(sample)
+            out.play_sample(sample, async=False)
         print("noise")
         sample = synth.white_noise(duration=1.5)
         sample = synth.to_sample(sample).fadein(0.1)
-        out.play_sample(sample)
+        out.play_sample(sample, async=False)
 
 
 def demo_song():
@@ -57,32 +57,26 @@ def demo_song():
     full_notes = {note: instrument(notes[note], tempo*4) for note in notes}
     song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
         "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
-    from pyaudio import PyAudio
-    audio = PyAudio()
-    stream = audio.open(format=audio.get_format_from_width(synth.samplewidth),
-                        channels=1, rate=synth.samplerate, output=True)
-    for note in song.split():
-        if note == ";":
-            filler = b"\0"*synth.samplewidth*stream.get_write_available()
-            stream.write(filler)
-            time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
-            print()
-            time.sleep(tempo*2)
-            continue
-        print(note, end="  ", flush=True)
-        if note.endswith(".."):
-            sample = full_notes[note[:-2]]
-        elif note.endswith("."):
-            sample = half_notes[note[:-1]]
-        else:
-            sample = quarter_notes[note]
-        sample.write_frames(stream)
-    stream.close()
-    print()
+    with Output(synth.samplerate, synth.samplewidth, 1) as out:
+        for note in song.split():
+            if note == ";":
+                print()
+                time.sleep(tempo*2)
+                continue
+            print(note, end="  ", flush=True)
+            if note.endswith(".."):
+                sample = full_notes[note[:-2]]
+            elif note.endswith("."):
+                sample = half_notes[note[:-1]]
+            else:
+                sample = quarter_notes[note]
+            out.play_sample(sample, async=False)
+        print()
 
 
 def demo_plot():
     from matplotlib import pyplot as plot
+    plot.title("Various waveforms")
     synth = Wavesynth(samplerate=1000)
     freq = 4
     s = synth.sawtooth(freq, duration=1)
@@ -100,36 +94,20 @@ def demo_plot():
     plot.show()
 
 
-def mixed_bass_tones():
-    synth = Wavesynth()
-    with Output() as out:
-        for note, freq in notes2.items():
-            print(note, freq)
-            duration = 1
-            a_sin1 = synth.triangle(freq, duration=duration, amplitude=0.2)
-            a_sin2 = synth.sine(freq*1.03, duration=duration, amplitude=0.4)
-            a_sin3 = synth.sine(freq*0.95, duration=duration, amplitude=0.3)
-            s_sin1 = synth.to_sample(a_sin1)
-            s_sin2 = synth.to_sample(a_sin2)
-            s_sin3 = synth.to_sample(a_sin3)
-            s_sin1.mix(s_sin2).mix(s_sin3)
-            s_sin1.amplify_max().fadeout(0.2).fadein(0.1)
-            out.play_sample(s_sin1)
-
-
 def modulate_amp():
     from matplotlib import pyplot as plot
     synth = Wavesynth()
     freq = 110
     s1 = synth.triangle(freq, duration=2)
-    m = synth.sine(1, duration=2)
+    m = synth.sine(2, duration=2, amplitude=0.4, bias=0.5)
     s1 = synth.to_sample(s1, False)
     m = synth.to_sample(m, False).get_frame_array()
     s1.modulate_amp(m)
+    plot.title("Amplitude modulation by another waveform (not an envelope)")
     plot.plot(s1.get_frame_array())
     plot.show()
     with Output() as out:
-        out.play_sample(s1)
+        out.play_sample(s1, async=False)
 
 
 def envelope():
@@ -138,47 +116,58 @@ def envelope():
     freq = 220
     s = synth.triangle(freq, duration=1)
     s = synth.to_sample(s, False)
-    s.envelope(0.05, 0.1, 0.6, 0.3)
+    s.envelope(0.05, 0.1, 0.2, 0.4)
+    plot.title("ADSR envelope")
     plot.plot(s.get_frame_array())
     plot.show()
     with Output() as out:
-        out.play_sample(s)
+        out.play_sample(s, async=False)
 
 
 def fm():
-    synth = Wavesynth()
+    synth = Wavesynth(samplerate=8000)
+    from matplotlib import pyplot as plot
+    freq = 2000
+    lfo1 = synth.oscillator.sine(1, amplitude=0.4)
+    s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
+    plot.title("Spectrogram")
+    plot.ylabel("Freq")
+    plot.xlabel("Time")
+    plot.specgram(s1, Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
+    plot.show()
     with Output() as out:
-        freq = 880
-        lfo1 = synth.oscillator.sine(5, amplitude=0.05)
-        s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
-        from matplotlib import pyplot as plot
-        plot.specgram(s1, Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
-        plot.show()
-        s1 = synth.to_sample(s1)
-        out.play_sample(s1)
-        lfo1 = synth.oscillator.sine(6, amplitude=0.1)
+        synth = Wavesynth()
+        freq = 440
+        lfo1 = synth.oscillator.sine(1, amplitude=0.2)
         s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
-        out.play_sample(s1)
+        out.play_sample(s1, async=False)
         lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
         s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
-        out.play_sample(s1)
+        out.play_sample(s1, async=False)
         lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
         s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
-        out.play_sample(s1)
+        out.play_sample(s1, async=False)
 
 
 def pwm():
-    synth = Wavesynth()
+    from matplotlib import pyplot as plot
+    synth = Wavesynth(samplerate=1000)
+    pwlfo = synth.oscillator.sine(0.2, amplitude=0.9)
+    s1 = synth.pulse(10, width=0.49, amplitude=0.6, duration=4, pwlfo=pwlfo)
+    plot.figure(figsize=(16, 4))
+    plot.title("Pulse width modulation")
+    plot.plot(s1)
+    plot.show()
     with Output() as out:
+        synth = Wavesynth()
         freq = 110
-        lfo1 = synth.oscillator.sine(220/33, amplitude=0.05)
-        lfo2 = synth.oscillator.sine(0.5, amplitude=0.99)
-        s1 = synth.pulse(freq, width=0.4, duration=4, fmlfo=lfo1, pwlfo=lfo2)
+        lfo2 = synth.oscillator.sine(0.3, amplitude=0.9)
+        s1 = synth.pulse(freq, width=0.49, amplitude=0.5, duration=4, fmlfo=None, pwlfo=lfo2)
         s1 = synth.to_sample(s1)
-        out.play_sample(s1)
+        out.play_sample(s1, async=False)
 
 
 def oscillator():
@@ -186,9 +175,11 @@ def oscillator():
     lfo = Oscillator(1000)
     l2 = lfo.square_h(4)
     plot.subplot(2, 1, 1)
+    plot.title("Square from harmonics")
     plot.plot([next(l2) for _ in range(1000)])
     l3 = lfo.harmonics(4, 8, only_even=True)
     plot.subplot(2, 1, 2)
+    plot.title("Even harmonics")
     plot.plot([next(l3) for _ in range(1000)])
     plot.show()
 
@@ -255,15 +246,41 @@ def square2():
     plot.show()
 
 
+def bias():
+    from matplotlib import pyplot as plot
+    synth = Wavesynth(samplerate=1000)
+    w1 = synth.sine(2, 4, 0.02, bias=0.1)
+    w2 = synth.triangle(2, 4, 0.02, bias=0.2)
+    w3 = synth.pulse(2, 0.45, 4, 0.02, bias=0.3)
+    w4 = synth.harmonics(2, 4, 7, 0.02, bias=0.4)
+    w5 = synth.sawtooth(2, 4, 0.02, bias=0.5)
+    w6 = synth.sawtooth_h(2, 4, 7, 0.02, bias=0.6)
+    w7 = synth.square(2, 4, 0.02, bias=0.7)
+    w8 = synth.square_h(2, 4, 7, 0.02, bias=0.8)
+    w9 = synth.white_noise(4, amplitude=0.02, bias=0.9)
+    plot.plot(w1)
+    plot.plot(w2)
+    plot.plot(w3)
+    plot.plot(w4)
+    plot.plot(w5)
+    plot.plot(w6)
+    plot.plot(w7)
+    plot.plot(w8)
+    plot.plot(w9)
+    plot.title("All waveforms biased to levels above zero")
+    plot.show()
+
+
 if __name__ == "__main__":
     # demo_plot()
     # demo_tones()
     # demo_song()
-    # mixed_bass_tones()
     # modulate_amp()
     # envelope()
     # fm()
-    # oscillator()
     # pwm()
+    # oscillator()
     test_lfo_fmfix()
-    square2()
+    # square2()
+    # bias()
+

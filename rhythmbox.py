@@ -14,7 +14,6 @@ import os
 import wave
 import audioop
 import array
-import time
 import threading
 import queue
 from configparser import ConfigParser
@@ -353,6 +352,7 @@ class Sample:
     def modulate_amp(self, modulator):
         """
         Perform amplitude modulation by another waveform (which will be cycled).
+        This is similar but not the same as AM by an LFO.
         The maximum amplitude of the modulator waveform is scaled to be 1.0 so no overflow/clipping will occur.
         """
         assert not self.__locked
@@ -787,17 +787,14 @@ class Output:
                 if not sample:
                     break
                 sample.write_frames(self.stream)
-            time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
+            # time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
 
         def play_immediately(self, sample, continuous=False):
-            if not continuous:
-                filler = b"\0"*sample.sampwidth*sample.nchannels*self.stream.get_write_available()
-                self.stream.write(filler)
             sample.write_frames(self.stream)
             if not continuous:
                 filler = b"\0"*sample.sampwidth*sample.nchannels*self.stream.get_write_available()
                 self.stream.write(filler)
-                time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
+                # time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
 
         def add_to_queue(self, sample):
             self.queue.put(sample)

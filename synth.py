@@ -48,17 +48,17 @@ class Wavesynth:
         s = Sample.from_array(sample_array, self.samplerate, 1)
         return s.fadeout(0.1 if fadeout else 0)
 
-    def sine(self, frequency, duration, amplitude=1.0, phase=0.0, fmlfo=None):
+    def sine(self, frequency, duration, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Simple sine wave. Optional FM using a supplied LFO."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.sine(frequency, amplitude, phase, fmlfo=fmlfo)
+        waveform = self.oscillator.sine(frequency, amplitude, phase, bias, fmlfo=fmlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def square(self, frequency, duration, amplitude=0.8, phase=0.0, fmlfo=None):
+    def square(self, frequency, duration, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
         """
         Generate a perfect square wave [max/-max].
         It is fast, but the square wave is not as 'natural' sounding as the ones
@@ -67,78 +67,78 @@ class Wavesynth:
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.square(frequency, amplitude, phase, fmlfo=fmlfo)
+        waveform = self.oscillator.square(frequency, amplitude, phase, bias, fmlfo=fmlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def square_h(self, frequency, duration, num_harmonics=12, amplitude=1.0, phase=0.0, fmlfo=None):
+    def square_h(self, frequency, duration, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Generate a square wave based on harmonic sine waves (more natural sounding than pure square)"""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.square_h(frequency, num_harmonics, amplitude, phase, fmlfo=fmlfo)
+        waveform = self.oscillator.square_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo=fmlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def triangle(self, frequency, duration, amplitude=1.0, phase=0.0, fmlfo=None):
+    def triangle(self, frequency, duration, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Perfect triangle waveform (not using harmonics). Optional FM using a supplied LFO."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.triangle(frequency, amplitude, phase, fmlfo=fmlfo)
+        waveform = self.oscillator.triangle(frequency, amplitude, phase, bias, fmlfo=fmlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def sawtooth(self, frequency, duration, amplitude=0.8, phase=0.0, fmlfo=None):
+    def sawtooth(self, frequency, duration, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
         """Perfect sawtooth waveform (not using harmonics)."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.sawtooth(frequency, amplitude, phase, fmlfo=fmlfo)
+        waveform = self.oscillator.sawtooth(frequency, amplitude, phase, bias, fmlfo=fmlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def sawtooth_h(self, frequency, duration, num_harmonics=12, amplitude=0.8, phase=0.0, fmlfo=None):
+    def sawtooth_h(self, frequency, duration, num_harmonics=12, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
         """Sawtooth waveform based on harmonic sine waves"""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.sawtooth_h(frequency, num_harmonics, amplitude, phase, fmlfo=fmlfo)
+        waveform = self.oscillator.sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo=fmlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def pulse(self, frequency, width, duration, amplitude=0.8, phase=0.0, fmlfo=None, pwlfo=None):
+    def pulse(self, frequency, width, duration, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None, pwlfo=None):
         """Perfect pulse waveform (not using harmonics). Optional FM and/or Pulse-width modulation."""
         assert 0 <= amplitude <= 1.0
         assert 0 < width <= 0.5
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.pulse(frequency, width, amplitude, phase, fmlfo=fmlfo, pwlfo=pwlfo)
+        waveform = self.oscillator.pulse(frequency, width, amplitude, phase, bias, fmlfo=fmlfo, pwlfo=pwlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def harmonics(self, frequency, duration, num_harmonics, amplitude=1.0, phase=0.0, only_even=False, only_odd=False, fmlfo=None):
+    def harmonics(self, frequency, duration, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
         """Makes a waveform based on harmonics. This is slow because many sine waves are added together."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.harmonics(frequency, num_harmonics, amplitude, phase, only_even=only_even, only_odd=only_odd, fmlfo=fmlfo)
+        waveform = self.oscillator.harmonics(frequency, num_harmonics, amplitude, phase, bias, only_even=only_even, only_odd=only_odd, fmlfo=fmlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def white_noise(self, duration, amplitude=1.0):
+    def white_noise(self, duration, amplitude=1.0, bias=0.0):
         """White noise (randomness) waveform."""
         assert 0 <= amplitude <= 1.0
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.white_noise(amplitude)
+        waveform = self.oscillator.white_noise(amplitude, bias)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
