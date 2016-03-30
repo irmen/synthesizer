@@ -194,7 +194,7 @@ def test_lfo_fmfix():
     phase = 0.4
     lfo = Oscillator(samplerate)
     fm = lfo.sine(2, amplitude=0.9)
-    s1_osc = lfo.triangle(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    s1_osc = lfo.square(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     s_orig = []
     for _ in range(samplerate*duration):
         s_orig.append(next(s1_osc))
@@ -207,7 +207,7 @@ def test_lfo_fmfix():
     duration = 4
     lfo = Oscillator(samplerate)
     fm = lfo.sine(440/100, amplitude=0.5)
-    s = lfo.triangle(440, amplitude=32000, fmlfo=fm)
+    s = lfo.square(440, amplitude=32000, fmlfo=fm)
     import array
     with Output(samplerate, 2, 1) as out:
         t = 0
