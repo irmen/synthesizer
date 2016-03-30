@@ -218,10 +218,15 @@ def test_lfo_fmfix():
     fm = lfo.sine(440/100, amplitude=0.5)
     s = lfo.triangle(440, amplitude=32000, fmlfo=fm)
     import array
-    a = array.array('h', [int(next(s)) for _ in range(samplerate*duration)])
-    s = Sample.from_array(a, samplerate, 1)
-    with Output() as out:
-        out.play_sample(s)
+    with Output(samplerate, 2, 1) as out:
+        t = 0
+        chunksize = 2205
+        while t < duration:
+            a = array.array('h', [int(next(s)) for _ in range(chunksize)])
+            smpl = Sample.from_array(a, samplerate, 1)
+            out.play_sample(smpl)
+            t += chunksize/samplerate
+    input("Enter to quit...")
 
 
 def square2():

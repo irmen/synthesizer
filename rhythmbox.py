@@ -15,7 +15,8 @@ import wave
 import audioop
 import array
 import time
-import contextlib
+import threading
+import queue
 from configparser import ConfigParser
 try:
     import pyaudio
@@ -768,12 +769,53 @@ class Song:
 
 
 class Output:
-    """Plays samples to audio output device."""
-    def __init__(self):
-        if pyaudio:
+    """Plays samples to audio output device or streams them to a file."""
+
+    class SoundOutputter(threading.Thread):
+        """Sound outputter running in its own thread. Requires PyAudio."""
+        def __init__(self, samplerate, samplewidth, nchannels, queuesize=100):
+            super().__init__(name="soundoutputter", daemon=True)
             self.audio = pyaudio.PyAudio()
+            self.stream = self.audio.open(
+                    format=self.audio.get_format_from_width(samplewidth),
+                    channels=nchannels, rate=samplerate, output=True)
+            self.queue = queue.Queue(maxsize=queuesize)
+
+        def run(self):
+            while True:
+                sample = self.queue.get()
+                if not sample:
+                    break
+                sample.write_frames(self.stream)
+            time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
+
+        def play_immediately(self, sample, continuous=False):
+            if not continuous:
+                filler = b"\0"*sample.sampwidth*sample.nchannels*self.stream.get_write_available()
+                self.stream.write(filler)
+            sample.write_frames(self.stream)
+            if not continuous:
+                filler = b"\0"*sample.sampwidth*sample.nchannels*self.stream.get_write_available()
+                self.stream.write(filler)
+                time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
+
+        def add_to_queue(self, sample):
+            self.queue.put(sample)
+
+        def close(self):
+            if self.stream:
+                self.stream.close()
+                self.stream = None
+            if self.audio:
+                self.audio.terminate()
+                self.audio = None
+
+    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_sampwidth, nchannels=Sample.norm_nchannels):
+        if pyaudio:
+            self.outputter = Output.SoundOutputter(samplerate, samplewidth, nchannels)
+            self.outputter.start()
         else:
-            self.audio = None
+            self.outputter = None
 
     def __enter__(self):
         return self
@@ -782,22 +824,18 @@ class Output:
         self.close()
 
     def close(self):
-        if self.audio:
-            self.audio.terminate()
-            self.audio = None
+        if self.outputter:
+            self.outputter.add_to_queue(None)
 
-    def play_sample(self, sample):
+    def play_sample(self, sample, async=True):
         """Play a single sample."""
         if sample.sampwidth not in (2, 3):
             sample = sample.copy().make_16bit()
-        if self.audio:
-            with contextlib.closing(self.audio.open(
-                    format=self.audio.get_format_from_width(sample.sampwidth),
-                    channels=sample.nchannels, rate=sample.samplerate, output=True)) as stream:
-                sample.write_frames(stream)
-                filler = b"\0"*sample.sampwidth*sample.nchannels*stream.get_write_available()
-                stream.write(filler)
-                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+        if self.outputter:
+            if async:
+                self.outputter.add_to_queue(sample)
+            else:
+                self.outputter.play_immediately(sample)
         else:
             # try to fallback to winsound (only works on windows)
             sample_file = "__temp_sample.wav"
@@ -805,16 +843,14 @@ class Output:
             winsound.PlaySound(sample_file, winsound.SND_FILENAME)
             os.remove(sample_file)
 
-    def play_samples(self, samples):
+    def play_samples(self, samples, async=True):
         """Plays all the given samples immediately after each other, with no pauses."""
-        if self.audio:
-            with contextlib.closing(self.audio.open(
-                    format=self.audio.get_format_from_width(2), channels=2, rate=44100, output=True)) as stream:
-                for sample in self.normalized_samples(samples, 26000):
-                    sample.write_frames(stream)
-                filler = b"\0\0\0\0"*stream.get_write_available()
-                stream.write(filler)
-                time.sleep(stream.get_output_latency()+stream.get_input_latency()+0.001)
+        if self.outputter:
+            for s in self.normalized_samples(samples, 26000):
+                if async:
+                    self.outputter.add_to_queue(s)
+                else:
+                    self.outputter.play_immediately(s, True)
         else:
             # winsound doesn't cut it when playing many small sample files...
             raise RuntimeError("Sorry but pyaudio is not installed. You need it to play streaming audio output.")
@@ -946,7 +982,7 @@ class Repl(cmd.Cmd):
         self.song.mix(output)
         mix = Sample(wave_file=output)
         print("Playing sound...")
-        self.out.play_sample(mix)
+        self.out.play_sample(mix, async=False)
         os.remove(output)
 
     def do_stream(self, args):
@@ -967,7 +1003,7 @@ class Repl(cmd.Cmd):
             return
         print("Mixing and streaming to speakers...")
         try:
-            self.out.play_samples(self.song.mix_generator())
+            self.out.play_samples(self.song.mix_generator(), async=False)
             print("\r                          ")
         except KeyboardInterrupt:
             print("Stopped.")
@@ -1056,7 +1092,7 @@ def main(track_file, outputfile=None, interactive=False):
             # mix and stream output in real time
             print("Mixing and streaming to speakers...")
             with Output() as out:
-                out.play_samples(song.mix_generator())
+                out.play_samples(song.mix_generator(), async=False)
             print("\r                          ")
         else:
             # pyaudio is needed to stream, fallback on mixing everything to a wav
