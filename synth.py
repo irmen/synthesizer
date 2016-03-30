@@ -177,14 +177,25 @@ class Oscillator:
 
     def triangle(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect triangle wave (not using harmonics)."""
-        # @TODO fix FM phase correction
-        rate = self.samplerate/frequency
-        t = int(phase*rate)
-        fmlfo = fmlfo or iter(int, 1)       # use endless zeros if no fmlfo supplied
-        while True:
-            tt = t + t*next(fmlfo)
-            yield 4*amplitude/rate*(abs((tt+rate*0.75) % rate - rate/2)-rate/4)+bias
-            t += 1
+        if fmlfo:
+            phase_correction = phase
+            freq_previous = frequency
+            increment = 1/self.samplerate
+            t = 0
+            while True:
+                freq = frequency * (1+next(fmlfo))
+                phase_correction += (freq_previous-freq)*t
+                freq_previous = freq
+                tt = t*freq+phase_correction
+                yield 4*amplitude*(abs((tt+0.75) % 1 - 0.5)-0.25)+bias
+                t += increment
+        else:
+            # optimized loop without FM
+            t = phase * frequency * frequency / self.samplerate
+            increment = 1/self.samplerate
+            while True:
+                yield 4*amplitude*(abs((t*frequency+0.75) % 1 - 0.5)-0.25)+bias
+                t += increment
 
     def square(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect square wave [max/-max] (not using harmonics)."""

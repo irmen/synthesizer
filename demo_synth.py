@@ -203,40 +203,51 @@ def test_lfo_fmfix():
     phase = 0.4
     lfo = Oscillator(samplerate)
     fm = lfo.sine(2, amplitude=0.9)
-    s1_osc = lfo.sine(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    s1_osc = lfo.triangle(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     s_orig = []
     for _ in range(samplerate*duration):
         s_orig.append(next(s1_osc))
-    fm = lfo.sine(2, amplitude=0.9)
-    # s1 = lfo.sine_fm_correct_array(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
-    # fm = lfo.sine(2, amplitude=0.9)
-    # s2 = lfo.sine_fm_correct_array_optimized(frequency, duration=duration, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     plot.figure(figsize=(20, 5))
-    # plot.subplot(411)
     plot.ylabel("Sine FM orig. Gen.")
     plot.plot(s_orig)
-    # plot.subplot(412)
-    # plot.ylabel("Sine FM good")
-    # plot.plot(s1)
-    # plot.subplot(413)
-    # plot.ylabel("Sine FM optimized")
-    # plot.plot(s2)
-    # plot.subplot(414)
-    # plot.ylabel("Combined")
-    # plot.plot(s1)
-    # plot.plot(s2)
     plot.show()
     # play some sound as well to hear it:
     samplerate = 22050
     duration = 4
     lfo = Oscillator(samplerate)
     fm = lfo.sine(440/100, amplitude=0.5)
-    s = lfo.sine(440, amplitude=30000, fmlfo=fm)
+    s = lfo.triangle(440, amplitude=32000, fmlfo=fm)
     import array
     a = array.array('h', [int(next(s)) for _ in range(samplerate*duration)])
     s = Sample.from_array(a, samplerate, 1)
     with Output() as out:
         out.play_sample(s)
+
+
+def square2():
+    from matplotlib import pyplot as plot
+    samplerate = 1000
+    duration = 1
+    frequency = 10
+    bias = 100
+    amplitude = 100
+    phase = 0.4
+    lfo = Oscillator(samplerate)
+    fm = lfo.sine(2, amplitude=0.5)
+    w1_osc = lfo.square(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    w2_osc = lfo.square2(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    w_orig = []
+    for _ in range(samplerate*duration):
+        w_orig.append(next(w1_osc))
+    plot.figure(figsize=(16, 8))
+    plot.subplot(211)
+    plot.plot(w_orig)
+    w_orig = []
+    for _ in range(samplerate*duration):
+        w_orig.append(next(w2_osc))
+    plot.subplot(212)
+    plot.plot(w_orig)
+    plot.show()
 
 
 if __name__ == "__main__":
@@ -250,3 +261,4 @@ if __name__ == "__main__":
     # oscillator()
     # pwm()
     test_lfo_fmfix()
+    square2()
