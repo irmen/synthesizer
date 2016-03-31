@@ -118,14 +118,17 @@ class Wavesynth:
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def pulse(self, frequency, width, duration, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None, pwlfo=None):
-        """Perfect pulse waveform (not using harmonics). Optional FM and/or Pulse-width modulation."""
+    def pulse(self, frequency, duration, amplitude=0.8, phase=0.0, bias=0.0, pulsewidth=0.1, fmlfo=None, pwlfo=None):
+        """
+        Perfect pulse waveform (not using harmonics).
+        Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
+        """
         assert 0 <= amplitude <= 1.0
         assert -1 <= bias <= 1.0
-        assert 0 < width <= 0.5
+        assert 0 < pulsewidth <= 0.5
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.pulse(frequency, width, amplitude, phase, bias, fmlfo=fmlfo, pwlfo=pwlfo)
+        waveform = self.oscillator.pulse(frequency, amplitude, phase, bias, pulsewidth, fmlfo=fmlfo, pwlfo=pwlfo)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(waveform)*scale))
         return samples
@@ -280,12 +283,12 @@ class Oscillator:
         for y in self.harmonics(frequency, num_harmonics, amplitude, phase+0.5, bias, fmlfo=fmlfo):
             yield bias-y+bias
 
-    def pulse(self, frequency, width, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None, pwlfo=None):
+    def pulse(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1, fmlfo=None, pwlfo=None):
         """
         Returns a generator that produces a perfect pulse waveform (not using harmonics).
-        Optional FM and/or Pulse-width modulation.
+        Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
         """
-        assert 0 < width <= 0.5
+        assert 0 < pulsewidth <= 0.5
         pwlfo = pwlfo or iter(int, 1)   # endless zeros if no pwm
         if fmlfo:
             increment = 1/self.samplerate
@@ -293,7 +296,7 @@ class Oscillator:
             phase_correction = phase
             t = 0
             while True:
-                pw = width * (1+next(pwlfo))
+                pw = pulsewidth * (1+next(pwlfo))
                 freq = frequency*(1+next(fmlfo))
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
@@ -305,7 +308,7 @@ class Oscillator:
             t = phase/frequency
             increment = 1/self.samplerate
             while True:
-                pw = width * (1+next(pwlfo))
+                pw = pulsewidth * (1+next(pwlfo))
                 yield (amplitude if t*frequency % 1 < pw else -amplitude)+bias
                 t += increment
 
@@ -314,42 +317,29 @@ class Oscillator:
         Returns a generator that produces a waveform based on harmonics.
         This is computationally intensive because many sine waves are added together.
         """
-        # @TODO fix FM phase correction
-        f = frequency/self.samplerate
-        t = phase
+        fmlfo = fmlfo or iter(int, 1)   # endless zeros if no fmlfo provided
+        increment = 2*pi/self.samplerate
+        phase_correction = phase*2*pi
+        freq_previous = frequency
+        t = 0
         while True:
             h = 0.0
-            q = 2*pi*t
-            if fmlfo:
-                # loops including FM
-                fm = next(fmlfo)
-                if only_odd:
-                    for k in range(1, 2*num_harmonics, 2):
-                        v = q*k
-                        h += sin(v+v*fm)/k
-                elif only_even:
-                    h += sin(q)*0.7  # always include harmonic #1 as base
-                    for k in range(2, 2*num_harmonics, 2):
-                        v = q*k
-                        h += sin(v+v*fm)/k
-                else:
-                    for k in range(1, 1+num_harmonics):
-                        v = q*k
-                        h += sin(v+v*fm)/k/2
+            freq = frequency*(1+next(fmlfo))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            q = t*freq + phase_correction
+            if only_odd:
+                for k in range(1, 2*num_harmonics, 2):
+                    h += sin(q*k)/k
+            elif only_even:
+                h += sin(q)*0.7  # always include harmonic #1 as base
+                for k in range(2, 2*num_harmonics, 2):
+                    h += sin(q*k)/k
             else:
-                # optimized loops without FM
-                if only_odd:
-                    for k in range(1, 2*num_harmonics, 2):
-                        h += sin(q*k)/k
-                elif only_even:
-                    h += sin(q)*0.7  # always include harmonic #1 as base
-                    for k in range(2, 2*num_harmonics, 2):
-                        h += sin(q*k)/k
-                else:
-                    for k in range(1, 1+num_harmonics):
-                        h += sin(q*k)/k/2
+                for k in range(1, 1+num_harmonics):
+                    h += sin(q*k)/k/2
             yield h*amplitude + bias
-            t += f
+            t += increment
 
     def white_noise(self, amplitude=1.0, bias=0.0):
         """Returns a generator that produces white noise (randomness) waveform."""

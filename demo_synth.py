@@ -1,5 +1,5 @@
 import time
-from rhythmbox import Output, Sample
+from rhythmbox import Output
 from synth import Wavesynth, key_freq, Oscillator
 from collections import OrderedDict
 
@@ -27,7 +27,7 @@ def demo_tones():
         print("pulse")
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
-            sample = synth.pulse(freq, 0.1, duration=0.4)
+            sample = synth.pulse(freq, duration=0.4, pulsewidth= 0.1)
             sample = synth.to_sample(sample).fadein(0.02)
             out.play_sample(sample, async=False)
         print("harmonics (only even)")
@@ -89,7 +89,7 @@ def demo_plot():
     plot.plot(s)
     s = synth.square_h(freq, duration=1)
     plot.plot(s)
-    s = synth.pulse(freq, 0.2, duration=1)
+    s = synth.pulse(freq, duration=1, pulsewidth=0.2)
     plot.plot(s)
     plot.show()
 
@@ -138,16 +138,21 @@ def fm():
     with Output() as out:
         synth = Wavesynth()
         freq = 440
-        lfo1 = synth.oscillator.sine(1, amplitude=0.2)
-        s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
-        s1 = synth.to_sample(s1)
-        out.play_sample(s1, async=False)
-        lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
-        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
-        s1 = synth.to_sample(s1)
-        out.play_sample(s1, async=False)
-        lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
-        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        # lfo1 = synth.oscillator.sine(1, amplitude=0.2)
+        # s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
+        # s1 = synth.to_sample(s1)
+        # out.play_sample(s1, async=False)
+        # lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
+        # s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        # s1 = synth.to_sample(s1)
+        # out.play_sample(s1, async=False)
+        # lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
+        # s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        # s1 = synth.to_sample(s1)
+        # out.play_sample(s1, async=False)
+        lfo1 = synth.oscillator.sine(1, amplitude=0.5)
+        lfo2 = synth.oscillator.sine(2, amplitude=0.9)
+        s1 = synth.pulse(freq, duration=5, pulsewidth=0.5, fmlfo=None, pwlfo=lfo2)
         s1 = synth.to_sample(s1)
         out.play_sample(s1, async=False)
 
@@ -156,7 +161,7 @@ def pwm():
     from matplotlib import pyplot as plot
     synth = Wavesynth(samplerate=1000)
     pwlfo = synth.oscillator.sine(0.2, amplitude=0.9)
-    s1 = synth.pulse(10, width=0.49, amplitude=0.6, duration=4, pwlfo=pwlfo)
+    s1 = synth.pulse(10, amplitude=0.6, duration=4, pwlfo=pwlfo)
     plot.figure(figsize=(16, 4))
     plot.title("Pulse width modulation")
     plot.plot(s1)
@@ -165,7 +170,7 @@ def pwm():
         synth = Wavesynth()
         freq = 110
         lfo2 = synth.oscillator.sine(0.3, amplitude=0.9)
-        s1 = synth.pulse(freq, width=0.49, amplitude=0.5, duration=4, fmlfo=None, pwlfo=lfo2)
+        s1 = synth.pulse(freq, amplitude=0.5, duration=4, fmlfo=None, pwlfo=lfo2)
         s1 = synth.to_sample(s1)
         out.play_sample(s1, async=False)
 
@@ -184,76 +189,12 @@ def oscillator():
     plot.show()
 
 
-def test_lfo_fmfix():
-    from matplotlib import pyplot as plot
-    samplerate = 1000
-    duration = 1
-    frequency = 20
-    bias = 100
-    amplitude = 100
-    phase = 0.4
-    lfo = Oscillator(samplerate)
-    fm = lfo.sine(2, amplitude=0.9)
-    s1_osc = lfo.pulse(frequency, 0.1, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
-    s_orig = []
-    for _ in range(samplerate*duration):
-        s_orig.append(next(s1_osc))
-    plot.figure(figsize=(20, 5))
-    plot.ylabel("Sine FM orig. Gen.")
-    plot.plot(s_orig)
-    plot.show()
-    # play some sound as well to hear it:
-    samplerate = 22050
-    lfo = Oscillator(samplerate)
-    duration = 10
-    # fm0 = lfo.sine(1.5, amplitude=0.4, bias=0.5)
-    # fm = lfo.sine(440/12, amplitude=1, fmlfo=fm0)
-    # fm = lfo.envelope(fm, 0.5, 0.5, 0.5, 0.2, 0.5, cycle=True)
-    duration = 4
-    fm = lfo.sine(1.5, amplitude=0.8)
-    s = lfo.pulse(440, 0.1, amplitude=32000, fmlfo=fm)
-    with Output(samplerate, 2, 1) as out:
-        import array
-        a = array.array('h', [int(next(s)) for _ in range(samplerate*duration)])
-        smpl = Sample.from_array(a, samplerate, 1).fadeout(1)
-        out.play_sample(smpl, async=False)
-
-
-def pulse2():
-    from matplotlib import pyplot as plot
-    samplerate = 1000
-    duration = 1
-    frequency = 20
-    bias = 100
-    amplitude = 100
-    phase = 0.4
-    width = 0.1
-    lfo = Oscillator(samplerate)
-    pwm = None
-    fm = lfo.sine(10)
-    w1_osc = lfo.pulse(frequency, width, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm, pwlfo=pwm)
-    fm = None
-    w2_osc = lfo.pulse(frequency, width, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm, pwlfo=pwm)
-    w_orig = []
-    for _ in range(samplerate*duration):
-        w_orig.append(next(w1_osc))
-    plot.figure(figsize=(16, 8))
-    plot.subplot(211)
-    plot.plot(w_orig)
-    w_orig = []
-    for _ in range(samplerate*duration):
-        w_orig.append(next(w2_osc))
-    plot.subplot(212)
-    plot.plot(w_orig)
-    plot.show()
-
-
 def bias():
     from matplotlib import pyplot as plot
     synth = Wavesynth(samplerate=1000)
     w1 = synth.sine(2, 4, 0.02, bias=0.1)
     w2 = synth.triangle(2, 4, 0.02, bias=0.2)
-    w3 = synth.pulse(2, 0.45, 4, 0.02, bias=0.3)
+    w3 = synth.pulse(2, 4, 0.02, bias=0.3, pulsewidth=0.45)
     w4 = synth.harmonics(2, 4, 7, 0.02, bias=0.4)
     w5 = synth.sawtooth(2, 4, 0.02, bias=0.5)
     w6 = synth.sawtooth_h(2, 4, 7, 0.02, bias=0.6)
@@ -284,16 +225,13 @@ def lfo_envelope():
 
 
 if __name__ == "__main__":
-    # demo_plot()
-    # demo_tones()
-    # demo_song()
-    # modulate_amp()
-    # envelope()
-    # fm()
-    # pwm()
-    # oscillator()
-    test_lfo_fmfix()
-    #pulse2()
-    # bias()
-    # lfo_envelope()
-
+    demo_plot()
+    demo_tones()
+    demo_song()
+    modulate_amp()
+    envelope()
+    pwm()
+    fm()
+    oscillator()
+    bias()
+    lfo_envelope()
