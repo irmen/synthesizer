@@ -285,22 +285,29 @@ class Oscillator:
         Returns a generator that produces a perfect pulse waveform (not using harmonics).
         Optional FM and/or Pulse-width modulation.
         """
-        # @TODO fix FM phase correction
         assert 0 < width <= 0.5
-        wave_width = self.samplerate/frequency
-        pulse_width = wave_width * width
-        t = int(phase*wave_width)
         pwlfo = pwlfo or iter(int, 1)   # endless zeros if no pwm
         if fmlfo:
+            increment = 1/self.samplerate
+            freq_previous = frequency
+            phase_correction = phase
+            t = 0
             while True:
-                pw = pulse_width * (1+next(pwlfo))
-                yield (amplitude if (t+t*next(fmlfo)) % wave_width < pw else -amplitude)+bias
-                t += 1
+                pw = width * (1+next(pwlfo))
+                freq = frequency*(1+next(fmlfo))
+                phase_correction += (freq_previous-freq)*t
+                freq_previous = freq
+                tt = t*freq+phase_correction
+                yield (amplitude if tt % 1 < pw else -amplitude)+bias
+                t += increment
         else:
+            # optimized loop without FM
+            t = phase/frequency
+            increment = 1/self.samplerate
             while True:
-                pw = pulse_width * (1+next(pwlfo))
-                yield (amplitude if t % wave_width < pw else -amplitude)+bias
-                t += 1
+                pw = width * (1+next(pwlfo))
+                yield (amplitude if t*frequency % 1 < pw else -amplitude)+bias
+                t += increment
 
     def harmonics(self, frequency, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
         """
