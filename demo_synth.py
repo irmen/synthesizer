@@ -194,7 +194,7 @@ def test_lfo_fmfix():
     phase = 0.4
     lfo = Oscillator(samplerate)
     fm = lfo.sine(2, amplitude=0.9)
-    s1_osc = lfo.square(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    s1_osc = lfo.sine(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     s_orig = []
     for _ in range(samplerate*duration):
         s_orig.append(next(s1_osc))
@@ -204,20 +204,17 @@ def test_lfo_fmfix():
     plot.show()
     # play some sound as well to hear it:
     samplerate = 22050
-    duration = 4
+    duration = 10
     lfo = Oscillator(samplerate)
-    fm = lfo.sine(440/100, amplitude=0.5)
-    s = lfo.square(440, amplitude=32000, fmlfo=fm)
-    import array
+    fm0 = lfo.sine(1.5, amplitude=0.4, bias=0.5)
+    fm = lfo.sine(440/12, amplitude=1, fmlfo=fm0)
+    fm = lfo.envelope(fm, 0.5, 0.5, 0.5, 0.2, 0.5, cycle=True)
+    s = lfo.triangle(440, amplitude=32000, fmlfo=fm)
     with Output(samplerate, 2, 1) as out:
-        t = 0
-        chunksize = 2205
-        while t < duration:
-            a = array.array('h', [int(next(s)) for _ in range(chunksize)])
-            smpl = Sample.from_array(a, samplerate, 1)
-            out.play_sample(smpl)
-            t += chunksize/samplerate
-    input("Enter to quit...")
+        import array
+        a = array.array('h', [int(next(s)) for _ in range(samplerate*duration)])
+        smpl = Sample.from_array(a, samplerate, 1).fadeout(1)
+        out.play_sample(smpl, async=False)
 
 
 def square2():
@@ -271,6 +268,16 @@ def bias():
     plot.show()
 
 
+def lfo_envelope():
+    synth = Wavesynth(samplerate=100)
+    lfo = synth.oscillator.constant(bias=1000)
+    lfo = synth.oscillator.envelope(lfo, 2, 1, 4, 0.3, 2, stop_at_end=True)
+    from matplotlib import pyplot as plot
+    plot.title("LFO Envelope")
+    plot.plot(list(lfo))
+    plot.show()
+
+
 if __name__ == "__main__":
     # demo_plot()
     # demo_tones()
@@ -283,4 +290,5 @@ if __name__ == "__main__":
     test_lfo_fmfix()
     # square2()
     # bias()
+    # lfo_envelope()
 

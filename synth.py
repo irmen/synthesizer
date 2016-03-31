@@ -163,9 +163,11 @@ class Wavesynth:
         return samples
 
 
-# @TODO add support to apply an ADSR envelope to the LFOs output
 class Oscillator:
-    """Oscillator that provides generators for several types of waveforms."""
+    """
+    Oscillator that provides generators for several types of waveforms.
+    You can also apply FM to an osc, and/or an ADSR envelope.
+    """
     def __init__(self, samplerate=Sample.norm_samplerate):
         self.samplerate = samplerate
 
@@ -337,3 +339,48 @@ class Oscillator:
         """Returns a generator that produces a single constant flat value."""
         while True:
             yield bias
+
+    def envelope(self, oscillator, attack, decay, sustain, sustain_level, release, stop_at_end=False, cycle=False):
+        """
+        Returns the oscillator with an ADSR volume envelope applied to it.
+        A,D,S,R are in seconds, sustain_level is an amplitude factor.
+        """
+        assert attack >= 0 and decay >= 0 and sustain >= 0 and release >= 0
+        assert 0 <= sustain_level <= 1
+        while True:
+            time = 0.0
+            end_time_decay = attack + decay
+            end_time_sustain = end_time_decay + sustain
+            end_time_release = end_time_sustain + release
+            increment = 1/self.samplerate
+            if attack:
+                amp_change = 1/attack*increment
+                amp = 0.0
+                while time < attack:
+                    yield next(oscillator)*amp
+                    amp += amp_change
+                    time += increment
+            if decay:
+                amp = 1.0
+                amp_change = (sustain_level-1)/decay*increment
+                while time < end_time_decay:
+                    yield next(oscillator)*amp
+                    amp += amp_change
+                    time += increment
+            while time < end_time_sustain:
+                yield next(oscillator)*sustain_level
+                time += increment
+            if release:
+                amp = sustain_level
+                amp_change = (-sustain_level)/release*increment
+                while time < end_time_release:
+                    yield next(oscillator)*amp
+                    amp += amp_change
+                    time += increment
+                if amp > 0:
+                    yield next(oscillator)*amp
+            if not cycle:
+                break
+        if not stop_at_end:
+            while True:
+                yield 0.0
