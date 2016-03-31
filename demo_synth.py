@@ -194,7 +194,7 @@ def test_lfo_fmfix():
     phase = 0.4
     lfo = Oscillator(samplerate)
     fm = lfo.sine(2, amplitude=0.9)
-    s1_osc = lfo.sine(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    s1_osc = lfo.square(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     s_orig = []
     for _ in range(samplerate*duration):
         s_orig.append(next(s1_osc))
@@ -204,12 +204,14 @@ def test_lfo_fmfix():
     plot.show()
     # play some sound as well to hear it:
     samplerate = 22050
-    duration = 10
     lfo = Oscillator(samplerate)
-    fm0 = lfo.sine(1.5, amplitude=0.4, bias=0.5)
-    fm = lfo.sine(440/12, amplitude=1, fmlfo=fm0)
-    fm = lfo.envelope(fm, 0.5, 0.5, 0.5, 0.2, 0.5, cycle=True)
-    s = lfo.triangle(440, amplitude=32000, fmlfo=fm)
+    duration = 10
+    # fm0 = lfo.sine(1.5, amplitude=0.4, bias=0.5)
+    # fm = lfo.sine(440/12, amplitude=1, fmlfo=fm0)
+    # fm = lfo.envelope(fm, 0.5, 0.5, 0.5, 0.2, 0.5, cycle=True)
+    duration = 4
+    fm = lfo.sine(1.5, amplitude=0.8)
+    s = lfo.square(440, amplitude=32000, fmlfo=fm)
     with Output(samplerate, 2, 1) as out:
         import array
         a = array.array('h', [int(next(s)) for _ in range(samplerate*duration)])
@@ -217,18 +219,18 @@ def test_lfo_fmfix():
         out.play_sample(smpl, async=False)
 
 
-def square2():
+def squareh2():
     from matplotlib import pyplot as plot
     samplerate = 1000
     duration = 1
-    frequency = 10
+    frequency = 20
     bias = 100
     amplitude = 100
-    phase = 0.4
+    phase = 0.12
     lfo = Oscillator(samplerate)
-    fm = lfo.sine(2, amplitude=0.5)
-    w1_osc = lfo.square(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
-    w2_osc = lfo.square2(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    fm = lfo.sine(2, amplitude=0.9)
+    w1_osc = lfo.square_h(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    w2_osc = lfo.square_h2(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     w_orig = []
     for _ in range(samplerate*duration):
         w_orig.append(next(w1_osc))

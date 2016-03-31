@@ -212,7 +212,7 @@ class Oscillator:
                 t += increment
         else:
             # optimized loop without FM
-            t = phase * frequency * frequency / self.samplerate
+            t = phase*frequency*frequency/self.samplerate
             increment = 1/self.samplerate
             while True:
                 yield 4*amplitude*(abs((t*frequency+0.75) % 1 - 0.5)-0.25)+bias
@@ -220,17 +220,24 @@ class Oscillator:
 
     def square(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect square wave [max/-max] (not using harmonics)."""
-        # @TODO fix FM phase correction
-        width = self.samplerate/frequency/2
-        t = phase*2
-        increment = 1/width
         if fmlfo:
+            phase_correction = phase*frequency*frequency*frequency/self.samplerate
+            freq_previous = frequency
+            increment = 1/self.samplerate
+            t = 0
             while True:
-                yield (-amplitude if int(t+t*next(fmlfo)) % 2 else amplitude)+bias
+                freq = frequency*(1+next(fmlfo))
+                phase_correction += (freq_previous-freq)*t
+                freq_previous = freq
+                tt = t*freq + phase_correction
+                yield (-amplitude if int(tt*2) % 2 else amplitude)+bias
                 t += increment
         else:
+            # optimized loop without FM
+            t = phase*frequency*frequency/self.samplerate
+            increment = 1/self.samplerate
             while True:
-                yield (-amplitude if int(t) % 2 else amplitude)+bias
+                yield (-amplitude if int(t*frequency*2) % 2 else amplitude)+bias
                 t += increment
 
     def square_h(self, frequency, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
