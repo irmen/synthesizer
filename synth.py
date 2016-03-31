@@ -212,7 +212,7 @@ class Oscillator:
                 t += increment
         else:
             # optimized loop without FM
-            t = phase*frequency*frequency/self.samplerate
+            t = phase/frequency
             increment = 1/self.samplerate
             while True:
                 yield 4*amplitude*(abs((t*frequency+0.75) % 1 - 0.5)-0.25)+bias
@@ -221,7 +221,7 @@ class Oscillator:
     def square(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect square wave [max/-max] (not using harmonics)."""
         if fmlfo:
-            phase_correction = phase*frequency*frequency*frequency/self.samplerate
+            phase_correction = phase
             freq_previous = frequency
             increment = 1/self.samplerate
             t = 0
@@ -234,7 +234,7 @@ class Oscillator:
                 t += increment
         else:
             # optimized loop without FM
-            t = phase*frequency*frequency/self.samplerate
+            t = phase/frequency
             increment = 1/self.samplerate
             while True:
                 yield (-amplitude if int(t*frequency*2) % 2 else amplitude)+bias
@@ -250,18 +250,25 @@ class Oscillator:
 
     def sawtooth(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect sawtooth waveform (not using harmonics)."""
-        # @TODO fix FM phase correction
-        rate = self.samplerate/frequency
-        increment = 1/rate
-        t = phase
         if fmlfo:
+            increment = 1/self.samplerate
+            freq_previous = frequency
+            phase_correction = phase
+            t = 0
             while True:
-                tt = t + t*next(fmlfo)
+                freq = frequency*(1+next(fmlfo))
+                phase_correction += (freq_previous-freq)*t
+                freq_previous = freq
+                tt = t*freq + phase_correction
                 yield bias+amplitude*2*(tt - floor(0.5+tt))
                 t += increment
         else:
+            # optimized loop without FM
+            t = phase/frequency
+            increment = 1/self.samplerate
             while True:
-                yield bias+amplitude*2*(t - floor(0.5+t))
+                tt = t*frequency
+                yield bias+amplitude*2*(tt - floor(0.5+tt))
                 t += increment
 
     def sawtooth_h(self, frequency, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):

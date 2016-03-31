@@ -194,7 +194,7 @@ def test_lfo_fmfix():
     phase = 0.4
     lfo = Oscillator(samplerate)
     fm = lfo.sine(2, amplitude=0.9)
-    s1_osc = lfo.square(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    s1_osc = lfo.sawtooth(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     s_orig = []
     for _ in range(samplerate*duration):
         s_orig.append(next(s1_osc))
@@ -211,7 +211,7 @@ def test_lfo_fmfix():
     # fm = lfo.envelope(fm, 0.5, 0.5, 0.5, 0.2, 0.5, cycle=True)
     duration = 4
     fm = lfo.sine(1.5, amplitude=0.8)
-    s = lfo.square(440, amplitude=32000, fmlfo=fm)
+    s = lfo.sawtooth(440, amplitude=32000, fmlfo=fm)
     with Output(samplerate, 2, 1) as out:
         import array
         a = array.array('h', [int(next(s)) for _ in range(samplerate*duration)])
@@ -219,18 +219,19 @@ def test_lfo_fmfix():
         out.play_sample(smpl, async=False)
 
 
-def squareh2():
+def sawtooth2():
     from matplotlib import pyplot as plot
     samplerate = 1000
     duration = 1
     frequency = 20
     bias = 100
     amplitude = 100
-    phase = 0.12
+    phase = 0.9
     lfo = Oscillator(samplerate)
     fm = lfo.sine(2, amplitude=0.9)
-    w1_osc = lfo.square_h(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
-    w2_osc = lfo.square_h2(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    w1_osc = lfo.sawtooth(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
+    fm = None
+    w2_osc = lfo.sawtooth(frequency, amplitude=amplitude, phase=phase, bias=bias, fmlfo=fm)
     w_orig = []
     for _ in range(samplerate*duration):
         w_orig.append(next(w1_osc))
@@ -290,7 +291,7 @@ if __name__ == "__main__":
     # pwm()
     # oscillator()
     test_lfo_fmfix()
-    # square2()
+    # sawtooth2()
     # bias()
     # lfo_envelope()
 
