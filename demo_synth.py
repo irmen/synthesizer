@@ -184,7 +184,7 @@ def pwm():
     plot.show()
     with Output(nchannels=1) as out:
         synth = Wavesynth()
-        lfo2 = synth.oscillator.sine(0.2, amplitude=0.5, bias=0.5)
+        lfo2 = synth.oscillator.sine(0.2, amplitude=0.48, bias=0.5)
         s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fmlfo=None, pwlfo=lfo2)
         s1 = synth.to_sample(s1)
         out.play_sample(s1, async=False)
