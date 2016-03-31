@@ -16,7 +16,7 @@ notes7 = OrderedDict((note, key_freq(76+i)) for i, note in enumerate(octave_note
 
 def demo_tones():
     synth = Wavesynth()
-    with Output() as out:
+    with Output(nchannels=1) as out:
         for wave in [synth.square_h, synth.square, synth.sine, synth.triangle, synth.sawtooth, synth.sawtooth_h]:
             print(wave.__name__)
             for note, freq in notes4.items():
@@ -97,7 +97,7 @@ def demo_plot():
 def modulate_amp():
     from matplotlib import pyplot as plot
     synth = Wavesynth()
-    freq = 110
+    freq = 220
     s1 = synth.triangle(freq, duration=2)
     m = synth.sine(2, duration=2, amplitude=0.4, bias=0.5)
     s1 = synth.to_sample(s1, False)
@@ -106,21 +106,21 @@ def modulate_amp():
     plot.title("Amplitude modulation by another waveform (not an envelope)")
     plot.plot(s1.get_frame_array())
     plot.show()
-    with Output() as out:
+    with Output(nchannels=1) as out:
         out.play_sample(s1, async=False)
 
 
 def envelope():
     from matplotlib import pyplot as plot
     synth = Wavesynth()
-    freq = 220
+    freq = 440
     s = synth.triangle(freq, duration=1)
     s = synth.to_sample(s, False)
     s.envelope(0.05, 0.1, 0.2, 0.4)
     plot.title("ADSR envelope")
     plot.plot(s.get_frame_array())
     plot.show()
-    with Output() as out:
+    with Output(nchannels=1) as out:
         out.play_sample(s, async=False)
 
 
@@ -135,44 +135,60 @@ def fm():
     plot.xlabel("Time")
     plot.specgram(s1, Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
     plot.show()
-    with Output() as out:
-        synth = Wavesynth()
+    with Output(nchannels=1, samplerate=22050) as out:
+        synth = Wavesynth(samplerate=22050)
         freq = 440
-        # lfo1 = synth.oscillator.sine(1, amplitude=0.2)
-        # s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
-        # s1 = synth.to_sample(s1)
-        # out.play_sample(s1, async=False)
-        # lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
-        # s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
-        # s1 = synth.to_sample(s1)
-        # out.play_sample(s1, async=False)
-        # lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
-        # s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
-        # s1 = synth.to_sample(s1)
-        # out.play_sample(s1, async=False)
-        lfo1 = synth.oscillator.sine(1, amplitude=0.5)
-        lfo2 = synth.oscillator.sine(2, amplitude=0.9)
-        s1 = synth.pulse(freq, duration=5, pulsewidth=0.5, fmlfo=None, pwlfo=lfo2)
+        lfo1 = synth.oscillator.constant(5)
+        lfo1 = synth.oscillator.envelope(lfo1, 1, 0.5, 0.5, 0.5, 1)
+        s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
+        s_all = s1.copy()
         out.play_sample(s1, async=False)
+        lfo1 = synth.oscillator.sine(1, amplitude=0.2)
+        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        s_all.join(s1)
+        out.play_sample(s1, async=False)
+        lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
+        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        s_all.join(s1)
+        out.play_sample(s1, async=False)
+        lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
+        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        s_all.join(s1)
+        out.play_sample(s1, async=False)
+        lfo1 = synth.oscillator.sine(1, amplitude=0.4)
+        s1 = synth.triangle(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        s_all.join(s1)
+        out.play_sample(s1, async=False)
+        freq = 440*2
+        lfo1 = synth.oscillator.sine(freq/80, amplitude=0.4)
+        s1 = synth.triangle(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.to_sample(s1)
+        s_all.join(s1)
+        out.play_sample(s1, async=False)
+        # s_all.write_wav("fmtestall.wav")
 
 
 def pwm():
     from matplotlib import pyplot as plot
     synth = Wavesynth(samplerate=1000)
-    pwlfo = synth.oscillator.sine(0.2, amplitude=0.9)
-    s1 = synth.pulse(10, amplitude=0.6, duration=4, pwlfo=pwlfo)
+    pwlfo = synth.oscillator.sine(0.2, amplitude=0.25, bias=0.25)
+    s1 = synth.pulse(4, amplitude=0.6, duration=20, pwlfo=pwlfo)
     plot.figure(figsize=(16, 4))
     plot.title("Pulse width modulation")
     plot.plot(s1)
     plot.show()
-    with Output() as out:
+    with Output(nchannels=1) as out:
         synth = Wavesynth()
-        freq = 110
-        lfo2 = synth.oscillator.sine(0.3, amplitude=0.9)
-        s1 = synth.pulse(freq, amplitude=0.5, duration=4, fmlfo=None, pwlfo=lfo2)
+        lfo2 = synth.oscillator.sine(0.2, amplitude=0.5, bias=0.5)
+        s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fmlfo=None, pwlfo=lfo2)
         s1 = synth.to_sample(s1)
         out.play_sample(s1, async=False)
+        # s1.write_wav("pwmtest.wav")
 
 
 def oscillator():
@@ -224,8 +240,17 @@ def lfo_envelope():
     plot.show()
 
 
+def a440():
+    synth = Wavesynth()
+    with Output(nchannels=1) as out:
+        a440 = synth.sine(440, duration=4)
+        a440 = synth.to_sample(a440)
+        out.play_sample(a440, async=False)
+
+
 if __name__ == "__main__":
     demo_plot()
+    a440()
     demo_tones()
     demo_song()
     modulate_amp()

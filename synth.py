@@ -6,6 +6,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 from rhythmbox import Sample
 from math import sin, pi, floor
+import sys
 import random
 import array
 
@@ -122,10 +123,11 @@ class Wavesynth:
         """
         Perfect pulse waveform (not using harmonics).
         Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
+        The pwlfo oscillator should yield values between 0 and 1 (=the pulse width factor), or it will be clipped.
         """
         assert 0 <= amplitude <= 1.0
         assert -1 <= bias <= 1.0
-        assert 0 < pulsewidth <= 0.5
+        assert 0 <= pulsewidth <= 1
         samples = self._get_array()
         scale = 2**(self.samplewidth*8-1)-1
         waveform = self.oscillator.pulse(frequency, amplitude, phase, bias, pulsewidth, fmlfo=fmlfo, pwlfo=pwlfo)
@@ -287,16 +289,23 @@ class Oscillator:
         """
         Returns a generator that produces a perfect pulse waveform (not using harmonics).
         Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
+        The pwlfo oscillator should yield values between 0 and 1 (=the pulse width factor), or it will be clipped.
         """
-        assert 0 < pulsewidth <= 0.5
-        pwlfo = pwlfo or iter(int, 1)   # endless zeros if no pwm
+        assert 0 <= pulsewidth <= 1
+        epsilon = sys.float_info.epsilon
+        if not pwlfo:
+            pwlfo = (i+pulsewidth for i in iter(int, 1))    # endless generator returning pulsewidth values
         if fmlfo:
             increment = 1/self.samplerate
             freq_previous = frequency
             phase_correction = phase
             t = 0
             while True:
-                pw = pulsewidth * (1+next(pwlfo))
+                pw = next(pwlfo)
+                if pw <= 0:
+                    pw = epsilon
+                elif pw >= 1:
+                    pw = 1.0-epsilon
                 freq = frequency*(1+next(fmlfo))
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
@@ -308,7 +317,11 @@ class Oscillator:
             t = phase/frequency
             increment = 1/self.samplerate
             while True:
-                pw = pulsewidth * (1+next(pwlfo))
+                pw = next(pwlfo)
+                if pw <= 0:
+                    pw = epsilon
+                elif pw >= 1:
+                    pw = 1.0-epsilon
                 yield (amplitude if t*frequency % 1 < pw else -amplitude)+bias
                 t += increment
 
