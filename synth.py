@@ -157,14 +157,14 @@ class Wavesynth:
             samples.append(int(next(waveform)*scale))
         return samples
 
-    def constant(self, duration, bias=0.0):
-        """Flat constant-value waveform."""
-        assert -1 <= bias <= 1.0
+    def linear(self, duration, startamp, finishamp):
+        """Returns a generator that produces a linear constant or sloped waveform."""
         samples = self._get_array()
-        scale = 2**(self.samplewidth*8-1)-1
-        waveform = self.oscillator.constant(bias)
-        for _ in range(int(duration*self.samplerate)):
-            samples.append(int(next(waveform)*scale))
+        num_samples = int(duration*self.samplerate)
+        increment = (finishamp-startamp)/(num_samples-1)
+        waveform = self.oscillator.linear(startamp, increment)
+        for _ in range(num_samples):
+            samples.append(int(next(waveform)))
         return samples
 
 
@@ -359,10 +359,11 @@ class Oscillator:
         while True:
             yield random.uniform(-amplitude, amplitude) + bias
 
-    def constant(self, bias=0.0):
-        """Returns a generator that produces a single constant flat value."""
+    def linear(self, startlevel, increment=0.0):
+        """Returns a generator that produces a linear sloped value."""
         while True:
-            yield bias
+            yield startlevel
+            startlevel += increment
 
     def envelope(self, oscillator, attack, decay, sustain, sustain_level, release, stop_at_end=False, cycle=False):
         """
@@ -408,3 +409,13 @@ class Oscillator:
         if not stop_at_end:
             while True:
                 yield 0.0
+
+    def add(self, oscillator1, oscillator2):
+        """Adds the wave from two oscillators together into one output wave."""
+        while True:
+            yield next(oscillator1)+next(oscillator2)
+
+    def modulate_amp(self, oscillator, modulator):
+        """Modulate the amplitude of the wave of an oscillator by another oscillator (the modulator."""
+        while True:
+            yield next(oscillator)*next(modulator)

@@ -349,7 +349,7 @@ class Sample:
         self.__frames = begin + end
         return self
 
-    def modulate_amp(self, modulator):
+    def modulate_amp(self, modulation_wave):
         """
         Perform amplitude modulation by another waveform (which will be cycled).
         This is similar but not the same as AM by an LFO.
@@ -364,13 +364,13 @@ class Sample:
             frames = array.array('l', self.__frames)
         else:
             raise ValueError("can only modulate sample widths 1, 2 and 4")
-        if isinstance(modulator, Sample):
-            modulator = modulator.get_frame_array()
-        factor = 1.0/max(modulator)
+        if isinstance(modulation_wave, Sample):
+            modulation_wave = modulation_wave.get_frame_array()
+        factor = 1.0/max(modulation_wave)
         import itertools
-        modulator = itertools.cycle(modulator)
+        modulation_wave = itertools.cycle(modulation_wave)
         for i in range(len(frames)):
-            frames[i] = int(frames[i] * next(modulator) * factor)
+            frames[i] = int(frames[i] * next(modulation_wave) * factor)
         self.__frames = frames.tobytes()
         if sys.byteorder == "big":
             self.__frames = audioop.byteswap(self.__frames, self.__sampwidth)

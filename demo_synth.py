@@ -27,7 +27,7 @@ def demo_tones():
         print("pulse")
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
-            sample = synth.pulse(freq, duration=0.4, pulsewidth= 0.1)
+            sample = synth.pulse(freq, duration=0.4, pulsewidth=0.1)
             sample = synth.to_sample(sample).fadein(0.02)
             out.play_sample(sample, async=False)
         print("harmonics (only even)")
@@ -138,7 +138,7 @@ def fm():
     with Output(nchannels=1, samplerate=22050) as out:
         synth = Wavesynth(samplerate=22050)
         freq = 440
-        lfo1 = synth.oscillator.constant(5)
+        lfo1 = synth.oscillator.linear(5)
         lfo1 = synth.oscillator.envelope(lfo1, 1, 0.5, 0.5, 0.5, 1)
         s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
         s1 = synth.to_sample(s1)
@@ -232,7 +232,7 @@ def bias():
 
 def lfo_envelope():
     synth = Wavesynth(samplerate=100)
-    lfo = synth.oscillator.constant(bias=1000)
+    lfo = synth.oscillator.linear(1000)
     lfo = synth.oscillator.envelope(lfo, 2, 1, 4, 0.3, 2, stop_at_end=True)
     from matplotlib import pyplot as plot
     plot.title("LFO Envelope")
