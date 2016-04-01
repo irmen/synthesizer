@@ -176,8 +176,8 @@ def fm():
 def pwm():
     from matplotlib import pyplot as plot
     synth = Wavesynth(samplerate=1000)
-    pwlfo = synth.oscillator.sine(0.2, amplitude=0.25, bias=0.25)
-    s1 = synth.pulse(4, amplitude=0.6, duration=20, pwlfo=pwlfo)
+    pwmlfo = synth.oscillator.sine(0.2, amplitude=0.25, bias=0.25)
+    s1 = synth.pulse(4, amplitude=0.6, duration=20, pwmlfo=pwmlfo)
     plot.figure(figsize=(16, 4))
     plot.title("Pulse width modulation")
     plot.plot(s1)
@@ -185,7 +185,7 @@ def pwm():
     with Output(nchannels=1) as out:
         synth = Wavesynth()
         lfo2 = synth.oscillator.sine(0.2, amplitude=0.48, bias=0.5)
-        s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fmlfo=None, pwlfo=lfo2)
+        s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fmlfo=None, pwmlfo=lfo2)
         s1 = synth.to_sample(s1)
         out.play_sample(s1, async=False)
         # s1.write_wav("pwmtest.wav")
