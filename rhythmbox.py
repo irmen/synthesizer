@@ -414,20 +414,21 @@ class Sample:
             return self
         raise ValueError("sample must be mono or stereo already")
 
-    def echo(self, seconds, amount, delay, decay):
+    def reverb(self, length, amount, delay, decay):
         """
-        Adds a given number of echos into the sample taking the last given number of seconds of the sample.
+        Adds the given amount of sound reflections into the end of the sample,
+        using a given length of sample data (from the end of the sample).
         The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead)
         """
         assert not self.__locked
         if amount > 0:
-            seconds = max(0, self.duration - seconds)
+            length = max(0, self.duration - length)
             echo = self.copy()
-            echo.__frames = self.__frames[self.frame_idx(seconds):]
+            echo.__frames = self.__frames[self.frame_idx(length):]
             for _ in range(amount):
-                seconds += delay
+                length += delay
                 echo.amplify(decay)
-                self.mix_at(seconds, echo)
+                self.mix_at(length, echo)
         return self
 
     def envelope(self, attack, decay, sustainlevel, release):
