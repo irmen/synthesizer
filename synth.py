@@ -429,7 +429,7 @@ class Oscillator:
     def linear(self, startlevel, increment=0.0):
         """Returns a generator that produces a linear sloped value."""
         if increment == 0.0:
-            return itertools.repeat(startlevel)
+            yield from itertools.repeat(startlevel)
         while True:
             yield startlevel
             startlevel += increment
