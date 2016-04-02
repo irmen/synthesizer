@@ -248,21 +248,21 @@ def a440():
         out.play_sample(a440, async=False)
 
 
-def reverb():
-    # @TODO this reverb is still based on the Sample not on the LFO's
+def echo():
+    # @TODO this echo is still based on the Sample not on the LFO's
     synth = Wavesynth(samplerate=22050)
     lfo = synth.oscillator.linear(1, -0.0001)
     s = synth.pulse(220, .5, fmlfo=lfo)
     s = synth.to_sample(s).fadeout(.2)
     with Output(s.samplerate, s.samplewidth, s.nchannels) as out:
-        e = s.copy().reverb(1, 4, 0.5, 0.4)   # echo
+        e = s.copy().echo(1, 4, 0.5, 0.4)   # echo
         out.play_sample(e, async=False)
-        e = s.copy().reverb(1, 15, 0.1, 0.6)    # reverberation
+        e = s.copy().echo(1, 15, 0.1, 0.6)    # reverberation
         out.play_sample(e, async=False)
 
 
 if __name__ == "__main__":
-    reverb()
+    echo()
     raise SystemExit
     demo_plot()
     a440()

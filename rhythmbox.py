@@ -32,7 +32,8 @@ __all__ = ["Sample", "Mixer", "Song", "Repl"]
 
 class Sample:
     """
-    Audio sample data. Supports integer sample formats of 1, 2 and 4 bytes per sample (no floating-point).
+    Audio sample data. Supports integer sample formats of 1, 2, 3 and 4 bytes per sample (no floating-point).
+    Python 3.4+ is required to support 3-bytes/24-bits sample sizes.
     Most operations modify the sample data in place (if it's not locked) and return the sample object,
     so you can easily chain several operations.
     """
@@ -198,7 +199,6 @@ class Sample:
         self.resample(self.norm_samplerate)
         if self.samplewidth != self.norm_samplewidth:
             # Convert to 16 bit sample size.
-            # Note that Python 3.4+ is required to support 24 bits sample sizes.
             self.__frames = audioop.lin2lin(self.__frames, self.samplewidth, self.norm_samplewidth)
             self.__samplewidth = self.norm_samplewidth
         if self.nchannels == 1:
@@ -488,11 +488,12 @@ class Sample:
             other = other.stereo(left_factor=0, right_factor=other_mix_factor)
         return self.mix(other)
 
-    def reverb(self, length, amount, delay, decay):
+    def echo(self, length, amount, delay, decay):
         """
-        Adds the given amount of sound reflections into the end of the sample,
+        Adds the given amount of echos into the end of the sample,
         using a given length of sample data (from the end of the sample).
-        The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead)
+        The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead).
+        If you use a very short delay the echos blend into the sound and the effect is more like a reverb.
         """
         assert not self.__locked
         if amount > 0:
