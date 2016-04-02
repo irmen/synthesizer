@@ -47,6 +47,9 @@ class Sample:
         if wave_file:
             self.load_wav(wave_file)
             self.__filename = wave_file
+            assert 1 <= self.__nchannels <=2
+            assert 1 <= self.__sampwidth <=4
+            assert self.__samplerate > 1
         else:
             self.__samplerate = self.norm_samplerate
             self.__nchannels = self.norm_nchannels
@@ -54,19 +57,30 @@ class Sample:
             self.__frames = b""
             self.__filename = None
 
+    def __repr__(self):
+        locked = " (locked)" if self.__locked else ""
+        return "<Sample at 0x{0:x}, {1:g} seconds, {2:d} channels, {3:d} bytes/sample, rate {4:d}{5:s}>"\
+            .format(id(self), self.duration, self.__nchannels, self.__sampwidth, self.__samplerate, locked)
+
     @classmethod
     def from_raw_frames(cls, frames, samplewidth, samplerate, numchannels):
         """Creates a new sample directly from the raw sample data."""
+        assert 1 <= numchannels <= 2
+        assert 1 <= samplewidth <= 4
+        assert samplerate > 1
         s = cls()
         s.__frames = frames
-        s.__samplerate = samplerate
-        s.__sampwidth = samplewidth
-        s.__nchannels = numchannels
+        s.__samplerate = int(samplerate)
+        s.__sampwidth = int(samplewidth)
+        s.__nchannels = int(numchannels)
         return s
 
     @classmethod
     def from_array(cls, array, samplerate, numchannels):
         samplewidth = array.itemsize
+        assert 1 <= numchannels <=2
+        assert 1 <= samplewidth <=4
+        assert samplerate > 1
         frames = array.tobytes()
         if sys.byteorder == "big":
             frames = audioop.byteswap(frames, samplewidth)
@@ -77,6 +91,11 @@ class Sample:
 
     @property
     def samplerate(self): return self.__samplerate
+
+    @samplerate.setter
+    def samplerate(self, rate):
+        assert rate > 0
+        self.__samplerate = int(rate)
 
     @property
     def nchannels(self): return self.__nchannels
@@ -175,10 +194,7 @@ class Sample:
         When mixing samples, they should all have the same properties, and this method is ideal to make sure of that.
         """
         assert not self.__locked
-        if self.samplerate != self.norm_samplerate:
-            # Convert sample rate. Note: resampling causes slight loss of sound quality.
-            self.__frames = audioop.ratecv(self.__frames, self.sampwidth, self.nchannels, self.samplerate, self.norm_samplerate, None)[0]
-            self.__samplerate = self.norm_samplerate
+        self.resample(self.norm_samplerate)
         if self.sampwidth != self.norm_sampwidth:
             # Convert to 16 bit sample size.
             # Note that Python 3.4+ is required to support 24 bits sample sizes.
@@ -188,6 +204,33 @@ class Sample:
             # convert to stereo
             self.__frames = audioop.tostereo(self.__frames, self.sampwidth, 1, 1)
             self.__nchannels = 2
+        return self
+
+    def resample(self, samplerate):
+        """
+        Resamples to a different sample rate, without changing the pitch and duration of the sound.
+        The algorithm used is simple, and it will cause a loss of sound quality.
+        """
+        assert not self.__locked
+        if samplerate == self.__samplerate:
+            return self
+        self.__frames = audioop.ratecv(self.__frames, self.sampwidth, self.nchannels, self.samplerate, samplerate, None)[0]
+        self.__samplerate = samplerate
+        return self
+
+    def speed(self, speed):
+        """
+        Changes the playback speed of the sample, without changing the sample rate.
+        This will change the pitch and duration of the sound accordingly.
+        The algorithm used is simple, and it will cause a loss of sound quality.
+        """
+        assert not self.__locked
+        assert speed > 0
+        if speed == 1.0:
+            return self
+        rate = self.samplerate
+        self.__frames = audioop.ratecv(self.__frames, self.sampwidth, self.nchannels, int(self.samplerate*speed), rate, None)[0]
+        self.__samplerate = rate
         return self
 
     def make_32bit(self, scale_amplitude=True):
@@ -384,6 +427,7 @@ class Sample:
 
     def invert(self):
         """Invert every sample value around 0."""
+        assert not self.__locked
         return self.amplify(-1)
 
     def bias(self, bias):
@@ -404,7 +448,11 @@ class Sample:
         raise ValueError("sample must be stereo or mono already")
 
     def stereo(self, left_factor=1.0, right_factor=1.0):
-        """Turn a mono sample into a stereo one with given factors/amplitudes for left and right channels"""
+        """
+        Turn a mono sample into a stereo one with given factors/amplitudes for left and right channels.
+        Note that it is a fast but simplistic conversion; the waveform in both channels is identical
+        so you may suffer from phase cancellation when playing the resulting stereo sample.
+        """
         assert not self.__locked
         if self.__nchannels == 2:
             return self
@@ -413,6 +461,31 @@ class Sample:
             self.__nchannels = 2
             return self
         raise ValueError("sample must be mono or stereo already")
+
+    def stereo_mix(self, other, other_channel, other_mix_factor=1.0):
+        """
+        Mixes another mono channel into the current sample as left or right channel.
+        The current sample will be the other channel.
+        If the current sample already was stereo, the new mono channel is mixed with the existing left or right channel.
+        """
+        assert not self.__locked
+        assert other.__nchannels == 1
+        assert other.__samplerate == self.__samplerate
+        assert other.__sampwidth == self.__sampwidth
+        assert other_channel in ('L', 'R')
+        if self.__nchannels == 1:
+            # turn self into stereo first
+            if other_channel == 'L':
+                self.stereo(left_factor=0, right_factor=1)
+            else:
+                self.stereo(left_factor=1, right_factor=0)
+        # turn other sample into stereo and mix it efficiently
+        other = other.copy()
+        if other_channel == 'L':
+            other = other.stereo(left_factor=other_mix_factor, right_factor=0)
+        else:
+            other = other.stereo(left_factor=0, right_factor=other_mix_factor)
+        return self.mix(other)
 
     def reverb(self, length, amount, delay, decay):
         """
@@ -433,6 +506,7 @@ class Sample:
 
     def envelope(self, attack, decay, sustainlevel, release):
         """Apply an ADSR volume envelope. A,D,R are in seconds, Sustainlevel is a factor."""
+        assert not self.__locked
         assert attack >= 0 and decay >= 0 and release >= 0
         assert 0 <= sustainlevel <= 1
         D = self.split(attack)   # self = A
