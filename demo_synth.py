@@ -1,4 +1,5 @@
 import time
+import array
 from rhythmbox import Output
 from synth import Wavesynth, key_freq, Oscillator
 from collections import OrderedDict
@@ -248,8 +249,7 @@ def a440():
         out.play_sample(a440, async=False)
 
 
-def echo():
-    # @TODO this echo is still based on the Sample not on the LFO's
+def echo_sample():
     synth = Wavesynth(samplerate=22050)
     lfo = synth.oscillator.linear(1, -0.0001)
     s = synth.pulse(220, .5, fmlfo=lfo)
@@ -257,21 +257,52 @@ def echo():
     with Output(s.samplerate, s.samplewidth, s.nchannels) as out:
         e = s.copy().echo(1, 4, 0.5, 0.4)   # echo
         out.play_sample(e, async=False)
-        e = s.copy().echo(1, 15, 0.1, 0.6)    # reverberation
+        e = s.copy().echo(1, 30, 0.1, 0.5)    # reverberation
         out.play_sample(e, async=False)
 
 
+def echo_lfo():
+    synth = Wavesynth(22050)
+    lfo = synth.oscillator
+    s = lfo.sawtooth(440, amplitude=25000)
+    s = lfo.envelope(s, 1, 0.1, 0, 0, 2, stop_at_end=True)
+    s = lfo.echo(s, 0.8, 6, 0.3, 0.7)
+    a = array.array('h', [int(y) for y in s])
+    samp = synth.to_sample(a, False)
+    import matplotlib.pyplot as plot
+    plot.plot(samp.get_frame_array())
+    plot.show()
+    with Output(samplerate=synth.samplerate) as out:
+        out.play_sample(samp, async=False)
+
+
+def lfo_func():
+    rate = 1000
+    synth = Wavesynth(rate)
+    lfo = synth.oscillator
+    s = lfo.sine(1, amplitude=100, bias=40)
+    s = lfo.abs(s)
+    s = lfo.clip(s, minimum=20, maximum=80)
+    s = lfo.delay(s, 1)
+    s = [next(s) for _ in range(rate*2)]
+    import matplotlib.pyplot as plot
+    plot.plot(s)
+    plot.show()
+
+
 if __name__ == "__main__":
-    echo()
+    lfo_func()
+    # echo_sample()
+    # echo_lfo()
     raise SystemExit
-    demo_plot()
-    a440()
-    demo_tones()
-    demo_song()
-    modulate_amp()
-    envelope()
-    pwm()
-    fm()
-    oscillator()
-    bias()
-    lfo_envelope()
+    # demo_plot()
+    # a440()
+    # demo_tones()
+    # demo_song()
+    # modulate_amp()
+    # envelope()
+    # pwm()
+    # fm()
+    # oscillator()
+    # bias()
+    # lfo_envelope()

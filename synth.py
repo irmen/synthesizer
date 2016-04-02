@@ -5,7 +5,8 @@ Creates some simple waveform samples with adjustable parameters.
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 from rhythmbox import Sample
-from math import sin, pi, floor
+from math import sin, pi, floor, fabs, log
+import itertools
 import sys
 import random
 import array
@@ -27,6 +28,7 @@ class Wavesynth:
     Waveform sample synthesizer. Can generate various wave forms based on mathematic functions:
     sine, square (perfect or with harmonics), triangle, sawtooth (perfect or with harmonics),
     variable harmonics, white noise.  It also supports an optional LFO for Frequency Modulation.
+    The resulting waveform sample data is in integer 8, 16 or 32 bits format.
     """
     def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth):
         if samplewidth not in (1, 2, 4):
@@ -231,6 +233,8 @@ class Oscillator:
     """
     Oscillator that provides generators for several types of waveforms.
     You can also apply FM to an osc, and/or an ADSR envelope.
+    These are generic oscillators and as such have floating-point inputs and result values
+    with variable amplitude (though usually -1.0...1.0), depending on what parameters you use.
     """
     def __init__(self, samplerate=Sample.norm_samplerate):
         self.samplerate = samplerate
@@ -241,6 +245,7 @@ class Oscillator:
             # The FM compensates for the phase change by means of phase_correction.
             # See http://stackoverflow.com/questions/3089832/sine-wave-glissando-from-one-pitch-to-another-in-numpy
             # and http://stackoverflow.com/questions/28185219/generating-vibrato-sine-wave
+            # The same idea is applied to the other waveforms to correct their phase with FM.
             phase_correction = phase*2*pi
             freq_previous = frequency
             increment = 2*pi/self.samplerate
@@ -353,7 +358,7 @@ class Oscillator:
         assert 0 <= pulsewidth <= 1
         epsilon = sys.float_info.epsilon
         if not pwmlfo:
-            pwmlfo = (i+pulsewidth for i in iter(int, 1))    # endless generator returning pulsewidth values
+            pwmlfo = itertools.repeat(pulsewidth)
         if fmlfo:
             increment = 1/self.samplerate
             freq_previous = frequency
@@ -389,11 +394,13 @@ class Oscillator:
         Returns a generator that produces a waveform based on harmonics.
         This is computationally intensive because many sine waves are added together.
         """
-        fmlfo = fmlfo or iter(int, 1)   # endless zeros if no fmlfo provided
+        fmlfo = fmlfo or itertools.repeat(0.0)  # endless zeros if no fmlfo provided
         increment = 2*pi/self.samplerate
         phase_correction = phase*2*pi
         freq_previous = frequency
         t = 0
+        # remove harmonics above the Nyquist frequency:
+        num_harmonics = min(num_harmonics, int(self.samplerate/2/frequency))
         while True:
             h = 0.0
             freq = frequency*(1+next(fmlfo))
@@ -420,6 +427,8 @@ class Oscillator:
 
     def linear(self, startlevel, increment=0.0):
         """Returns a generator that produces a linear sloped value."""
+        if increment == 0.0:
+            return itertools.repeat(startlevel)
         while True:
             yield startlevel
             startlevel += increment
@@ -478,3 +487,71 @@ class Oscillator:
         """Modulate the amplitude of the wave of an oscillator by another oscillator (the modulator."""
         while True:
             yield next(oscillator)*next(modulator)
+
+    def delay(self, oscillator, seconds):
+        """
+        Delays an oscillator.
+        If you use a negative value, it skips ahead in time instead.
+        Note that if you want to precisely phase-shift an oscillator, you should perhaps
+        use the phase parameter on the oscillator function itself instead.
+        """
+        if seconds < 0:
+            for _ in range(int(-self.samplerate*seconds)):
+                next(oscillator)
+        else:
+            for _ in range(int(self.samplerate*seconds)):
+                yield 0.0
+        yield from oscillator
+
+    def abs(self, oscillator):
+        """Returns the absolute values from an oscillator."""
+        return self.custom(oscillator, fabs)
+
+    def custom(self, oscillator, func):
+        """Apply custom function to every oscillator value."""
+        while True:
+            yield func(next(oscillator))
+
+    def clip(self, oscillator, minimum=None, maximum=None):
+        """Clips the values from an oscillator at the given mininum and/or maximum value."""
+        assert not(minimum is None and maximum is None)
+        if minimum is None:
+            minimum = sys.float_info.min
+        if maximum is None:
+            maximum = sys.float_info.max
+        while True:
+            yield max(min(next(oscillator), maximum), minimum)
+
+    def tee(self, oscillator, n=2):
+        """
+        Return n independent oscillator clones from a single oscillator.
+        This is needed when you want to use an oscillator multiple times within a single
+        oscillator chain.
+        """
+        return itertools.tee(oscillator, n)
+
+    def echo(self, oscillator, after, amount, delay, decay):
+        """
+        Mix given number of echos of the oscillator into itself.
+        The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead).
+        If you use a very short delay the echos blend into the sound and the effect is more like a reverb.
+        """
+        # first play the first part till the echos start
+        for _ in range(int(self.samplerate*after)):
+            yield next(oscillator)
+        # now start mixing the echos
+        amp = decay
+        if decay < 1:
+            # avoid computing echos that you can't hear:
+            amount = int(min(amount, log(0.000001, decay)))
+        echo_oscs = list(self.tee(oscillator, amount+1))
+        echos = [echo_oscs[0]]
+        echo_delay = delay
+        for echo in echo_oscs[1:]:
+            echo = self.delay(echo, echo_delay)
+            echo = self.modulate_amp(echo, itertools.repeat(amp))
+            echos.append(echo)
+            echo_delay += delay
+            amp *= decay
+        while True:
+            yield sum([next(echo) for echo in echos])

@@ -525,10 +525,15 @@ class Sample:
             length = max(0, self.duration - length)
             echo = self.copy()
             echo.__frames = self.__frames[self.frame_idx(length):]
+            echo_amp = decay
             for _ in range(amount):
+                if echo_amp < 1.0/(2**(8*self.__samplewidth-1)):
+                    # avoid computing echos that you can't hear
+                    break
                 length += delay
-                echo.amplify(decay)
+                echo = echo.copy().amplify(echo_amp)
                 self.mix_at(length, echo)
+                echo_amp *= decay
         return self
 
     def envelope(self, attack, decay, sustainlevel, release):
@@ -858,7 +863,7 @@ class Song:
         """
         patterns = [self.patterns[name] for name in self.pattern_sequence]
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
-        yield from mixer.mixed_triggers()
+        return mixer.mixed_triggers(False)
 
     def mix_generator(self):
         """
@@ -867,7 +872,7 @@ class Song:
         """
         patterns = [self.patterns[name] for name in self.pattern_sequence]
         mixer = Mixer(patterns, self.bpm, self.ticks, self.instruments)
-        yield from mixer.mix_generator()
+        return mixer.mix_generator()
 
 
 class Output:
