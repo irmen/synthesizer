@@ -254,7 +254,7 @@ def reverb():
     lfo = synth.oscillator.linear(1, -0.0001)
     s = synth.pulse(220, .5, fmlfo=lfo)
     s = synth.to_sample(s).fadeout(.2)
-    with Output(s.samplerate, s.sampwidth, s.nchannels) as out:
+    with Output(s.samplerate, s.samplewidth, s.nchannels) as out:
         e = s.copy().reverb(1, 4, 0.5, 0.4)   # echo
         out.play_sample(e, async=False)
         e = s.copy().reverb(1, 15, 0.1, 0.6)    # reverberation

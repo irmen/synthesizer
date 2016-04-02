@@ -28,7 +28,7 @@ class Wavesynth:
     sine, square (perfect or with harmonics), triangle, sawtooth (perfect or with harmonics),
     variable harmonics, white noise.  It also supports an optional LFO for Frequency Modulation.
     """
-    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_sampwidth):
+    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth):
         if samplewidth not in (1, 2, 4):
             raise ValueError("only samplewidth sizes 1, 2 and 4 are supported")
         self.samplerate = samplerate
