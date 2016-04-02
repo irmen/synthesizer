@@ -71,12 +71,12 @@ class Wavesynth:
         while True:
             yield int(next(wave))
 
-    def square_h(self, frequency, duration, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def square_h(self, frequency, duration, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """A square wave based on harmonic sine waves (more natural sounding than pure square)"""
         wave = self.__square_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def square_h_gen(self, frequency, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def square_h_gen(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Generator for a square wave based on harmonic sine waves (more natural sounding than pure square)"""
         wave = self.__square_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         while True:
@@ -104,12 +104,12 @@ class Wavesynth:
         while True:
             yield int(next(wave))
 
-    def sawtooth_h(self, frequency, duration, num_harmonics=12, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def sawtooth_h(self, frequency, duration, num_harmonics=16, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
         """Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def sawtooth_h_gen(self, frequency, num_harmonics=12, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def sawtooth_h_gen(self, frequency, num_harmonics=16, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
         """Generator for a Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         while True:
@@ -168,40 +168,40 @@ class Wavesynth:
             yield int(next(wave))
 
     def __sine(self, frequency, amplitude, phase, bias, fmlfo):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.sine(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
 
     def __square(self, frequency, amplitude, phase, bias, fmlfo):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.square(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
 
     def __square_h(self, frequency, num_harmonics, amplitude, phase, bias, fmlfo):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.square_h(frequency, num_harmonics, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
 
     def __triangle(self, frequency, amplitude, phase, bias, fmlfo):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.triangle(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
 
     def __sawtooth(self, frequency, amplitude, phase, bias, fmlfo):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.sawtooth(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
 
     def __sawtooth_h(self, frequency, num_harmonics, amplitude, phase, bias, fmlfo):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.sawtooth_h(frequency, num_harmonics, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
 
     def __pulse(self, frequency, amplitude, phase, bias, pulsewidth, fmlfo, pwmlfo):
         assert 0 <= pulsewidth <= 1
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.pulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth, fmlfo=fmlfo, pwmlfo=pwmlfo)
 
     def __harmonics(self, frequency, num_harmonics, amplitude, phase, bias, only_even, only_odd, fmlfo):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return self.oscillator.harmonics(frequency, num_harmonics, amplitude*scale, phase, bias*scale, only_even=only_even, only_odd=only_odd, fmlfo=fmlfo)
 
     def __white_noise(self, amplitude, bias):
-        scale = self.__check_and_get_scale(amplitude, bias)
+        scale = self.__check_and_get_scale(1, amplitude, bias)
         return self.oscillator.white_noise(amplitude*scale, bias*scale)
 
     def __linear(self, duration, startamp, finishamp):
@@ -209,7 +209,8 @@ class Wavesynth:
         increment = (finishamp-startamp)/(num_samples-1)
         return self.oscillator.linear(startamp, increment)
 
-    def __check_and_get_scale(self, amplitude, bias):
+    def __check_and_get_scale(self, freq, amplitude, bias):
+        assert freq <= self.samplerate/2    # don't exceed the Nyquist frequency
         assert 0 <= amplitude <= 1.0
         assert -1 <= bias <= 1.0
         scale = 2 ** (self.samplewidth * 8 - 1) - 1
@@ -309,7 +310,7 @@ class Oscillator:
                 yield (-amplitude if int(t*frequency*2) % 2 else amplitude)+bias
                 t += increment
 
-    def square_h(self, frequency, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def square_h(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """
         Returns a generator that produces a square wave based on harmonic sine waves.
         It is a lot heavier to generate than square because it has to add many individual sine waves.
@@ -340,7 +341,7 @@ class Oscillator:
                 yield bias+amplitude*2*(tt - floor(0.5+tt))
                 t += increment
 
-    def sawtooth_h(self, frequency, num_harmonics=12, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def sawtooth_h(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """
         Returns a generator that produces a sawtooth wave based on harmonic sine waves.
         It is a lot heavier to generate than square because it has to add many individual sine waves.
