@@ -305,8 +305,7 @@ class Sample:
         assert end_seconds > start_seconds
         start = self.frame_idx(start_seconds)
         end = self.frame_idx(end_seconds)
-        if end != len(self.__frames):
-            self.__frames = self.__frames[start:end]
+        self.__frames = self.__frames[start:end]
         return self
 
     def split(self, seconds):
@@ -430,6 +429,32 @@ class Sample:
         """Invert every sample value around 0."""
         assert not self.__locked
         return self.amplify(-1)
+
+    def delay(self, seconds, keep_length=False):
+        """
+        Delay the sample for a given time (inserts silence).
+        If delay<0, instead, skip a bit from the start.
+        This is a nice wrapper around the add_silence and clip functions.
+        """
+        assert not self.__locked
+        if seconds > 0:
+            if keep_length:
+                num_frames = len(self.__frames)
+                self.add_silence(seconds, at_start=True)
+                self.__frames = self.__frames[:num_frames]
+                return self
+            else:
+                return self.add_silence(seconds, at_start=True)
+        elif seconds < 0:
+            seconds = -seconds
+            if keep_length:
+                num_frames = len(self.__frames)
+                self.add_silence(seconds)
+                self.__frames = self.__frames[len(self.__frames)-num_frames:]
+                return self
+            else:
+                self.__frames = self.__frames[self.frame_idx(seconds):]
+        return self
 
     def bias(self, bias):
         """Add a bias constant to each sample value."""
