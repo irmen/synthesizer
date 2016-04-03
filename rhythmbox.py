@@ -488,7 +488,7 @@ class Sample:
             return self
         raise ValueError("sample must be mono or stereo already")
 
-    def stereo_mix(self, other, other_channel, other_mix_factor=1.0):
+    def stereo_mix(self, other, other_channel, other_mix_factor=1.0, mix_at=0.0, other_seconds=None):
         """
         Mixes another mono channel into the current sample as left or right channel.
         The current sample will be the other channel.
@@ -511,7 +511,7 @@ class Sample:
             other = other.stereo(left_factor=other_mix_factor, right_factor=0)
         else:
             other = other.stereo(left_factor=0, right_factor=other_mix_factor)
-        return self.mix(other)
+        return self.mix_at(mix_at, other, other_seconds)
 
     def echo(self, length, amount, delay, decay):
         """
@@ -583,6 +583,8 @@ class Sample:
         Mix another sample into the current sample at a specific time point.
         You can limit the length taken from the other sample.
         """
+        if seconds == 0.0:
+            return self.mix(other, other_seconds)
         assert not self.__locked
         assert self.samplewidth == other.samplewidth
         assert self.samplerate == other.samplerate
