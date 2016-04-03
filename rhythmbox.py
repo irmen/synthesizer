@@ -32,7 +32,7 @@ __all__ = ["Sample", "Mixer", "Song", "Repl"]
 
 class Sample:
     """
-    Audio sample data. Supports integer sample formats of 1, 2, 3 and 4 bytes per sample (no floating-point).
+    Audio sample data. Supports integer sample formats of 2, 3 and 4 bytes per sample (no floating-point).
     Python 3.4+ is required to support 3-bytes/24-bits sample sizes.
     Most operations modify the sample data in place (if it's not locked) and return the sample object,
     so you can easily chain several operations.
@@ -48,7 +48,7 @@ class Sample:
             self.load_wav(wave_file)
             self.__filename = wave_file
             assert 1 <= self.__nchannels <= 2
-            assert 1 <= self.__samplewidth <= 4
+            assert 2 <= self.__samplewidth <= 4
             assert self.__samplerate > 1
         else:
             self.__samplerate = self.norm_samplerate
@@ -59,14 +59,14 @@ class Sample:
 
     def __repr__(self):
         locked = " (locked)" if self.__locked else ""
-        return "<Sample at 0x{0:x}, {1:g} seconds, {2:d} channels, {3:d} bytes/sample, rate {4:d}{5:s}>"\
-            .format(id(self), self.duration, self.__nchannels, self.__samplewidth, self.__samplerate, locked)
+        return "<Sample at 0x{0:x}, {1:g} seconds, {2:d} channels, {3:d} bits, rate {4:d}{5:s}>"\
+            .format(id(self), self.duration, self.__nchannels, 8*self.__samplewidth, self.__samplerate, locked)
 
     @classmethod
     def from_raw_frames(cls, frames, samplewidth, samplerate, numchannels):
         """Creates a new sample directly from the raw sample data."""
         assert 1 <= numchannels <= 2
-        assert 1 <= samplewidth <= 4
+        assert 2 <= samplewidth <= 4
         assert samplerate > 1
         s = cls()
         s.__frames = frames
@@ -79,7 +79,7 @@ class Sample:
     def from_array(cls, array, samplerate, numchannels):
         samplewidth = array.itemsize
         assert 1 <= numchannels <= 2
-        assert 1 <= samplewidth <= 4
+        assert 2 <= samplewidth <= 4
         assert samplerate > 1
         frames = array.tobytes()
         if sys.byteorder == "big":
@@ -87,7 +87,8 @@ class Sample:
         return Sample.from_raw_frames(frames, samplewidth, samplerate, numchannels)
 
     @property
-    def samplewidth(self): return self.__samplewidth
+    def samplewidth(self):
+        return self.__samplewidth
 
     @property
     def samplerate(self):
@@ -935,9 +936,19 @@ class Output:
             super().__init__(name="soundoutputter", daemon=True)
             self.audio = pyaudio.PyAudio()
             self.stream = self.audio.open(
-                    format=self.audio.get_format_from_width(samplewidth),
+                    format=self.pyaudio_format_from_width(samplewidth),
                     channels=nchannels, rate=samplerate, output=True)
             self.queue = queue.Queue(maxsize=queuesize)
+
+        def pyaudio_format_from_width(self, width):
+            if width == 2:
+                return pyaudio.paInt16
+            elif width == 3:
+                return pyaudio.paInt24
+            elif width == 4:
+                return pyaudio.paInt32
+            else:
+                raise ValueError("Invalid width: %d" % width)
 
         def run(self):
             while True:
@@ -966,11 +977,18 @@ class Output:
                 self.audio = None
 
     def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels):
+        self.samplerate = samplerate
+        self.samplewidth = samplewidth
+        self.nchannels = nchannels
         if pyaudio:
             self.outputter = Output.SoundOutputter(samplerate, samplewidth, nchannels)
             self.outputter.start()
         else:
             self.outputter = None
+
+    def __repr__(self):
+        return "<Output at 0x{0:x}, {1:d} channels, {2:d} bits, rate {3:d}>"\
+            .format(id(self), self.nchannels, 8*self.samplewidth, self.samplerate)
 
     @classmethod
     def for_sample(cls, sample):
@@ -988,8 +1006,9 @@ class Output:
 
     def play_sample(self, sample, async=True):
         """Play a single sample."""
-        if sample.samplewidth not in (2, 3):
-            sample = sample.copy().make_16bit()
+        assert sample.samplewidth == self.samplewidth
+        assert sample.samplerate == self.samplerate
+        assert sample.nchannels == self.nchannels
         if self.outputter:
             if async:
                 self.outputter.add_to_queue(sample)

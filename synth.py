@@ -28,11 +28,11 @@ class Wavesynth:
     Waveform sample synthesizer. Can generate various wave forms based on mathematic functions:
     sine, square (perfect or with harmonics), triangle, sawtooth (perfect or with harmonics),
     variable harmonics, white noise.  It also supports an optional LFO for Frequency Modulation.
-    The resulting waveform sample data is in integer 8, 16 or 32 bits format.
+    The resulting waveform sample data is in integer 16 or 32 bits format.
     """
     def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth):
-        if samplewidth not in (1, 2, 4):
-            raise ValueError("only samplewidth sizes 1, 2 and 4 are supported")
+        if samplewidth not in (2, 4):
+            raise ValueError("only sample widths 2 and 4 are supported")
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.oscillator = Oscillator(self.samplerate)
@@ -41,18 +41,18 @@ class Wavesynth:
         s = Sample.from_array(sample_array, self.samplerate, 1)
         return s.fadeout(0.1 if fadeout else 0)
 
-    def sine(self, frequency, duration, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def sine(self, frequency, duration, amplitude=0.9999, phase=0.0, bias=0.0, fmlfo=None):
         """Simple sine wave. Optional FM using a supplied LFO."""
         wave = self.__sine(frequency, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def sine_gen(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def sine_gen(self, frequency, amplitude=0.9999, phase=0.0, bias=0.0, fmlfo=None):
         """Simple sine wave generator. Optional FM using a supplied LFO."""
         wave = self.__sine(frequency, amplitude, phase, bias, fmlfo)
         while True:
             yield int(next(wave))
 
-    def square(self, frequency, duration, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def square(self, frequency, duration, amplitude=0.75, phase=0.0, bias=0.0, fmlfo=None):
         """
         A perfect square wave [max/-max].
         It is fast, but the square wave is not as 'natural' sounding as the ones
@@ -61,7 +61,7 @@ class Wavesynth:
         wave = self.__square(frequency, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def square_gen(self, frequency, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def square_gen(self, frequency, amplitude=0.75, phase=0.0, bias=0.0, fmlfo=None):
         """
         Generator for a perfect square wave [max/-max].
         It is fast, but the square wave is not as 'natural' sounding as the ones
@@ -71,51 +71,51 @@ class Wavesynth:
         while True:
             yield int(next(wave))
 
-    def square_h(self, frequency, duration, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def square_h(self, frequency, duration, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fmlfo=None):
         """A square wave based on harmonic sine waves (more natural sounding than pure square)"""
         wave = self.__square_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def square_h_gen(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def square_h_gen(self, frequency, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fmlfo=None):
         """Generator for a square wave based on harmonic sine waves (more natural sounding than pure square)"""
         wave = self.__square_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         while True:
             yield int(next(wave))
 
-    def triangle(self, frequency, duration, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def triangle(self, frequency, duration, amplitude=0.9999, phase=0.0, bias=0.0, fmlfo=None):
         """Perfect triangle waveform (not using harmonics). Optional FM using a supplied LFO."""
         wave = self.__triangle(frequency, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def triangle_gen(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
+    def triangle_gen(self, frequency, amplitude=0.9999, phase=0.0, bias=0.0, fmlfo=None):
         """Generator for a perfect triangle waveform (not using harmonics). Optional FM using a supplied LFO."""
         wave = self.__triangle(frequency, amplitude, phase, bias, fmlfo)
         while True:
             yield int(next(wave))
 
-    def sawtooth(self, frequency, duration, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def sawtooth(self, frequency, duration, amplitude=0.75, phase=0.0, bias=0.0, fmlfo=None):
         """Perfect sawtooth waveform (not using harmonics)."""
         wave = self.__sawtooth(frequency, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def sawtooth_gen(self, frequency, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def sawtooth_gen(self, frequency, amplitude=0.75, phase=0.0, bias=0.0, fmlfo=None):
         """Generator for a perfect sawtooth waveform (not using harmonics)."""
         wave = self.__sawtooth(frequency, amplitude, phase, bias, fmlfo)
         while True:
             yield int(next(wave))
 
-    def sawtooth_h(self, frequency, duration, num_harmonics=16, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def sawtooth_h(self, frequency, duration, num_harmonics=16, amplitude=0.75, phase=0.0, bias=0.0, fmlfo=None):
         """Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def sawtooth_h_gen(self, frequency, num_harmonics=16, amplitude=0.8, phase=0.0, bias=0.0, fmlfo=None):
+    def sawtooth_h_gen(self, frequency, num_harmonics=16, amplitude=0.75, phase=0.0, bias=0.0, fmlfo=None):
         """Generator for a Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fmlfo)
         while True:
             yield int(next(wave))
 
-    def pulse(self, frequency, duration, amplitude=0.8, phase=0.0, bias=0.0, pulsewidth=0.1, fmlfo=None, pwmlfo=None):
+    def pulse(self, frequency, duration, amplitude=0.75, phase=0.0, bias=0.0, pulsewidth=0.1, fmlfo=None, pwmlfo=None):
         """
         Perfect pulse waveform (not using harmonics).
         Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
@@ -124,7 +124,7 @@ class Wavesynth:
         wave = self.__pulse(frequency, amplitude, phase, bias, pulsewidth, fmlfo, pwmlfo)
         return self.__render_samples(duration, wave)
 
-    def pulse_gen(self, frequency, amplitude=0.8, phase=0.0, bias=0.0, pulsewidth=0.1, fmlfo=None, pwmlfo=None):
+    def pulse_gen(self, frequency, amplitude=0.75, phase=0.0, bias=0.0, pulsewidth=0.1, fmlfo=None, pwmlfo=None):
         """
         Generator for perfect pulse waveform (not using harmonics).
         Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
@@ -134,23 +134,23 @@ class Wavesynth:
         while True:
             yield int(next(wave))
 
-    def harmonics(self, frequency, duration, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
+    def harmonics(self, frequency, duration, num_harmonics, amplitude=0.9999, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
         """Makes a waveform based on harmonics. This is slow because many sine waves are added together."""
         wave = self.__harmonics(frequency, num_harmonics, amplitude, phase, bias, only_even, only_odd, fmlfo)
         return self.__render_samples(duration, wave)
 
-    def harmonics_gen(self, frequency, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
+    def harmonics_gen(self, frequency, num_harmonics, amplitude=0.9999, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
         """Generator for a waveform based on harmonics. This is slow because many sine waves are added together."""
         wave = self.__harmonics(frequency, num_harmonics, amplitude, phase, bias, only_even, only_odd, fmlfo)
         while True:
             yield int(next(wave))
 
-    def white_noise(self, duration, amplitude=1.0, bias=0.0):
+    def white_noise(self, duration, amplitude=0.9999, bias=0.0):
         """White noise (randomness) waveform."""
         wave = self.__white_noise(amplitude, bias)
         return self.__render_samples(duration, wave)
 
-    def white_noise_gen(self, amplitude=1.0, bias=0.0):
+    def white_noise_gen(self, amplitude=0.9999, bias=0.0):
         """Generator for White noise (randomness) waveform."""
         wave = self.__white_noise(amplitude, bias)
         while True:

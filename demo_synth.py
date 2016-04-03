@@ -242,10 +242,10 @@ def lfo_envelope():
 
 
 def a440():
-    synth = Wavesynth()
-    with Output(nchannels=1) as out:
-        a440 = synth.sine(440, duration=4)
-        a440 = synth.to_sample(a440)
+    synth = Wavesynth(samplerate=44100, samplewidth=4)
+    a440 = synth.sine(440, duration=3)
+    a440 = synth.to_sample(a440)
+    with Output.for_sample(a440) as out:
         out.play_sample(a440, async=False)
 
 
@@ -272,7 +272,7 @@ def echo_lfo():
     import matplotlib.pyplot as plot
     plot.plot(samp.get_frame_array())
     plot.show()
-    with Output(samplerate=synth.samplerate) as out:
+    with Output.for_sample(samp) as out:
         out.play_sample(samp, async=False)
 
 
@@ -321,10 +321,8 @@ def stereo_pan():
     synth = Wavesynth()
     # panning a stereo source:
     wave = Sample("samples/SOS 020.wav").clip(6, 12).normalize().fadein(0.5).fadeout(0.5).lock()
-    print(wave)
     osc = synth.oscillator.sine(0.4)
     panning = wave.copy().pan(lfo=osc).fadeout(0.2)
-    print(panning)
     with Output.for_sample(panning) as out:
         out.play_sample(panning, async=False)
     # panning a generated mono source:
