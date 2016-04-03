@@ -109,6 +109,10 @@ class Sample:
     def duration(self):
         return len(self.__frames) / self.__samplerate / self.__samplewidth / self.__nchannels
 
+    @property
+    def maximum(self):
+        return audioop.max(self.__frames, self.samplewidth)
+
     def __len__(self):
         """returns the number of sample frames"""
         return len(self.__frames) // self.__samplewidth // self.__nchannels
@@ -473,15 +477,31 @@ class Sample:
             return self
         raise ValueError("sample must be stereo or mono already")
 
+    def left(self):
+        """Only keeps left channel."""
+        assert not self.__locked
+        assert self.__nchannels == 2
+        return self.mono(1.0, 0)
+
+    def right(self):
+        """Only keeps right channel."""
+        assert not self.__locked
+        assert self.__nchannels == 2
+        return self.mono(0, 1.0)
+
     def stereo(self, left_factor=1.0, right_factor=1.0):
         """
         Turn a mono sample into a stereo one with given factors/amplitudes for left and right channels.
         Note that it is a fast but simplistic conversion; the waveform in both channels is identical
         so you may suffer from phase cancellation when playing the resulting stereo sample.
+        If the sample is already stereo, the left/right channel separation is changed instead.
         """
         assert not self.__locked
         if self.__nchannels == 2:
-            return self
+            # first split the left and right channels and then remix them
+            right = self.copy().right()
+            self.left().amplify(left_factor)
+            return self.stereo_mix(right, 'R', right_factor)
         if self.__nchannels == 1:
             self.__frames = audioop.tostereo(self.__frames, self.__samplewidth, left_factor, right_factor)
             self.__nchannels = 2
@@ -512,6 +532,35 @@ class Sample:
         else:
             other = other.stereo(left_factor=0, right_factor=other_mix_factor)
         return self.mix_at(mix_at, other, other_seconds)
+
+    def pan(self, panning=0, lfo=None):
+        """
+        Linear Stereo panning, -1 = full left, 1 = full right.
+        If you provide a LFO that will be used for panning instead.
+        """
+        assert not self.__locked
+        if not lfo:
+            return self.stereo((1-panning)/2, (1+panning)/2)
+        if self.__nchannels == 2:
+            right = self.copy().right().get_frame_array()
+            left = self.copy().left().get_frame_array()
+            stereo = self.get_frame_array()
+            for i in range(len(right)):
+                panning = next(lfo)
+                left_s = left[i]*(1-panning)/2
+                right_s = right[i]*(1+panning)/2
+                stereo[i*2] = int(left_s)
+                stereo[i*2+1] = int(right_s)
+        else:
+            mono = self.get_frame_array()
+            stereo = mono+mono
+            for i, sample in enumerate(mono):
+                panning = next(lfo)
+                stereo[i*2] = int(sample*(1-panning)/2)
+                stereo[i*2+1] = int(sample*(1+panning)/2)
+            self.__nchannels = 2
+        self.__frames = Sample.from_array(stereo, self.__samplerate, 2).__frames
+        return self
 
     def echo(self, length, amount, delay, decay):
         """

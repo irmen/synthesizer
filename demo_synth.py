@@ -1,6 +1,6 @@
 import time
 import array
-from rhythmbox import Output
+from rhythmbox import Output, Sample
 from synth import Wavesynth, key_freq, Oscillator
 from collections import OrderedDict
 
@@ -291,8 +291,8 @@ def lfo_func():
 
 
 def bells():
-    synth = Wavesynth()
     def makebell(freq):
+        synth = Wavesynth()
         duration = 2
         divider = 2.2823535
         fm = synth.oscillator.triangle(freq/divider, amplitude=0.5)
@@ -317,6 +317,26 @@ def bells():
         out.play_sample(bells, async=False)
 
 
+def stereo_pan():
+    synth = Wavesynth()
+    # panning a stereo source:
+    wave = Sample("samples/SOS 020.wav").clip(6, 12).normalize().fadein(0.5).fadeout(0.5).lock()
+    print(wave)
+    osc = synth.oscillator.sine(0.4)
+    panning = wave.copy().pan(lfo=osc).fadeout(0.2)
+    print(panning)
+    with Output.for_sample(panning) as out:
+        out.play_sample(panning, async=False)
+    # panning a generated mono source:
+    fm = synth.oscillator.sine(0.5, 0.1999, bias=0.2)
+    wave = synth.triangle(220, 5, fmlfo=fm)
+    wave = synth.to_sample(wave).lock()
+    osc = synth.oscillator.sine(0.4)
+    panning = wave.copy().pan(lfo=osc).fadeout(0.2)
+    with Output.for_sample(panning) as out:
+        out.play_sample(panning, async=False)
+
+
 if __name__ == "__main__":
     bells()
     lfo_func()
@@ -333,3 +353,4 @@ if __name__ == "__main__":
     oscillator()
     bias()
     lfo_envelope()
+    stereo_pan()
