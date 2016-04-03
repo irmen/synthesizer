@@ -267,7 +267,7 @@ def echo_lfo():
     s = lfo.sawtooth(440, amplitude=25000)
     s = lfo.envelope(s, 1, 0.1, 0, 0, 2, stop_at_end=True)
     s = lfo.echo(s, 0.8, 6, 0.3, 0.7)
-    a = array.array('h', [int(y) for y in s])
+    a = Sample.get_array(synth.samplewidth, [int(y) for y in s])
     samp = synth.to_sample(a, False)
     import matplotlib.pyplot as plot
     plot.plot(samp.get_frame_array())

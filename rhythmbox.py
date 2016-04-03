@@ -30,6 +30,17 @@ if sys.version_info < (3, 0):
 __all__ = ["Sample", "Mixer", "Song", "Repl"]
 
 
+samplewidths_to_arraycode = {
+    1: 'b',
+    2: 'h',
+    4: 'l'    # or 'i' on 64 bit systems
+}
+
+# the actual array type code for the given sample width varies
+if array.array('i').itemsize == 4:
+    samplewidths_to_arraycode[4] = 'i'
+
+
 class Sample:
     """
     Audio sample data. Supports integer sample formats of 2, 3 and 4 bytes per sample (no floating-point).
@@ -120,14 +131,12 @@ class Sample:
 
     def get_frame_array(self):
         """Returns the sample values as array. Warning: this can copy large amounts of data."""
-        if self.__samplewidth == 1:
-            return array.array('b', self.__frames)
-        elif self.__samplewidth == 2:
-            return array.array('h', self.__frames)
-        elif self.__samplewidth == 4:
-            return array.array('l', self.__frames)
-        else:
-            raise ValueError("can only fade sample widths 1, 2 and 4")
+        return Sample.get_array(self.samplewidth, self.__frames)
+
+    @staticmethod
+    def get_array(samplewidth, initializer=[]):
+        """Returns an array with the correct type code, optionally initialized with values."""
+        return array.array(samplewidths_to_arraycode[samplewidth], initializer)
 
     def copy(self):
         """Returns a copy of the sample (unlocked)."""
@@ -346,14 +355,7 @@ class Sample:
     def fadeout(self, seconds, target_volume=0.0):
         """Fade the end of the sample out to the target volume (usually zero) in the given time."""
         assert not self.__locked
-        if self.__samplewidth == 1:
-            faded = array.array('b')
-        elif self.__samplewidth == 2:
-            faded = array.array('h')
-        elif self.__samplewidth == 4:
-            faded = array.array('l')
-        else:
-            raise ValueError("can only fade sample widths 1, 2 and 4")
+        faded = Sample.get_array(self.__samplewidth)
         seconds = min(seconds, self.duration)
         i = self.frame_idx(self.duration-seconds)
         begin = self.__frames[:i]
@@ -373,14 +375,7 @@ class Sample:
     def fadein(self, seconds, start_volume=0.0):
         """Fade the start of the sample in from the starting volume (usually zero) in the given time."""
         assert not self.__locked
-        if self.__samplewidth == 1:
-            faded = array.array('b')
-        elif self.__samplewidth == 2:
-            faded = array.array('h')
-        elif self.__samplewidth == 4:
-            faded = array.array('l')
-        else:
-            raise ValueError("can only fade sample widths 1, 2 and 4")
+        faded = Sample.get_array(self.__samplewidth)
         seconds = min(seconds, self.duration)
         i = self.frame_idx(seconds)
         begin = self.__frames[:i]  # we fade this chunk
@@ -404,14 +399,7 @@ class Sample:
         The maximum amplitude of the modulator waveform is scaled to be 1.0 so no overflow/clipping will occur.
         """
         assert not self.__locked
-        if self.__samplewidth == 1:
-            frames = array.array('b', self.__frames)
-        elif self.__samplewidth == 2:
-            frames = array.array('h', self.__frames)
-        elif self.__samplewidth == 4:
-            frames = array.array('l', self.__frames)
-        else:
-            raise ValueError("can only modulate sample widths 1, 2 and 4")
+        frames = self.get_frame_array()
         if isinstance(modulation_wave, Sample):
             modulation_wave = modulation_wave.get_frame_array()
         factor = 1.0/max(modulation_wave)

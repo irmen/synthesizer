@@ -9,7 +9,6 @@ from math import sin, pi, floor, fabs, log
 import itertools
 import sys
 import random
-import array
 
 __all__ = ["key_freq", "Wavesynth"]
 
@@ -217,14 +216,7 @@ class Wavesynth:
         return scale
 
     def __render_samples(self, duration, wave):
-        if self.samplewidth == 1:
-            samples = array.array('b')
-        elif self.samplewidth == 2:
-            samples = array.array('h')
-        elif self.samplewidth == 4:
-            samples = array.array('l')
-        else:
-            raise ValueError("only samplewidth sizes 1, 2 and 4 are supported")
+        samples = Sample.get_array(self.samplewidth)
         for _ in range(int(duration*self.samplerate)):
             samples.append(int(next(wave)))
         return samples
