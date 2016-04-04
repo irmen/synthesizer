@@ -129,7 +129,7 @@ def fm():
     from matplotlib import pyplot as plot
     freq = 2000
     lfo1 = synth.oscillator.sine(1, amplitude=0.4)
-    s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
+    s1 = synth.sine(freq, duration=3, fm_lfo=lfo1)
     plot.title("Spectrogram")
     plot.ylabel("Freq")
     plot.xlabel("Time")
@@ -140,33 +140,33 @@ def fm():
         freq = 440
         lfo1 = synth.oscillator.linear(5)
         lfo1 = synth.oscillator.envelope(lfo1, 1, 0.5, 0.5, 0.5, 1)
-        s1 = synth.sine(freq, duration=3, fmlfo=lfo1)
+        s1 = synth.sine(freq, duration=3, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all = s1.copy()
         out.play_sample(s1, async=False)
         lfo1 = synth.oscillator.sine(1, amplitude=0.2)
-        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.sine(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
         out.play_sample(s1, async=False)
         lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
-        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.sine(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
         out.play_sample(s1, async=False)
         lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
-        s1 = synth.sine(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.sine(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
         out.play_sample(s1, async=False)
         lfo1 = synth.oscillator.sine(1, amplitude=0.4)
-        s1 = synth.triangle(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.triangle(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
         out.play_sample(s1, async=False)
         freq = 440*2
         lfo1 = synth.oscillator.sine(freq/80, amplitude=0.4)
-        s1 = synth.triangle(freq, duration=2, fmlfo=lfo1)
+        s1 = synth.triangle(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
         out.play_sample(s1, async=False)
@@ -176,8 +176,8 @@ def fm():
 def pwm():
     from matplotlib import pyplot as plot
     synth = WaveSynth(samplerate=1000)
-    pwmlfo = synth.oscillator.sine(0.2, amplitude=0.25, bias=0.25)
-    s1 = synth.pulse(4, amplitude=0.6, duration=20, pwmlfo=pwmlfo)
+    pwm_lfo = synth.oscillator.sine(0.2, amplitude=0.25, bias=0.25)
+    s1 = synth.pulse(4, amplitude=0.6, duration=20, pwm_lfo=pwm_lfo)
     plot.figure(figsize=(16, 4))
     plot.title("Pulse width modulation")
     plot.plot(s1)
@@ -185,7 +185,7 @@ def pwm():
     with Output(nchannels=1) as out:
         synth = WaveSynth()
         lfo2 = synth.oscillator.sine(0.2, amplitude=0.48, bias=0.5)
-        s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fmlfo=None, pwmlfo=lfo2)
+        s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fm_lfo=None, pwm_lfo=lfo2)
         s1 = synth.to_sample(s1)
         out.play_sample(s1, async=False)
         # s1.write_wav("pwmtest.wav")
@@ -251,7 +251,7 @@ def a440():
 def echo_sample():
     synth = WaveSynth(samplerate=22050)
     lfo = synth.oscillator.linear(1, -0.0001)
-    s = synth.pulse(220, .5, fmlfo=lfo)
+    s = synth.pulse(220, .5, fm_lfo=lfo)
     s = synth.to_sample(s).fadeout(.2)
     with Output(s.samplerate, s.samplewidth, s.nchannels) as out:
         e = s.copy().echo(1, 4, 0.5, 0.4)   # echo
@@ -295,7 +295,7 @@ def bells():
         duration = 2
         divider = 2.2823535
         fm = synth.oscillator.triangle(freq/divider, amplitude=0.5)
-        s = synth.sine(freq, duration, amplitude=0.6, fmlfo=fm)
+        s = synth.sine(freq, duration, amplitude=0.6, fm_lfo=fm)
         s = synth.to_sample(s, False)
         s.envelope(0, duration*0.25, .5, duration*0.75)
         s.echo(2, 5, 0.05, 0.6)
@@ -326,7 +326,7 @@ def stereo_pan():
         out.play_sample(panning, async=False)
     # panning a generated mono source:
     fm = synth.oscillator.sine(0.5, 0.1999, bias=0.2)
-    wave = synth.triangle(220, 5, fmlfo=fm)
+    wave = synth.triangle(220, 5, fm_lfo=fm)
     wave = synth.to_sample(wave).lock()
     osc = synth.oscillator.sine(0.4)
     panning = wave.copy().pan(lfo=osc).fadeout(0.2)
@@ -347,7 +347,7 @@ def osc_bench():
     # sine
     print("      Sine:   ", end="")
     start = time.time()
-    get_values(lfo.sine(440, fmlfo=fm))
+    get_values(lfo.sine(440, fm_lfo=fm))
     duration1 = time.time()-start
     start = time.time()
     get_values(lfo.sine(440))
@@ -359,7 +359,7 @@ def osc_bench():
     # triangle
     print("  Triangle:   ", end="")
     start = time.time()
-    get_values(lfo.triangle(440, fmlfo=fm))
+    get_values(lfo.triangle(440, fm_lfo=fm))
     duration1 = time.time()-start
     start = time.time()
     get_values(lfo.triangle(440))
@@ -371,7 +371,7 @@ def osc_bench():
     # square
     print("    Square:   ", end="")
     start = time.time()
-    get_values(lfo.square(440, fmlfo=fm))
+    get_values(lfo.square(440, fm_lfo=fm))
     duration1 = time.time()-start
     start = time.time()
     get_values(lfo.square(440))
@@ -383,7 +383,7 @@ def osc_bench():
     # sawtooth
     print("  Sawtooth:   ", end="")
     start = time.time()
-    get_values(lfo.sawtooth(440, fmlfo=fm))
+    get_values(lfo.sawtooth(440, fm_lfo=fm))
     duration1 = time.time()-start
     start = time.time()
     get_values(lfo.sawtooth(440))
@@ -395,7 +395,7 @@ def osc_bench():
     # pulse
     print("     Pulse:   ", end="")
     start = time.time()
-    get_values(lfo.pulse(440, fmlfo=fm))
+    get_values(lfo.pulse(440, fm_lfo=fm))
     duration1 = time.time()-start
     start = time.time()
     get_values(lfo.pulse(440))
@@ -407,7 +407,7 @@ def osc_bench():
     # square_h
     print("  Square_H:   ", end="")
     start = time.time()
-    get_values(lfo.square_h(440, fmlfo=fm))
+    get_values(lfo.square_h(440, fm_lfo=fm))
     duration1 = time.time()-start
     start = time.time()
     get_values(lfo.square_h(440))
@@ -415,7 +415,7 @@ def osc_bench():
     print("{:.3f} / {:.3f}".format(duration1, duration2))
     print("Sawtooth_H:   ", end="")
     start = time.time()
-    get_values(lfo.sawtooth_h(440, fmlfo=fm))
+    get_values(lfo.sawtooth_h(440, fm_lfo=fm))
     duration1 = time.time()-start
     start = time.time()
     get_values(lfo.sawtooth_h(440))
@@ -437,19 +437,19 @@ def test_simple_osc():
     import itertools
     synth = WaveSynth(1000)
     w1 = synth.sine(10, 1)
-    w2 = synth.sine(10, 1, fmlfo=itertools.repeat(0.0))
+    w2 = synth.sine(10, 1, fm_lfo=itertools.repeat(0.0))
     assert w1 == w2
     w1 = synth.triangle(10, 1)
-    w2 = synth.triangle(10, 1, fmlfo=itertools.repeat(0.0))
+    w2 = synth.triangle(10, 1, fm_lfo=itertools.repeat(0.0))
     assert w1 == w2
     w1 = synth.square(10, 1)
-    w2 = synth.square(10, 1, fmlfo=itertools.repeat(0.0))
+    w2 = synth.square(10, 1, fm_lfo=itertools.repeat(0.0))
     assert w1 == w2
     w1 = synth.sawtooth(10, 1)
-    w2 = synth.sawtooth(10, 1, fmlfo=itertools.repeat(0.0))
+    w2 = synth.sawtooth(10, 1, fm_lfo=itertools.repeat(0.0))
     assert w1 == w2
     w1 = synth.pulse(10, 1)
-    w2 = synth.pulse(10, 1, fmlfo=itertools.repeat(0.0))
+    w2 = synth.pulse(10, 1, fm_lfo=itertools.repeat(0.0))
     assert w1 == w2
 
 
