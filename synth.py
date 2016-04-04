@@ -10,7 +10,7 @@ import itertools
 import sys
 import random
 
-__all__ = ["key_freq", "Wavesynth"]
+__all__ = ["key_freq", "WaveSynth", "Oscillator", "SimpleOscillator"]
 
 
 def key_freq(key_number, a4=440.0):
@@ -22,7 +22,7 @@ def key_freq(key_number, a4=440.0):
     return 2**((key_number-49)/12) * a4
 
 
-class Wavesynth:
+class WaveSynth:
     """
     Waveform sample synthesizer. Can generate various wave forms based on mathematic functions:
     sine, square (perfect or with harmonics), triangle, sawtooth (perfect or with harmonics),
@@ -35,6 +35,7 @@ class Wavesynth:
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.oscillator = Oscillator(self.samplerate)
+        self.simple_oscillator = SimpleOscillator(self.samplerate)
 
     def to_sample(self, sample_array, fadeout=True):
         s = Sample.from_array(sample_array, self.samplerate, 1)
@@ -168,11 +169,17 @@ class Wavesynth:
 
     def __sine(self, frequency, amplitude, phase, bias, fmlfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
-        return self.oscillator.sine(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        if fmlfo:
+            return self.oscillator.sine(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        else:
+            return self.simple_oscillator.sine(frequency, amplitude*scale, phase, bias*scale)
 
     def __square(self, frequency, amplitude, phase, bias, fmlfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
-        return self.oscillator.square(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        if fmlfo:
+            return self.oscillator.square(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        else:
+            return self.simple_oscillator.square(frequency, amplitude*scale, phase, bias*scale)
 
     def __square_h(self, frequency, num_harmonics, amplitude, phase, bias, fmlfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -180,11 +187,17 @@ class Wavesynth:
 
     def __triangle(self, frequency, amplitude, phase, bias, fmlfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
-        return self.oscillator.triangle(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        if fmlfo:
+            return self.oscillator.triangle(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        else:
+            return self.simple_oscillator.triangle(frequency, amplitude*scale, phase, bias*scale)
 
     def __sawtooth(self, frequency, amplitude, phase, bias, fmlfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
-        return self.oscillator.sawtooth(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        if fmlfo:
+            return self.oscillator.sawtooth(frequency, amplitude*scale, phase, bias*scale, fmlfo=fmlfo)
+        else:
+            return self.simple_oscillator.sawtooth(frequency, amplitude*scale, phase, bias*scale)
 
     def __sawtooth_h(self, frequency, num_harmonics, amplitude, phase, bias, fmlfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -193,7 +206,10 @@ class Wavesynth:
     def __pulse(self, frequency, amplitude, phase, bias, pulsewidth, fmlfo, pwmlfo):
         assert 0 <= pulsewidth <= 1
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
-        return self.oscillator.pulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth, fmlfo=fmlfo, pwmlfo=pwmlfo)
+        if fmlfo:
+            return self.oscillator.pulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth, fmlfo=fmlfo, pwmlfo=pwmlfo)
+        else:
+            return self.simple_oscillator.pulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth, pwm_lfo=pwmlfo)
 
     def __harmonics(self, frequency, num_harmonics, amplitude, phase, bias, only_even, only_odd, fmlfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -222,85 +238,70 @@ class Wavesynth:
         return samples
 
 
-class Oscillator:
+class OscillatorBase:
+    def __init__(self, samplerate=None):
+        self.samplerate = samplerate or Sample.norm_samplerate
+
+
+class Oscillator(OscillatorBase):
     """
     Oscillator that provides generators for several types of waveforms.
     You can also apply FM to an osc, and/or an ADSR envelope.
     These are generic oscillators and as such have floating-point inputs and result values
     with variable amplitude (though usually -1.0...1.0), depending on what parameters you use.
+    Using a FM LFO is computationally quite heavy, so if you know you don't use FM,
+    consider using the SimpleOscillator instead. It contains optimized algorithms for this case.
     """
-    def __init__(self, samplerate=Sample.norm_samplerate):
-        self.samplerate = samplerate
+    def __init__(self, samplerate=None):
+        super().__init__(samplerate)
 
     def sine(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a sine wave. Optionally applies a FM LFO."""
-        if fmlfo:
-            # The FM compensates for the phase change by means of phase_correction.
-            # See http://stackoverflow.com/questions/3089832/sine-wave-glissando-from-one-pitch-to-another-in-numpy
-            # and http://stackoverflow.com/questions/28185219/generating-vibrato-sine-wave
-            # The same idea is applied to the other waveforms to correct their phase with FM.
-            phase_correction = phase*2*pi
-            freq_previous = frequency
-            increment = 2*pi/self.samplerate
-            t = 0
-            while True:
-                freq = frequency*(1+next(fmlfo))
-                phase_correction += (freq_previous-freq)*t
-                freq_previous = freq
-                yield sin(t*freq+phase_correction)*amplitude+bias
-                t += increment
-        else:
-            # optimized loop without FM
-            rate = self.samplerate/frequency
-            increment = 2*pi/rate
-            t = phase*2*pi
-            while True:
-                yield sin(t)*amplitude+bias
-                t += increment
+        # The FM compensates for the phase change by means of phase_correction.
+        # See http://stackoverflow.com/questions/3089832/sine-wave-glissando-from-one-pitch-to-another-in-numpy
+        # and http://stackoverflow.com/questions/28185219/generating-vibrato-sine-wave
+        # The same idea is applied to the other waveforms to correct their phase with FM.
+        fmlfo = fmlfo or itertools.repeat(0.0)
+        phase_correction = phase*2*pi
+        freq_previous = frequency
+        increment = 2*pi/self.samplerate
+        t = 0
+        while True:
+            freq = frequency*(1+next(fmlfo))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            yield sin(t*freq+phase_correction)*amplitude+bias
+            t += increment
 
     def triangle(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect triangle wave (not using harmonics)."""
-        if fmlfo:
-            phase_correction = phase
-            freq_previous = frequency
-            increment = 1/self.samplerate
-            t = 0
-            while True:
-                freq = frequency * (1+next(fmlfo))
-                phase_correction += (freq_previous-freq)*t
-                freq_previous = freq
-                tt = t*freq+phase_correction
-                yield 4*amplitude*(abs((tt+0.75) % 1 - 0.5)-0.25)+bias
-                t += increment
-        else:
-            # optimized loop without FM
-            t = phase/frequency
-            increment = 1/self.samplerate
-            while True:
-                yield 4*amplitude*(abs((t*frequency+0.75) % 1 - 0.5)-0.25)+bias
-                t += increment
+        fmlfo = fmlfo or itertools.repeat(0.0)
+        phase_correction = phase
+        freq_previous = frequency
+        increment = 1/self.samplerate
+        t = 0
+        while True:
+            freq = frequency * (1+next(fmlfo))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            tt = t*freq+phase_correction
+            yield 4*amplitude*(abs((tt+0.75) % 1 - 0.5)-0.25)+bias
+            t += increment
 
     def square(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect square wave [max/-max] (not using harmonics)."""
-        if fmlfo:
-            phase_correction = phase
-            freq_previous = frequency
-            increment = 1/self.samplerate
-            t = 0
-            while True:
-                freq = frequency*(1+next(fmlfo))
-                phase_correction += (freq_previous-freq)*t
-                freq_previous = freq
-                tt = t*freq + phase_correction
-                yield (-amplitude if int(tt*2) % 2 else amplitude)+bias
-                t += increment
-        else:
-            # optimized loop without FM
-            t = phase/frequency
-            increment = 1/self.samplerate
-            while True:
-                yield (-amplitude if int(t*frequency*2) % 2 else amplitude)+bias
-                t += increment
+        fmlfo = fmlfo or itertools.repeat(0.0)
+        phase_correction = phase
+        freq_previous = frequency
+        increment = 1/self.samplerate
+        t = 0
+        while True:
+            freq = frequency*(1+next(fmlfo))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            tt = t*freq + phase_correction
+            yield (-amplitude if int(tt*2) % 2 else amplitude)+bias
+            t += increment
 
     def square_h(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """
@@ -312,26 +313,18 @@ class Oscillator:
 
     def sawtooth(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """Returns a generator that produces a perfect sawtooth waveform (not using harmonics)."""
-        if fmlfo:
-            increment = 1/self.samplerate
-            freq_previous = frequency
-            phase_correction = phase
-            t = 0
-            while True:
-                freq = frequency*(1+next(fmlfo))
-                phase_correction += (freq_previous-freq)*t
-                freq_previous = freq
-                tt = t*freq + phase_correction
-                yield bias+amplitude*2*(tt - floor(0.5+tt))
-                t += increment
-        else:
-            # optimized loop without FM
-            t = phase/frequency
-            increment = 1/self.samplerate
-            while True:
-                tt = t*frequency
-                yield bias+amplitude*2*(tt - floor(0.5+tt))
-                t += increment
+        fmlfo = fmlfo or itertools.repeat(0.0)
+        increment = 1/self.samplerate
+        freq_previous = frequency
+        phase_correction = phase
+        t = 0
+        while True:
+            freq = frequency*(1+next(fmlfo))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            tt = t*freq + phase_correction
+            yield bias+amplitude*2*(tt - floor(0.5+tt))
+            t += increment
 
     def sawtooth_h(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fmlfo=None):
         """
@@ -346,41 +339,28 @@ class Oscillator:
         """
         Returns a generator that produces a perfect pulse waveform (not using harmonics).
         Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
-        The pwmlfo oscillator should yield values between 0 and 1 (=the pulse width factor), or it will be clipped.
+        The pwmlfo oscillator will be clipped between 0 and 1 as pulse width factor.
         """
         assert 0 <= pulsewidth <= 1
         epsilon = sys.float_info.epsilon
-        if not pwmlfo:
-            pwmlfo = itertools.repeat(pulsewidth)
-        if fmlfo:
-            increment = 1/self.samplerate
-            freq_previous = frequency
-            phase_correction = phase
-            t = 0
-            while True:
-                pw = next(pwmlfo)
-                if pw <= 0:
-                    pw = epsilon
-                elif pw >= 1:
-                    pw = 1.0-epsilon
-                freq = frequency*(1+next(fmlfo))
-                phase_correction += (freq_previous-freq)*t
-                freq_previous = freq
-                tt = t*freq+phase_correction
-                yield (amplitude if tt % 1 < pw else -amplitude)+bias
-                t += increment
-        else:
-            # optimized loop without FM
-            t = phase/frequency
-            increment = 1/self.samplerate
-            while True:
-                pw = next(pwmlfo)
-                if pw <= 0:
-                    pw = epsilon
-                elif pw >= 1:
-                    pw = 1.0-epsilon
-                yield (amplitude if t*frequency % 1 < pw else -amplitude)+bias
-                t += increment
+        pwmlfo = pwmlfo or itertools.repeat(pulsewidth)
+        fmlfo = fmlfo or itertools.repeat(0.0)
+        increment = 1/self.samplerate
+        freq_previous = frequency
+        phase_correction = phase
+        t = 0
+        while True:
+            pw = next(pwmlfo)
+            if pw <= 0:
+                pw = epsilon
+            elif pw >= 1:
+                pw = 1.0-epsilon
+            freq = frequency*(1+next(fmlfo))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            tt = t*freq+phase_correction
+            yield (amplitude if tt % 1 < pw else -amplitude)+bias
+            t += increment
 
     def harmonics(self, frequency, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fmlfo=None):
         """
@@ -548,3 +528,78 @@ class Oscillator:
             amp *= decay
         while True:
             yield sum([next(echo) for echo in echos])
+
+
+class SimpleOscillator(OscillatorBase):
+    """
+    Oscillator that provides generators for several types of waveforms.
+    This one doesn't allow FM or PWM and doesn't allow its parameters to be changed
+    after it was created. However, the calculations offered here are several times
+    faster than their counterparts in the full blown Oscillator.
+    """
+    def __init__(self, samplerate=None):
+        super().__init__(samplerate)
+
+    def sine(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a sine wave."""
+        rate = self.samplerate/frequency
+        increment = 2*pi/rate
+        t = phase*2*pi
+        while True:
+            yield sin(t)*amplitude+bias
+            t += increment
+
+    def triangle(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a perfect triangle wave (not using harmonics)."""
+        t = phase/frequency
+        increment = 1/self.samplerate
+        amplitude *= 4
+        while True:
+            yield amplitude*(abs((t*frequency+0.75) % 1 - 0.5)-0.25)+bias
+            t += increment
+
+    def square(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a perfect square wave [max/-max] (not using harmonics)."""
+        t = phase/frequency
+        increment = 1/self.samplerate
+        while True:
+            yield (-amplitude if int(t*frequency*2) % 2 else amplitude)+bias
+            t += increment
+
+    def sawtooth(self, frequency, amplitude=1.0, phase=0.0, bias=0.0):
+        """Returns a generator that produces a perfect sawtooth waveform (not using harmonics)."""
+        t = phase/frequency
+        increment = 1/self.samplerate
+        amplitude *= 2
+        while True:
+            tt = t*frequency
+            yield bias+amplitude*(tt - floor(0.5+tt))
+            t += increment
+
+    def pulse(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1, pwm_lfo=None):
+        """
+        Returns a generator that produces a perfect pulse waveform (not using harmonics).
+        Optional Pulse-width modulation. If used, the pulsewidth argument is ignored.
+        The pwm_lfo oscillator will be clipped between 0 and 1 as pulse width factor.
+        """
+        assert 0 <= pulsewidth <= 1
+        if pwm_lfo:
+            # optimized loop without FM, but with PWM
+            epsilon = sys.float_info.epsilon
+            t = phase/frequency
+            increment = 1/self.samplerate
+            while True:
+                pw = next(pwm_lfo)
+                if pw <= 0:
+                    pw = epsilon
+                elif pw >= 1:
+                    pw = 1.0-epsilon
+                yield (amplitude if t*frequency % 1 < pw else -amplitude)+bias
+                t += increment
+        else:
+            # no FM, no PWM
+            t = phase/frequency
+            increment = 1/self.samplerate
+            while True:
+                yield (amplitude if t*frequency % 1 < pulsewidth else -amplitude)+bias
+                t += increment
