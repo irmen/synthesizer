@@ -17,6 +17,7 @@ import audioop
 import array
 import threading
 import queue
+import math
 from configparser import ConfigParser
 try:
     import pyaudio
@@ -27,7 +28,7 @@ import cmd
 if sys.version_info < (3, 0):
     raise RuntimeError("This module requires python 3.x")
 
-__all__ = ["Sample", "Mixer", "Song", "Repl"]
+__all__ = ["Sample", "Mixer", "Song", "LevelMeter", "Repl"]
 
 
 samplewidths_to_arraycode = {
@@ -124,6 +125,44 @@ class Sample:
     @property
     def maximum(self):
         return audioop.max(self.__frames, self.samplewidth)
+
+    @property
+    def rms(self):
+        return audioop.rms(self.__frames, self.samplewidth)
+
+    @property
+    def level_db_peak(self):
+        return self.__db_level(False)
+
+    @property
+    def level_db_rms(self):
+        return self.__db_level(True)
+
+    def __db_level(self, rms_mode=False):
+        """
+        Returns the average audio volume level measured in dB (range -60 db to 0 db)
+        If the sample is stereo, you get back a tuple: (left_level, right_level)
+        If the sample is mono, you still get a tuple but both values will be the same.
+        This method is probably only useful if processed on very short sample fragments in sequence,
+        so the db levels could be used to show a level meter for the duration of the sample.
+        """
+        maxvalue = 2**(8*self.__samplewidth-1)
+        if self.nchannels == 1:
+            if rms_mode:
+                peak_left = peak_right = (audioop.rms(self.__frames, self.__samplewidth)+1)/maxvalue
+            else:
+                peak_left = peak_right = (audioop.max(self.__frames, self.__samplewidth)+1)/maxvalue
+        else:
+            left_frames = audioop.tomono(self.__frames, self.__samplewidth, 1, 0)
+            right_frames = audioop.tomono(self.__frames, self.__samplewidth, 0, 1)
+            if rms_mode:
+                peak_left = (audioop.rms(left_frames, self.__samplewidth)+1)/maxvalue
+                peak_right = (audioop.rms(right_frames, self.__samplewidth)+1)/maxvalue
+            else:
+                peak_left = (audioop.max(left_frames, self.__samplewidth)+1)/maxvalue
+                peak_right = (audioop.max(right_frames, self.__samplewidth)+1)/maxvalue
+        # cut off at the bottom at -60 instead of all the way down to -infinity
+        return max(20.0*math.log(peak_left, 10), -60.0), max(20.0*math.log(peak_right, 10), -60.0)
 
     def __len__(self):
         """returns the number of sample frames"""
@@ -964,12 +1003,12 @@ class Output:
                 self.audio.terminate()
                 self.audio = None
 
-    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels):
+    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels, queuesize=100):
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.nchannels = nchannels
         if pyaudio:
-            self.outputter = Output.SoundOutputter(samplerate, samplewidth, nchannels)
+            self.outputter = Output.SoundOutputter(samplerate, samplewidth, nchannels, queuesize)
             self.outputter.start()
         else:
             self.outputter = None
@@ -1243,6 +1282,60 @@ If a pattern with the name doesn't exist yet it will be added."""
             if input("File exists: '{:s}'. Overwrite y/n? ".format(filename)) not in ('y', 'yes'):
                 return
         self.song.write(filename)
+
+
+# noinspection PyAttributeOutsideInit
+class LevelMeter:
+    """
+    Keeps track of sound level (measured on the decibel scale where 0 db=max level).
+    It has state, because it keeps track of the peak levels as well over time.
+    The peaks eventually decay slowly if the actual level is decreased.
+    """
+    def __init__(self, rms_mode=False, lowest=-60.0):
+        """
+        Creates a new Level meter.
+        Rms mode means that instead of peak volume, RMS volume will be used.
+        """
+        assert -60.0 <= lowest < 0.0
+        self._rms = rms_mode
+        self._lowest = lowest
+        self.reset()
+
+    def reset(self):
+        """Resets the meter to its initial state with zero level."""
+        self.peak_left = self.peak_right = self._lowest
+        self._peak_left_hold = self._peak_right_hold = 0.0
+        self.level_left = self.level_right = 0.0
+        self._time = 0.0
+
+    def process(self, sample):
+        """
+        Process a sample and calculate new levels (Left/Right) and new peak levels.
+        This works best if you use short sample fragments (say < 0.1 seconds).
+        It will update the level meter's state, but for convenience also returns
+        the left, peakleft, right, peakright levels as a tuple.
+        """
+        if self._rms:
+            left, right = sample.level_db_rms
+        else:
+            left, right = sample.level_db_peak
+        left = max(left, self._lowest)
+        right = max(right, self._lowest)
+        time = self._time + sample.duration
+        if (time-self._peak_left_hold) > 0.4:
+            self.peak_left -= sample.duration*30.0
+        if left >= self.peak_left:
+            self.peak_left = left
+            self._peak_left_hold = time
+        if (time-self._peak_right_hold) > 0.4:
+            self.peak_right -= sample.duration*30.0
+        if right >= self.peak_right:
+            self.peak_right = right
+            self._peak_right_hold = time
+        self.level_left = left
+        self.level_right = right
+        self._time = time
+        return left, self.peak_left, right, self.peak_right
 
 
 def main(track_file, outputfile=None, interactive=False):
