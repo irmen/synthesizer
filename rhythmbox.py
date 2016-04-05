@@ -1031,7 +1031,7 @@ class Output:
         if self.outputter:
             self.outputter.add_to_queue(None)
 
-    def play_sample(self, sample, async=True):
+    def play_sample(self, sample, async=False):
         """Play a single sample."""
         assert sample.samplewidth == self.samplewidth
         assert sample.samplerate == self.samplerate
@@ -1048,7 +1048,7 @@ class Output:
             winsound.PlaySound(sample_file, winsound.SND_FILENAME)
             os.remove(sample_file)
 
-    def play_samples(self, samples, async=True):
+    def play_samples(self, samples, async=False):
         """Plays all the given samples immediately after each other, with no pauses."""
         if self.outputter:
             for s in self.normalized_samples(samples, 26000):
@@ -1147,7 +1147,7 @@ class Repl(cmd.Cmd):
         try:
             m = Mixer(patterns, self.song.bpm, self.song.ticks, self.song.instruments)
             result = m.mix(verbose=len(patterns) > 1)
-            self.out.play_sample(result)
+            self.out.play_sample(result, True)
         except ValueError as x:
             print("ERROR:", x)
 
@@ -1168,13 +1168,13 @@ class Repl(cmd.Cmd):
         if pattern:
             self.play_single_bar(sample, pattern)
         else:
-            self.out.play_sample(sample)
+            self.out.play_sample(sample, True)
 
     def play_single_bar(self, sample, pattern):
         try:
             m = Mixer([{"sample": pattern}], self.song.bpm, self.song.ticks, {"sample": sample})
             result = m.mix(verbose=False)
-            self.out.play_sample(result)
+            self.out.play_sample(result, True)
         except ValueError as x:
             print("ERROR:", x)
 
@@ -1187,7 +1187,7 @@ class Repl(cmd.Cmd):
         self.song.mix(output)
         mix = Sample(wave_file=output)
         print("Playing sound...")
-        self.out.play_sample(mix, async=False)
+        self.out.play_sample(mix)
         os.remove(output)
 
     def do_stream(self, args):
@@ -1351,7 +1351,7 @@ def main(track_file, outputfile=None, interactive=False):
             # mix and stream output in real time
             print("Mixing and streaming to speakers...")
             with Output() as out:
-                out.play_samples(song.mix_generator(), async=False)
+                out.play_samples(song.mix_generator(), False)
             print("\r                          ")
         else:
             # pyaudio is needed to stream, fallback on mixing everything to a wav

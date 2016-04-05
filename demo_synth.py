@@ -23,23 +23,23 @@ def demo_tones():
                 print("   {:f} hz".format(freq))
                 sample = wave(freq, duration=0.4)
                 sample = synth.to_sample(sample).fadein(0.02)
-                out.play_sample(sample, async=False)
+                out.play_sample(sample)
         print("pulse")
         for note, freq in notes4.items():
             print("   {:f} hz".format(freq))
             sample = synth.pulse(freq, duration=0.4, pulsewidth=0.1)
             sample = synth.to_sample(sample).fadein(0.02)
-            out.play_sample(sample, async=False)
+            out.play_sample(sample)
         print("harmonics (only even)")
         for note, freq in notes3.items():
             print("   {:f} hz".format(freq))
             sample = synth.harmonics(freq, duration=0.4, num_harmonics=5, only_odd=True)
             sample = synth.to_sample(sample).fadein(0.02)
-            out.play_sample(sample, async=False)
+            out.play_sample(sample)
         print("noise")
         sample = synth.white_noise(duration=1.5)
         sample = synth.to_sample(sample).fadein(0.1)
-        out.play_sample(sample, async=False)
+        out.play_sample(sample)
 
 
 def demo_song():
@@ -70,7 +70,7 @@ def demo_song():
                 sample = half_notes[note[:-1]]
             else:
                 sample = quarter_notes[note]
-            out.play_sample(sample, async=False)
+            out.play_sample(sample)
         print()
 
 
@@ -107,7 +107,7 @@ def modulate_amp():
     plot.plot(s1.get_frame_array())
     plot.show()
     with Output(nchannels=1) as out:
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
 
 
 def envelope():
@@ -121,7 +121,7 @@ def envelope():
     plot.plot(s.get_frame_array())
     plot.show()
     with Output(nchannels=1) as out:
-        out.play_sample(s, async=False)
+        out.play_sample(s)
 
 
 def fm():
@@ -143,33 +143,33 @@ def fm():
         s1 = synth.sine(freq, duration=3, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all = s1.copy()
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
         lfo1 = synth.oscillator.sine(1, amplitude=0.2)
         s1 = synth.sine(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
         lfo1 = synth.oscillator.sine(freq/17, amplitude=0.5)
         s1 = synth.sine(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
         lfo1 = synth.oscillator.sine(freq/6, amplitude=0.5)
         s1 = synth.sine(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
         lfo1 = synth.oscillator.sine(1, amplitude=0.4)
         s1 = synth.triangle(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
         freq = 440*2
         lfo1 = synth.oscillator.sine(freq/80, amplitude=0.4)
         s1 = synth.triangle(freq, duration=2, fm_lfo=lfo1)
         s1 = synth.to_sample(s1)
         s_all.join(s1)
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
         # s_all.write_wav("fmtestall.wav")
 
 
@@ -187,7 +187,7 @@ def pwm():
         lfo2 = synth.oscillator.sine(0.2, amplitude=0.48, bias=0.5)
         s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fm_lfo=None, pwm_lfo=lfo2)
         s1 = synth.to_sample(s1)
-        out.play_sample(s1, async=False)
+        out.play_sample(s1)
         # s1.write_wav("pwmtest.wav")
 
 
@@ -245,7 +245,7 @@ def a440():
     a440 = synth.sine(440, duration=3)
     a440 = synth.to_sample(a440)
     with Output.for_sample(a440) as out:
-        out.play_sample(a440, async=False)
+        out.play_sample(a440)
 
 
 def echo_sample():
@@ -255,9 +255,9 @@ def echo_sample():
     s = synth.to_sample(s).fadeout(.2)
     with Output(s.samplerate, s.samplewidth, s.nchannels) as out:
         e = s.copy().echo(1, 4, 0.5, 0.4)   # echo
-        out.play_sample(e, async=False)
+        out.play_sample(e)
         e = s.copy().echo(1, 30, 0.1, 0.5)    # reverberation
-        out.play_sample(e, async=False)
+        out.play_sample(e)
 
 
 def echo_lfo():
@@ -272,7 +272,7 @@ def echo_lfo():
     plot.plot(samp.get_frame_array())
     plot.show()
     with Output.for_sample(samp) as out:
-        out.play_sample(samp, async=False)
+        out.play_sample(samp)
 
 
 def lfo_func():
@@ -297,7 +297,7 @@ def bells():
         fm = synth.oscillator.triangle(freq/divider, amplitude=0.5)
         s = synth.sine(freq, duration, amplitude=0.6, fm_lfo=fm)
         s = synth.to_sample(s, False)
-        s.envelope(0, duration*0.25, .5, duration*0.75)
+        s.envelope(0, duration*0.25, .5, duration*0.75)   # @todo better bell amp curve
         s.echo(2, 5, 0.05, 0.6)
         return s
     b_l1 = makebell(key_freq(56))
@@ -313,7 +313,7 @@ def bells():
     bells.stereo_mix(b_h3, 'R', mix_at=4.5)
     bells.stereo_mix(b_h1, 'R', mix_at=5)
     with Output.for_sample(bells) as out:
-        out.play_sample(bells, async=False)
+        out.play_sample(bells)
 
 
 def stereo_pan():
@@ -323,7 +323,7 @@ def stereo_pan():
     osc = synth.oscillator.sine(0.4)
     panning = wave.copy().pan(lfo=osc).fadeout(0.2)
     with Output.for_sample(panning) as out:
-        out.play_sample(panning, async=False)
+        out.play_sample(panning)
     # panning a generated mono source:
     fm = synth.oscillator.sine(0.5, 0.1999, bias=0.2)
     wave = synth.triangle(220, 5, fm_lfo=fm)
@@ -331,7 +331,7 @@ def stereo_pan():
     osc = synth.oscillator.sine(0.4)
     panning = wave.copy().pan(lfo=osc).fadeout(0.2)
     with Output.for_sample(panning) as out:
-        out.play_sample(panning, async=False)
+        out.play_sample(panning)
 
 
 def osc_bench():
@@ -453,6 +453,28 @@ def test_simple_osc():
     assert w1 == w2
 
 
+def vibrato():
+    synth = WaveSynth()
+    duration = 3
+    def make_sample(freq):
+        fmfm = synth.oscillator.linear(0, 0.001)
+        fm = synth.oscillator.sine(0.1, amplitude=0.1, fm_lfo=fmfm)
+        fms = synth.oscillator.tee(fm, 3)
+        s1 = synth.sawtooth(freq, duration, amplitude=0.4, fm_lfo=fms[0])
+        s2 = synth.sine(freq*2.001, duration, amplitude=0.5, fm_lfo=fms[1])
+        s3 = synth.sine(freq*3.002, duration, amplitude=0.3, fm_lfo=fms[2])
+        s = Sample().mono()
+        s.samplerate = synth.samplerate
+        for m in [s1, s2, s3]:
+            m = synth.to_sample(m)
+            s.mix(m)
+        s.envelope(0.01, 0.1, 0.4, 2)
+        return s
+    with Output(synth.samplerate, nchannels=1) as out:
+        for f in [220, 330, 440]:
+            out.play_sample(make_sample(f))
+
+
 if __name__ == "__main__":
     test_simple_osc()
     osc_bench()
@@ -472,3 +494,4 @@ if __name__ == "__main__":
     bias()
     lfo_envelope()
     stereo_pan()
+    vibrato()
