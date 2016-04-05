@@ -99,11 +99,19 @@ def modulate_amp():
     synth = WaveSynth()
     freq = 220
     s1 = synth.triangle(freq, duration=2)
-    m = synth.sine(2, duration=2, amplitude=0.4, bias=0.5)
     s1 = synth.to_sample(s1, False)
-    m = synth.to_sample(m, False).get_frame_array()
+    m = synth.sine(2, duration=2, amplitude=0.4, bias=0.5)
     s1.modulate_amp(m)
-    plot.title("Amplitude modulation by another waveform (not an envelope)")
+    plot.title("Amplitude modulation by another waveform")
+    plot.plot(s1.get_frame_array())
+    plot.show()
+    with Output(nchannels=1) as out:
+        out.play_sample(s1)
+    s1 = synth.triangle(freq, duration=2)
+    s1 = synth.to_sample(s1)
+    m = synth.oscillator.sine(3, amplitude=0.4, bias=0.5)
+    s1.modulate_amp(m)
+    plot.title("Amplitude modulation by an oscillator")
     plot.plot(s1.get_frame_array())
     plot.show()
     with Output(nchannels=1) as out:

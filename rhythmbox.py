@@ -18,6 +18,7 @@ import array
 import threading
 import queue
 import math
+import itertools
 from configparser import ConfigParser
 try:
     import pyaudio
@@ -431,21 +432,23 @@ class Sample:
         self.__frames = begin + end
         return self
 
-    def modulate_amp(self, modulation_wave):
+    def modulate_amp(self, modulator):
         """
-        Perform amplitude modulation by another waveform (which will be cycled).
-        This is similar but not the same as AM by an LFO.
-        The maximum amplitude of the modulator waveform is scaled to be 1.0 so no overflow/clipping will occur.
+        Perform amplitude modulation by another waveform or oscillator.
+        You can use a Sample (or array of sample values) or an oscillator as modulator.
+        If you use a Sample (or array), it will be cycled if needed and its maximum amplitude
+        is scaled to be 1.0, effectively using it as if it was an oscillator.
         """
         assert not self.__locked
         frames = self.get_frame_array()
-        if isinstance(modulation_wave, Sample):
-            modulation_wave = modulation_wave.get_frame_array()
-        factor = 1.0/max(modulation_wave)
-        import itertools
-        modulation_wave = itertools.cycle(modulation_wave)
+        if isinstance(modulator, (Sample, list, array.array)):
+            # modulator is a waveform, turn that into an 'oscillator' ran
+            if isinstance(modulator, Sample):
+                modulator = modulator.get_frame_array()
+            biggest = max(max(modulator), abs(min(modulator)))
+            modulator = (v/biggest for v in itertools.cycle(modulator))
         for i in range(len(frames)):
-            frames[i] = int(frames[i] * next(modulation_wave) * factor)
+            frames[i] = int(frames[i] * next(modulator))
         self.__frames = frames.tobytes()
         if sys.byteorder == "big":
             self.__frames = audioop.byteswap(self.__frames, self.__samplewidth)
