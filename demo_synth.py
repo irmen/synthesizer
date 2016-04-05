@@ -303,23 +303,25 @@ def bells():
         duration = 2
         divider = 2.2823535
         fm = synth.oscillator.triangle(freq/divider, amplitude=0.5)
-        s = synth.sine(freq, duration, amplitude=0.6, fm_lfo=fm)
+        s = synth.sine(freq, duration, fm_lfo=fm)
         s = synth.to_sample(s, False)
-        s.envelope(0, duration*0.25, .5, duration*0.75)   # @todo better bell amp curve
-        s.echo(2, 5, 0.05, 0.6)
-        return s
+        # apply ADSR envelope that resembles bell amp curve, see http://www.hibberts.co.uk/make.htm
+        s.envelope(0, duration*0.25, .5, duration*0.75)
+        s.echo(2, 5, 0.06, 0.6)
+        return s.make_32bit(False)
     b_l1 = makebell(key_freq(56))
     b_l2 = makebell(key_freq(60))
     b_h1 = makebell(key_freq(78)).amplify(0.7)
     b_h2 = makebell(key_freq(82)).amplify(0.7)
     b_h3 = makebell(key_freq(84)).amplify(0.7)
-    bells = b_l1.stereo_mix(b_h1, 'L', mix_at=1.0)
-    bells.stereo_mix(b_h2, 'L', mix_at=1.5)
-    bells.stereo_mix(b_h3, 'L', mix_at=2)
-    bells.stereo_mix(b_l2, 'L', mix_at=3)
-    bells.stereo_mix(b_h2, 'R', mix_at=4)
-    bells.stereo_mix(b_h3, 'R', mix_at=4.5)
-    bells.stereo_mix(b_h1, 'R', mix_at=5)
+    bells = b_l1.mix_at(1.0, b_h1)
+    bells.mix_at(1.5, b_h2)
+    bells.mix_at(2, b_h3)
+    bells.mix_at(3, b_l2)
+    bells.mix_at(4, b_h2)
+    bells.mix_at(4.5, b_h3)
+    bells.mix_at(5, b_h1)
+    bells.make_16bit()
     with Output.for_sample(bells) as out:
         out.play_sample(bells)
 
