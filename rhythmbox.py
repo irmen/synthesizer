@@ -75,6 +75,14 @@ class Sample:
         return "<Sample at 0x{0:x}, {1:g} seconds, {2:d} channels, {3:d} bits, rate {4:d}{5:s}>"\
             .format(id(self), self.duration, self.__nchannels, 8*self.__samplewidth, self.__samplerate, locked)
 
+    def __eq__(self, other):
+        if not isinstance(other, Sample):
+            return False
+        return self.__samplewidth == other.__samplewidth and \
+            self.__samplerate == other.__samplerate and \
+            self.__nchannels == other.__nchannels and \
+            self.__frames == other.__frames
+
     @classmethod
     def from_raw_frames(cls, frames, samplewidth, samplerate, numchannels):
         """Creates a new sample directly from the raw sample data."""
@@ -89,12 +97,17 @@ class Sample:
         return s
 
     @classmethod
-    def from_array(cls, array, samplerate, numchannels):
-        samplewidth = array.itemsize
+    def from_array(cls, array_or_list, samplerate, numchannels):
         assert 1 <= numchannels <= 2
-        assert 2 <= samplewidth <= 4
         assert samplerate > 1
-        frames = array.tobytes()
+        if isinstance(array_or_list, list):
+            try:
+                array_or_list = Sample.get_array(2, array_or_list)
+            except OverflowError:
+                array_or_list = Sample.get_array(4, array_or_list)
+        samplewidth = array_or_list.itemsize
+        assert 2 <= samplewidth <= 4
+        frames = array_or_list.tobytes()
         if sys.byteorder == "big":
             frames = audioop.byteswap(frames, samplewidth)
         return Sample.from_raw_frames(frames, samplewidth, samplerate, numchannels)
