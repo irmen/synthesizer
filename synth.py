@@ -447,8 +447,8 @@ class Oscillator(OscillatorBase):
             while True:
                 yield 0.0
 
-    def add(self, oscillator1, oscillator2):
-        """Adds the wave from two oscillators together into one output wave."""
+    def mix(self, oscillator1, oscillator2):
+        """Mixes (adds) the wave from two oscillators together into one output wave."""
         while True:
             yield next(oscillator1)+next(oscillator2)
 
