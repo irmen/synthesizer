@@ -171,10 +171,11 @@ def fm():
 def pwm():
     from matplotlib import pyplot as plot
     synth = WaveSynth(samplerate=1000)
-    pwm_lfo = synth.oscillator.sine(0.2, amplitude=0.25, bias=0.25)
+    pwm_lfo = synth.oscillator.sine(0.05, amplitude=0.49, bias=0.5)
     s1 = synth.pulse(4, amplitude=0.6, duration=20, pwm_lfo=pwm_lfo)
     plot.figure(figsize=(16, 4))
     plot.title("Pulse width modulation")
+    plot.ylim([-35000, 35000])
     plot.plot(s1.get_frame_array())
     plot.show()
     with Output(nchannels=1) as out:
@@ -271,7 +272,9 @@ def lfo_func():
     s = lfo.delay(s, 1)
     s = [next(s) for _ in range(rate*2)]
     import matplotlib.pyplot as plot
-    plot.plot(s)
+    a = plot.subplot(111)
+    a.set_ylim([-50, 100])
+    a.plot(s)
     plot.show()
 
 
@@ -443,14 +446,10 @@ def vibrato():
     synth = WaveSynth()
     duration = 3
     def make_sample(freq):
-        fmfm = synth.oscillator.linear(0, 0.001)
-        fm = synth.oscillator.sine(0.1, amplitude=0.1, fm_lfo=fmfm)
-        fms = synth.oscillator.tee(fm, 3)
-        s1 = synth.sawtooth(freq, duration, amplitude=0.4, fm_lfo=fms[0])
-        s2 = synth.sine(freq*2.001, duration, amplitude=0.5, fm_lfo=fms[1])
-        s3 = synth.sine(freq*3.002, duration, amplitude=0.3, fm_lfo=fms[2])
-        s1.mix(s2).mix(s3)
-        s1.envelope(0.01, 0.1, 0.4, 2)
+        fmfm = synth.oscillator.linear(0, 0.002)
+        fm = synth.oscillator.sine(0.05, amplitude=0.5, fm_lfo=fmfm)
+        s1 = synth.sawtooth(freq, duration, amplitude=0.6, fm_lfo=fm)
+        s1.envelope(0.01, 0.1, 0.6, 2)
         return s1
     with Output(synth.samplerate, nchannels=1) as out:
         for f in [220, 330, 440]:
