@@ -1,7 +1,7 @@
 import time
-from rhythmbox import Output, Sample
-from synth import WaveSynth, key_freq, Oscillator, SimpleOscillator
 from collections import OrderedDict
+from synthesizer.sample import Output, Sample
+from synthesizer.synth import WaveSynth, key_freq, Oscillator, SimpleOscillator
 
 # some note frequencies for octaves 1 to 7
 octave_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']

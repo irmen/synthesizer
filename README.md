@@ -1,11 +1,11 @@
-# rhythmbox
+# synthesizer.mixer and synthesizer.sample
 
 Sample mixer and sequencer, think a simple [Roland TR-909](https://en.wikipedia.org/wiki/Roland_TR-909).
 It can mix the patterns into a single output file, but can also stream the mix.
 It provides a command line interface where you can edit the song and patterns,
 play samples and individual patterns, and mix or stream it by entering simple commands.
 
-Note: *rhythmbox requires Python 3.x.*
+Note: *requires Python 3.x.*
 
 
 The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.
@@ -15,7 +15,7 @@ as it is produced in real time.
 Apart from [pyaudio](http://people.csail.mit.edu/hubert/pyaudio/) which is used for audio output, no other custom libraries are required.
 On windows you can even run it without having pyaudio installed (it will use winsound, but you won't be able to stream).
 
-# synth
+# synthesizer.synth
 
 There's also a waveform synthesizer (``synth.py``) that can generate different wave form samples:
 sine, triangle, sawtooth, square, pulse wave, harmonics and white noise.
@@ -76,15 +76,15 @@ hihat4     = .... x...
 kick7      = .... x...
 ```
 
-## invoking rhythmbox
+## invoking the mixer
 
 To simply mix and stream your track file to your speakers use the following command:
 
-``python3 rhythmbox.py mytrack.ini``
+``python3 trackmixer.py mytrack.ini``
 
 To load your track file and start the interactive command line interface:
 
-``python3 rhythmbox.py -i mytrack.ini``
+``python3 trackmixer.py -i mytrack.ini``
 
 ...then type ``help`` to see what commands are available.
 
@@ -94,7 +94,3 @@ A few example tracks are provided, try them out!  (pre-mixed output can be found
 - track2.ini  - a somewhat longer classic rhythm loop, I guess it's in 4/4 time
 - track3.ini  - an experiment with a few liquid drum'n'bass type patterns
 
-
-### multimedia application? not this one
-If you're looking for the GNOME multimedia application [rhythmbox](https://github.com/GNOME/rhythmbox), this is not it.
-This simple python script is in no way shape or form pretending to be such a thing. Have a look [here](https://wiki.gnome.org/Apps/Rhythmbox) instead.

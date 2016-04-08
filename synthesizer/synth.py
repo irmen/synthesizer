@@ -1,14 +1,16 @@
 """
-Sample waveform synthesizer.
+Sample waveform synthesizer. Inspired by FM synthesizers such as the Yamaha DX-7.
 Creates some simple waveform samples with adjustable parameters.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
-from rhythmbox import Sample
-from math import sin, pi, floor, fabs, log
-import itertools
+
 import sys
+import itertools
 import random
+from math import sin, pi, floor, fabs, log
+from .sample import Sample
+
 
 __all__ = ["key_freq", "WaveSynth", "Oscillator", "SimpleOscillator"]
 

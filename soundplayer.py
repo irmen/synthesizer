@@ -16,7 +16,7 @@ import wave
 import time
 import tkinter as tk
 import tkinter.ttk as ttk
-from rhythmbox import Sample, Output, LevelMeter
+from synthesizer.sample import Sample, Output, LevelMeter
 
 
 def play_console(filename_or_stream):
