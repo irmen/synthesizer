@@ -4,6 +4,7 @@ from synthesizer.sample import Output, Sample
 from synthesizer.synth import WaveSynth, key_freq
 from synthesizer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, SawtoothH, WhiteNoise, Linear, Harmonics
 from synthesizer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle
+from synthesizer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter, DelayFilter
 
 
 # some note frequencies for octaves 1 to 7
@@ -22,17 +23,17 @@ def demo_tones():
     with Output(nchannels=1) as out:
         for wave in [synth.square_h, synth.square, synth.sine, synth.triangle, synth.sawtooth, synth.sawtooth_h]:
             print(wave.__name__)
-            for note, freq in notes4.items():
+            for note, freq in list(notes4.items())[6:]:
                 print("   {:f} hz".format(freq))
                 sample = wave(freq, duration=0.4).fadein(0.02).fadeout(0.1)
                 out.play_sample(sample)
         print("pulse")
-        for note, freq in notes4.items():
+        for note, freq in list(notes4.items())[6:]:
             print("   {:f} hz".format(freq))
             sample = synth.pulse(freq, duration=0.4, pulsewidth=0.1).fadein(0.02).fadeout(0.1)
             out.play_sample(sample)
         print("harmonics (only even)")
-        for note, freq in notes3.items():
+        for note, freq in list(notes3.items())[6:]:
             print("   {:f} hz".format(freq))
             harmonics = [(n, 1/n) for n in range(1, 5*2, 2)]
             sample = synth.harmonics(freq, 0.4, harmonics).fadein(0.02).fadeout(0.1)
@@ -145,7 +146,7 @@ def fm():
         synth = WaveSynth(samplerate=22050)
         freq = 440
         lfo1 = Linear(5, samplerate=synth.samplerate)
-        lfo1 = lfo1.envelope(1, 0.5, 0.5, 0.5, 1)
+        lfo1 = EnvelopeFilter(lfo1, 1, 0.5, 0.5, 0.5, 1)
         s1 = synth.sine(freq, duration=3, fm_lfo=lfo1)
         s_all = s1.copy()
         out.play_sample(s1)
@@ -196,14 +197,14 @@ def oscillator():
     l2 = SquareH(4, samplerate=1000)
     plot.subplot(2, 1, 1)
     plot.title("Square from harmonics")
-    l2=iter(l2)
+    l2 = iter(l2)
     plot.plot([next(l2) for _ in range(1000)])
     harmonics = [(1, 1)]
     harmonics.extend([(n, 1/n) for n in range(2, 8*2, 2)])
     l3 = Harmonics(4, harmonics, samplerate=1000)
     plot.subplot(2, 1, 2)
     plot.title("Even harmonics")
-    l3=iter(l3)
+    l3 = iter(l3)
     plot.plot([next(l3) for _ in range(1000)])
     plot.show()
 
@@ -230,7 +231,7 @@ def bias():
 def lfo_envelope():
     synth = WaveSynth(samplerate=100)
     lfo = Linear(1000, samplerate=synth.samplerate)
-    lfo = lfo.envelope(2, 1, 4, 0.3, 2, stop_at_end=True)
+    lfo = EnvelopeFilter(lfo, 2, 1, 4, 0.3, 2, stop_at_end=True)
     from matplotlib import pyplot as plot
     plot.title("LFO Envelope")
     plot.plot(list(lfo))
@@ -258,9 +259,9 @@ def echo_sample():
 def echo_lfo():
     synth = WaveSynth(22050)
     s = Sine(440, amplitude=25000, samplerate=synth.samplerate)
-    s = s.envelope(.2, .2, 0, 0, 1.5, stop_at_end=True)
-    s = s.echo(.15, 5, 0.3, 0.6)
-    s = s.clip(-32000, 32000)
+    s = EnvelopeFilter(s, .2, .2, 0, 0, 1.5, stop_at_end=True)
+    s = EchoFilter(s, .15, 5, 0.3, 0.6)
+    s = ClipFilter(s, -32000, 32000)
     frames = [int(v) for v in s]
     import matplotlib.pyplot as plot
     plot.plot(frames)
@@ -273,9 +274,9 @@ def echo_lfo():
 def lfo_func():
     rate = 1000
     s = Sine(1, amplitude=100, bias=40, samplerate=rate)
-    s = s.abs()
-    s = s.clip(minimum=20, maximum=80)
-    s = s.delay(0.5)
+    s = AbsFilter(s)
+    s = ClipFilter(s, minimum=20, maximum=80)
+    s = DelayFilter(s, 0.5)
     s = iter(s)
     s = [next(s) for _ in range(rate*2)]
     import matplotlib.pyplot as plot
@@ -474,10 +475,10 @@ if __name__ == "__main__":
     demo_song()
     modulate_amp()
     envelope()
+    lfo_envelope()
     pwm()
     fm()
     oscillator()
     bias()
-    lfo_envelope()
     stereo_pan()
     vibrato()
