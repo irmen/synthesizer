@@ -17,7 +17,7 @@ On windows you can even run it without having pyaudio installed (it will use win
 
 # synthesizer.synth
 
-There's also a waveform synthesizer (``synth.py``) that can generate different wave form samples:
+There's also a waveform synthesizer that can generate different wave form samples:
 sine, triangle, sawtooth, square, pulse wave, harmonics and white noise.
 It also supports Frequency Modulation, Pulse-width modulation, and ADSR envelopes using LFOs.
 

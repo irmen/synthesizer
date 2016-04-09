@@ -456,6 +456,8 @@ class Sample:
                 modulator = modulator.get_frame_array()
             biggest = max(max(modulator), abs(min(modulator)))
             modulator = (v/biggest for v in itertools.cycle(modulator))
+        else:
+            modulator = iter(modulator)
         for i in range(len(frames)):
             frames[i] = int(frames[i] * next(modulator))
         self.__frames = frames.tobytes()
@@ -581,6 +583,7 @@ class Sample:
         assert not self.__locked
         if not lfo:
             return self.stereo((1-panning)/2, (1+panning)/2)
+        lfo = iter(lfo)
         if self.__nchannels == 2:
             right = self.copy().right().get_frame_array()
             left = self.copy().left().get_frame_array()
