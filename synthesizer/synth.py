@@ -353,58 +353,63 @@ class OscillatorBase:
                 yield max(min(v, maximum), minimum)
         return FilteredOscillator(self, wrapper)
 
-    def tee(self, n=2):
-        """
-        Return n independent oscillator clones.
-        This is needed when you want to use an oscillator multiple times within a single
-        oscillator chain.
-        """
-        return [FilteredOscillator(self, wrap_generator=g) for g in itertools.tee(self, n)]
-
     def echo(self, after, amount, delay, decay):
         """
         Mix given number of echos of the oscillator into itself.
         The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead).
         If you use a very short delay the echos blend into the sound and the effect is more like a reverb.
         """
+        return EchoingOscillator(self, after, amount, delay, decay)
+
+
+class EchoingOscillator(OscillatorBase):
+    # @todo not sure if I want this to be a wrapper like Oscillator or if it should be explicitly outside of it, like a FilterChain or something
+    def __init__(self, oscillator, after, amount, delay, decay):
+        super().__init__(oscillator.samplerate)
         if decay < 1:
             # avoid computing echos that you can't hear:
             amount = int(min(amount, log(0.000001, decay)))
-        def wrapper(oscillator):
-            oscillator = iter(oscillator)
-            # first play the first part till the echos start
-            for _ in range(int(self.samplerate*after)):
-                yield next(oscillator)
-            # now start mixing the echos
-            amp = decay
-            echo_oscs = list(self.tee(amount+1))
-            echos = [echo_oscs[0]]
-            echo_delay = delay
-            for echo in echo_oscs[1:]:
-                echo = echo.delay(echo_delay)
-                echo = echo.modulate_amp(itertools.repeat(amp))
-                echos.append(echo)
-                echo_delay += delay
-                amp *= decay
-            echos = [iter(echo) for echo in echos]
-            while True:
-                yield sum([next(echo) for echo in echos])
-        return FilteredOscillator(self, wrapper)
+        self._oscillator = oscillator
+        self._after = after
+        self._amount = amount
+        self._delay = delay
+        self._decay = decay
+
+    def generator(self):
+        oscillator = iter(self._oscillator)
+        # first play the first part till the echos start
+        for _ in range(int(self.samplerate*self._after)):
+            yield next(oscillator)
+        # now start mixing the echos
+        amp = self._decay
+        echo_oscs = [FilteredOscillator(osc, samplerate=self.samplerate) for osc in itertools.tee(oscillator, self._amount+1)]
+        echos = [echo_oscs[0]]
+        echo_delay = self._delay
+        for echo in echo_oscs[1:]:
+            echo = echo.delay(echo_delay)
+            echo = echo.modulate_amp(itertools.repeat(amp))
+            echos.append(echo)
+            echo_delay += self._delay
+            amp *= self._decay
+        echos = [iter(echo) for echo in echos]
+        while True:
+            yield sum([next(echo) for echo in echos])
 
 
 class FilteredOscillator(OscillatorBase):
     # @todo not sure if I want this to be a wrapper like Oscillator or if it should be explicitly outside of it, like a FilterChain or something
-    def __init__(self, oscillator, wrapper=None, wrap_generator=None):
-        super().__init__(oscillator.samplerate)
+    def __init__(self, oscillator_or_iterable, wrapper=None, samplerate=None):
+        if samplerate:
+            super().__init__(samplerate)
+        else:
+            super().__init__(oscillator_or_iterable.samplerate)
         self._wrapper = wrapper
-        self._oscillator = oscillator
-        self._wrapped_generator = wrap_generator
+        self._oscillator = oscillator_or_iterable
 
     def generator(self):
-        if not self._wrapper:
-            return self._wrapped_generator
-        else:
+        if self._wrapper:
             return self._wrapper(self._oscillator)
+        return self._oscillator
 
 
 class Sine(OscillatorBase):

@@ -251,13 +251,13 @@ def echo_sample():
         out.play_sample(e)
 
 
-def echo_lfo():   # @todo BROKEN NOW
+def echo_lfo():
     synth = WaveSynth(22050)
-    s = Sawtooth(440, amplitude=25000, samplerate=synth.samplerate)
-    s = s.envelope(.5, .5, 0, 0, 1.5, stop_at_end=True)
-    s = s.echo(.4, 6, 1, 0.3)
+    s = Sine(440, amplitude=25000, samplerate=synth.samplerate)
+    s = s.envelope(.2, .2, 0, 0, 1.5, stop_at_end=True)
+    s = s.echo(.15, 5, 0.3, 0.6)
     s = s.clip(-32000, 32000)
-    frames = [int(y) for y in s]
+    frames = [int(v) for v in s]
     import matplotlib.pyplot as plot
     plot.plot(frames)
     plot.show()
@@ -465,7 +465,7 @@ if __name__ == "__main__":
     lfo_func()
     bells()
     echo_sample()
-    echo_lfo()     # @todo BROKEN NOW
+    echo_lfo()
     demo_plot()
     a440()
     demo_tones()
