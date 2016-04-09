@@ -102,12 +102,12 @@ class WaveSynth:
         while True:
             yield int(next(wave))
 
-    def sawtooth_h(self, frequency, duration, num_harmonics=16, amplitude=0.75, phase=0.0, bias=0.0, fm_lfo=None):
+    def sawtooth_h(self, frequency, duration, num_harmonics=16, amplitude=0.5, phase=0.0, bias=0.0, fm_lfo=None):
         """Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fm_lfo)
         return self.__render_sample(duration, wave)
 
-    def sawtooth_h_gen(self, frequency, num_harmonics=16, amplitude=0.75, phase=0.0, bias=0.0, fm_lfo=None):
+    def sawtooth_h_gen(self, frequency, num_harmonics=16, amplitude=0.5, phase=0.0, bias=0.0, fm_lfo=None):
         """Generator for a Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fm_lfo)
         while True:
@@ -132,14 +132,14 @@ class WaveSynth:
         while True:
             yield int(next(wave))
 
-    def harmonics(self, frequency, duration, num_harmonics, amplitude=0.9999, phase=0.0, bias=0.0, only_even=False, only_odd=False, fm_lfo=None):
+    def harmonics(self, frequency, duration, harmonics, amplitude=0.5, phase=0.0, bias=0.0, fm_lfo=None):
         """Makes a waveform based on harmonics. This is slow because many sine waves are added together."""
-        wave = self.__harmonics(frequency, num_harmonics, amplitude, phase, bias, only_even, only_odd, fm_lfo)
+        wave = self.__harmonics(frequency, harmonics, amplitude, phase, bias, fm_lfo)
         return self.__render_sample(duration, wave)
 
-    def harmonics_gen(self, frequency, num_harmonics, amplitude=0.9999, phase=0.0, bias=0.0, only_even=False, only_odd=False, fm_lfo=None):
+    def harmonics_gen(self, frequency, harmonics, amplitude=0.5, phase=0.0, bias=0.0, fm_lfo=None):
         """Generator for a waveform based on harmonics. This is slow because many sine waves are added together."""
-        wave = self.__harmonics(frequency, num_harmonics, amplitude, phase, bias, only_even, only_odd, fm_lfo)
+        wave = self.__harmonics(frequency, harmonics, amplitude, phase, bias, fm_lfo)
         while True:
             yield int(next(wave))
 
@@ -209,9 +209,9 @@ class WaveSynth:
         else:
             return FastPulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth, pwm_lfo=pwm_lfo, samplerate=self.samplerate)
 
-    def __harmonics(self, frequency, num_harmonics, amplitude, phase, bias, only_even, only_odd, fm_lfo):
+    def __harmonics(self, frequency, harmonics, amplitude, phase, bias, fm_lfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
-        return Harmonics(frequency, num_harmonics, amplitude*scale, phase, bias*scale, only_even=only_even, only_odd=only_odd, fm_lfo=fm_lfo, samplerate=self.samplerate)
+        return Harmonics(frequency, harmonics, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
 
     def __white_noise(self, amplitude, bias):
         scale = self.__check_and_get_scale(1, amplitude, bias)
@@ -367,7 +367,7 @@ class EchoingOscillator(OscillatorBase):
     def __init__(self, oscillator, after, amount, delay, decay):
         super().__init__(oscillator.samplerate)
         if decay < 1:
-            # avoid computing echos that you can't hear:
+            # avoid computing echos that have virtually zero amplitude:
             amount = int(min(amount, log(0.000001, decay)))
         self._oscillator = oscillator
         self._after = after
@@ -383,7 +383,7 @@ class EchoingOscillator(OscillatorBase):
         # now start mixing the echos
         amp = self._decay
         echo_oscs = [FilteredOscillator(osc, samplerate=self.samplerate) for osc in itertools.tee(oscillator, self._amount+1)]
-        echos = [echo_oscs[0]]
+        echos = [iter(echo_oscs[0])]
         echo_delay = self._delay
         for echo in echo_oscs[1:]:
             echo = echo.delay(echo_delay)
@@ -553,16 +553,23 @@ class Harmonics(OscillatorBase):
     Oscillator that produces a waveform based on harmonics.
     This is computationally intensive because many sine waves are added together.
     """
-    def __init__(self, frequency, num_harmonics, amplitude=1.0, phase=0.0, bias=0.0, only_even=False, only_odd=False, fm_lfo=None, samplerate=Sample.norm_samplerate):
+    def __init__(self, frequency, harmonics, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
         super().__init__(samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self._phase = phase
         self.bias = bias
         self.fm = iter(fm_lfo or itertools.repeat(0.0))
-        self.num_harmonics = num_harmonics
-        self.only_even = only_even
-        self.only_odd = only_odd
+        self.harmonics = harmonics
+
+    @property
+    def harmonics(self):
+        return self.__harmonics
+
+    @harmonics.setter
+    def harmonics(self, harmonics):
+        # only keep harmonics below the Nyquist frequency
+        self.__harmonics = list(filter(lambda h: h[0]*self.frequency <= self.samplerate/2, harmonics))
 
     def generator(self):
         increment = 2*pi/self.samplerate
@@ -570,23 +577,13 @@ class Harmonics(OscillatorBase):
         freq_previous = self.frequency
         t = 0
         while True:
-            # remove harmonics above the Nyquist frequency:
-            num_harmonics = min(self.num_harmonics, int(self.samplerate/2/self.frequency))
             h = 0.0
             freq = self.frequency*(1+next(self.fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             q = t*freq + phase_correction
-            if self.only_odd:
-                for k in range(1, 2*num_harmonics, 2):
-                    h += sin(q*k)/k
-            elif self.only_even:
-                h += sin(q)*0.7  # always include harmonic #1 as base
-                for k in range(2, 2*num_harmonics, 2):
-                    h += sin(q*k)/k
-            else:
-                for k in range(1, 1+num_harmonics):
-                    h += sin(q*k)/k/2
+            for k, amp in self.harmonics:
+                h += sin(q*k)*amp
             yield h*self.amplitude+self.bias
             t += increment
 
@@ -597,8 +594,9 @@ class SquareH(Harmonics):
     It is a lot heavier to generate than square because it has to add many individual sine waves.
     It's done by adding only odd-integer harmonics, see https://en.wikipedia.org/wiki/Square_wave
     """
-    def __init__(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
-        super().__init__(frequency, num_harmonics, amplitude, phase, bias, only_odd=True, fm_lfo=fm_lfo, samplerate=samplerate)
+    def __init__(self, frequency, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
+        harmonics = [(n, 1/n) for n in range(1, num_harmonics*2, 2)]  # only the odd harmonics
+        super().__init__(frequency, harmonics, amplitude, phase, bias, fm_lfo=fm_lfo, samplerate=samplerate)
 
 
 class SawtoothH(Harmonics):
@@ -607,8 +605,9 @@ class SawtoothH(Harmonics):
     It is a lot heavier to generate than square because it has to add many individual sine waves.
     It's done by adding all harmonics, see https://en.wikipedia.org/wiki/Sawtooth_wave
     """
-    def __init__(self, frequency, num_harmonics=16, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
-        super().__init__(frequency, num_harmonics, amplitude, phase+0.5, bias, fm_lfo=fm_lfo, samplerate=samplerate)
+    def __init__(self, frequency, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
+        harmonics = [(n, 1/n) for n in range(1, num_harmonics+1)]  # all harmonics
+        super().__init__(frequency, harmonics, amplitude, phase+0.5, bias, fm_lfo=fm_lfo, samplerate=samplerate)
 
     def generator(self):
         for y in super().generator():

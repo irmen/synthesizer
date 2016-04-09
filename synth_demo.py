@@ -34,7 +34,8 @@ def demo_tones():
         print("harmonics (only even)")
         for note, freq in notes3.items():
             print("   {:f} hz".format(freq))
-            sample = synth.harmonics(freq, duration=0.4, num_harmonics=5, only_odd=True).fadein(0.02).fadeout(0.1)
+            harmonics = [(n, 1/n) for n in range(1, 5*2, 2)]
+            sample = synth.harmonics(freq, 0.4, harmonics).fadein(0.02).fadeout(0.1)
             out.play_sample(sample)
         print("noise")
         sample = synth.white_noise(duration=1.5).fadein(0.1).fadeout(0.1)
@@ -47,7 +48,8 @@ def demo_song():
     tempo = 0.3
 
     def instrument(freq, duration):
-        a = synth.harmonics(freq, duration, num_harmonics=4, amplitude=0.8, only_even=True)
+        harmonics = [(1, 1), (2, 1/2), (4, 1/4), (6, 1/6)]
+        a = synth.harmonics(freq, duration, harmonics)
         return a.envelope(0.05, 0.2, 0.8, 0.5)
 
     print("Synthesizing tones...")
@@ -196,7 +198,9 @@ def oscillator():
     plot.title("Square from harmonics")
     l2=iter(l2)
     plot.plot([next(l2) for _ in range(1000)])
-    l3 = Harmonics(4, 8, only_even=True, samplerate=1000)
+    harmonics = [(1, 1)]
+    harmonics.extend([(n, 1/n) for n in range(2, 8*2, 2)])
+    l3 = Harmonics(4, harmonics, samplerate=1000)
     plot.subplot(2, 1, 2)
     plot.title("Even harmonics")
     l3=iter(l3)
@@ -211,7 +215,7 @@ def bias():
     waves.append(synth.sine(2, 4, 0.02, bias=0.1))
     waves.append(synth.triangle(2, 4, 0.02, bias=0.2))
     waves.append(synth.pulse(2, 4, 0.02, bias=0.3, pulsewidth=0.45))
-    waves.append(synth.harmonics(2, 4, 7, 0.02, bias=0.4))
+    waves.append(synth.harmonics(2, 4, [(n, 1/n) for n in range(1, 8)], 0.02, bias=0.4))
     waves.append(synth.sawtooth(2, 4, 0.02, bias=0.5))
     waves.append(synth.sawtooth_h(2, 4, 7, 0.02, bias=0.6))
     waves.append(synth.square(2, 4, 0.02, bias=0.7))
@@ -424,26 +428,6 @@ def osc_bench():
     print("        {:.3f}".format(duration1))
 
 
-def test_simple_osc():
-    import itertools
-    synth = WaveSynth(1000)
-    w1 = synth.sine(10, 1)
-    w2 = synth.sine(10, 1, fm_lfo=itertools.repeat(0.0))
-    assert w1 == w2
-    w1 = synth.triangle(10, 1)
-    w2 = synth.triangle(10, 1, fm_lfo=itertools.repeat(0.0))
-    assert w1 == w2
-    w1 = synth.square(10, 1)
-    w2 = synth.square(10, 1, fm_lfo=itertools.repeat(0.0))
-    assert w1 == w2
-    w1 = synth.sawtooth(10, 1)
-    w2 = synth.sawtooth(10, 1, fm_lfo=itertools.repeat(0.0))
-    assert w1 == w2
-    w1 = synth.pulse(10, 1)
-    w2 = synth.pulse(10, 1, fm_lfo=itertools.repeat(0.0))
-    assert w1 == w2
-
-
 def vibrato():
     synth = WaveSynth()
     duration = 3
@@ -459,8 +443,26 @@ def vibrato():
             out.play_sample(sample)
 
 
+def harmonics():
+    synth = WaveSynth()
+    freq = 1500
+    num_harmonics = 6
+    h_all = synth.harmonics(freq, 1, [(n, 1/n) for n in range(1, num_harmonics+1)])
+    even_harmonics = [(1, 1)]  # always include fundamental tone harmonic
+    even_harmonics.extend([(n, 1/n) for n in range(2, num_harmonics*2, 2)])
+    h_even = synth.harmonics(freq, 1, even_harmonics)
+    h_odd = synth.harmonics(freq, 1, [(n, 1/n) for n in range(1, num_harmonics*2, 2)])
+    h_all.join(h_even).join(h_odd)
+    import matplotlib.pyplot as plot
+    plot.title("Spectrogram")
+    plot.ylabel("Freq")
+    plot.xlabel("Time")
+    plot.specgram(h_all.get_frame_array(), Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
+    plot.show()
+
+
 if __name__ == "__main__":
-    test_simple_osc()
+    harmonics()
     osc_bench()
     lfo_func()
     bells()
