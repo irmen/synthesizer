@@ -10,6 +10,12 @@ import math
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
 from synthesizer.synth import WaveSynth
 from synthesizer.sample import Sample, Output
+try:
+    import matplotlib
+    matplotlib.use("tkagg")
+    import matplotlib.pyplot as plot
+except ImportError:
+    plot = None
 
 
 class OscillatorGUI(tk.Frame):
@@ -60,7 +66,9 @@ class OscillatorGUI(tk.Frame):
             tk.Label(f, text="FM").grid(row=5, column=0)
             values = ["<none>"]
             values.extend(fm_sources)
-            tk.OptionMenu(f, self.input_fm, *values).grid(row=5, column=1)
+            menu = tk.OptionMenu(f, self.input_fm, *values)
+            menu["width"] = 10
+            menu.grid(row=5, column=1)
             self.input_fm.set("<none>")
         if pwm_sources:
             self.pwm_label = tk.Label(f, text="PWM")
@@ -69,6 +77,7 @@ class OscillatorGUI(tk.Frame):
             values = ["<none>"]
             values.extend(pwm_sources)
             self.pwm_select = tk.OptionMenu(f, self.input_pwm, *values, command=self.pwm_selected)
+            self.pwm_select["width"] = 10
             self.pwm_select.grid(row=6, column=1)
             self.pwm_select.grid_remove()
             self.input_pwm.set("<none>")
@@ -169,14 +178,15 @@ class SynthGUI(tk.Frame):
         o = self.create_osc(osc, all_oscillators=self.oscillators)
         o = iter(o)
         frames = [next(o) for _ in range(self.synth.samplerate)]
-        try:
-            import matplotlib.pyplot as plot
-        except ImportError:
+        if not plot:
             tkmsgbox.showerror("matplotlib not installed", "To plot things, you need to have matplotlib installed")
+            return
         plot.figure(figsize=(16, 4))
         plot.title("Waveform")
         plot.plot(frames)
         plot.show()
+        # @todo properly integrate matplotlib in the tkinter gui because the above causes gui freeze problems
+        # see http://matplotlib.org/examples/user_interfaces/embedding_in_tk2.html
 
 
 if __name__ == "__main__":
