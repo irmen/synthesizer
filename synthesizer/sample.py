@@ -24,6 +24,11 @@ try:
 except ImportError:
     pyaudio = None
     import winsound
+try:
+    import numpy
+except ImportError:
+    numpy = None
+
 
 __all__ = ["Sample", "Output", "LevelMeter"]
 
@@ -101,6 +106,14 @@ class Sample:
                 array_or_list = Sample.get_array(2, array_or_list)
             except OverflowError:
                 array_or_list = Sample.get_array(4, array_or_list)
+        elif numpy:
+            if isinstance(array_or_list, numpy.ndarray) and any(array_or_list):
+                if not isinstance(array_or_list[0], (int, numpy.integer)):
+                    raise TypeError("the sample values must be integer")
+        else:
+            if any(array_or_list):
+                if not type(array_or_list[0]) is int:
+                    raise TypeError("the sample values must be integer")
         samplewidth = array_or_list.itemsize
         assert 2 <= samplewidth <= 4
         frames = array_or_list.tobytes()
