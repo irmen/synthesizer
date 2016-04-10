@@ -13,7 +13,7 @@ from synthesizer.sample import Sample, Output
 
 
 class OscillatorGUI(tk.Frame):
-    def __init__(self, master, title, fm_sources=None):
+    def __init__(self, master, title, fm_sources=None, pwm_sources=None):
         super().__init__(master)
         oscframe = tk.LabelFrame(self, text=title)
         oscframe.pack(side=tk.LEFT)
@@ -41,14 +41,15 @@ class OscillatorGUI(tk.Frame):
         self.input_pw = tk.DoubleVar()
         self.input_pw.set(0.1)
         self.input_fm = tk.StringVar()
+        self.input_pwm = tk.StringVar()
         tk.Label(f, text="freq Hz").grid(row=0, column=0)
         tk.Entry(f, width=10, textvariable=self.input_freq).grid(row=0, column=1)
         tk.Label(f, text="amp").grid(row=1, column=0)
         tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0, resolution=.01).grid(row=1, column=1)
-        self.pw_label = tk.Label(f, text="pulsewidth", state="disabled")
+        self.pw_label = tk.Label(f, text="pulsewidth")
         self.pw_label.grid(row=2, column=0)
         self.pw_label.grid_remove()
-        self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999, resolution=.001, state="disabled")
+        self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999, resolution=.001)
         self.pw_slider.grid(row=2, column=1)
         self.pw_slider.grid_remove()
         tk.Label(f, text="phase").grid(row=3, column=0)
@@ -59,20 +60,44 @@ class OscillatorGUI(tk.Frame):
             tk.Label(f, text="FM").grid(row=5, column=0)
             values = ["<none>"]
             values.extend(fm_sources)
-            self.optionMenuWidget = tk.OptionMenu(f, self.input_fm, *values).grid(row=5, column=1)
+            tk.OptionMenu(f, self.input_fm, *values).grid(row=5, column=1)
             self.input_fm.set("<none>")
+        if pwm_sources:
+            self.pwm_label = tk.Label(f, text="PWM")
+            self.pwm_label.grid(row=6, column=0)
+            self.pwm_label.grid_remove()
+            values = ["<none>"]
+            values.extend(pwm_sources)
+            self.pwm_select = tk.OptionMenu(f, self.input_pwm, *values, command=self.pwm_selected)
+            self.pwm_select.grid(row=6, column=1)
+            self.pwm_select.grid_remove()
+            self.input_pwm.set("<none>")
         tk.Button(rightframe, text="Play", command=lambda: master.do_play(self)).pack(side=tk.RIGHT, pady=10)
         tk.Button(rightframe, text="Plot", command=lambda: master.do_plot(self)).pack(side=tk.RIGHT, pady=10)
         self.pack(side=tk.LEFT, anchor=tk.N, padx=10, pady=10)
 
-    def waveform_selected(self):
+    def waveform_selected(self, *args):
         wf = self.input_waveformtype.get()
         if wf == "pulse":
-            self.pw_slider.grid()
             self.pw_label.grid()
+            self.pw_slider.grid()
+            if hasattr(self, "pwm_label"):
+                self.pwm_label.grid()
+                self.pwm_select.grid()
         else:
-            self.pw_slider.grid_remove()
             self.pw_label.grid_remove()
+            self.pw_slider.grid_remove()
+            if hasattr(self, "pwm_label"):
+                self.pwm_label.grid_remove()
+                self.pwm_select.grid_remove()
+
+    def pwm_selected(self, *args):
+        if self.input_pwm.get() != "<none>":
+            self.pw_label.grid_remove()
+            self.pw_slider.grid_remove()
+        else:
+            self.pw_label.grid()
+            self.pw_slider.grid()
 
 
 class SynthGUI(tk.Frame):
@@ -80,11 +105,12 @@ class SynthGUI(tk.Frame):
         super().__init__(master)
         self.synth = WaveSynth()
         self.master.title("Synthesizer")
+        tk.Label(master, text="This shows a few of the possible oscillators and how they can be combined.").pack(side=tk.TOP)
         num_oscillators = 5
         self.oscillators = []
         fm_sources = []
         for n in range(num_oscillators):
-            self.oscillators.append(OscillatorGUI(self, "Oscillator "+str(n+1), fm_sources=fm_sources))
+            self.oscillators.append(OscillatorGUI(self, "Oscillator "+str(n+1), fm_sources=fm_sources, pwm_sources=fm_sources))
             fm_sources.append("osc "+str(n+1))
         self.pack()
 
@@ -108,6 +134,7 @@ class SynthGUI(tk.Frame):
         bias = from_gui.input_bias.get()
         pw = from_gui.input_pw.get()
         fm_choice = from_gui.input_fm.get()
+        pwm_choice = from_gui.input_pwm.get()
         if fm_choice in (None, "", "<none>"):
             fm = None
         elif fm_choice.startswith("osc"):
@@ -115,9 +142,16 @@ class SynthGUI(tk.Frame):
             fm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
         else:
             raise ValueError("invalid fm choice")
+        if pwm_choice in (None, "", "<none>"):
+            pwm = None
+        elif pwm_choice.startswith("osc"):
+            osc_num = int(pwm_choice.split()[1])
+            pwm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+        else:
+            raise ValueError("invalid fm choice")
         o = oscs[waveform]
         if waveform == "pulse":
-            o = o(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, samplerate=self.synth.samplerate)
+            o = o(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
         else:
             o = o(frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
         return o
