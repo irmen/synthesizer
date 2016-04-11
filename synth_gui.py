@@ -1,14 +1,13 @@
 """
-GUI For the synthesizer components
+GUI For the synthesizer components, including a piano keyboard.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
+import platform
 import tkinter as tk
-import tkinter.messagebox as tkmsgbox
-import math
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
-from synthesizer.synth import WaveSynth
+from synthesizer.synth import WaveSynth, note_freq, MixingFilter
 from synthesizer.sample import Sample, Output
 try:
     import matplotlib
@@ -16,14 +15,17 @@ try:
     import matplotlib.pyplot as plot
 except ImportError:
     plot = None
+if platform.system() == "Darwin":
+    print("Sorry but the piano keyboard buttons are messed up on OSX due to not being able to resize buttons...")   # @todo fix that
 
 
 class OscillatorGUI(tk.Frame):
-    def __init__(self, master, title, fm_sources=None, pwm_sources=None):
+    def __init__(self, master, gui, title, fm_sources=None, pwm_sources=None):
         super().__init__(master)
-        oscframe = tk.LabelFrame(self, text=title)
-        oscframe.pack(side=tk.LEFT)
-        leftframe = tk.Frame(oscframe)
+        self._title = title
+        self.oscframe = tk.LabelFrame(self, text=title)
+        self.oscframe.pack(side=tk.LEFT)
+        leftframe = tk.Frame(self.oscframe)
         leftframe.pack(side=tk.LEFT, anchor=tk.N)
         waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "harmonics", "noise", "linear"]
         self.input_waveformtype = tk.StringVar()
@@ -33,7 +35,7 @@ class OscillatorGUI(tk.Frame):
             if w in ("harmonics", "noise", "linear"):
                 b.configure(state="disabled")
             b.pack(anchor=tk.W)
-        rightframe = tk.Frame(oscframe)
+        rightframe = tk.Frame(self.oscframe)
         rightframe.pack(side=tk.RIGHT, anchor=tk.N)
         f = tk.LabelFrame(rightframe, text="inputs")
         f.pack(side=tk.TOP)
@@ -81,9 +83,15 @@ class OscillatorGUI(tk.Frame):
             self.pwm_select.grid(row=6, column=1)
             self.pwm_select.grid_remove()
             self.input_pwm.set("<none>")
-        tk.Button(rightframe, text="Play", command=lambda: master.do_play(self)).pack(side=tk.RIGHT, pady=10)
-        tk.Button(rightframe, text="Plot", command=lambda: master.do_plot(self)).pack(side=tk.RIGHT, pady=10)
+        tk.Button(rightframe, text="Play", command=lambda: gui.do_play(self)).pack(side=tk.RIGHT, pady=10)
+        tk.Button(rightframe, text="Plot", command=lambda: gui.do_plot(self)).pack(side=tk.RIGHT, pady=10)
         self.pack(side=tk.LEFT, anchor=tk.N, padx=10, pady=10)
+
+    def set_title_status(self, status):
+        title = self._title
+        if status:
+            title = "{} - [{}]".format(self._title, status)
+        self.oscframe["text"] = title
 
     def waveform_selected(self, *args):
         wf = self.input_waveformtype.get()
@@ -109,19 +117,73 @@ class OscillatorGUI(tk.Frame):
             self.pw_slider.grid()
 
 
+class PianoKeyboard(tk.Frame):
+    # XXX the keyboard buttons are all wrong on OSX because they can't be resized/styled there... :(
+    def __init__(self, master, gui):
+        super().__init__(master)
+        black_keys = tk.Frame(self)
+        white_keys = tk.Frame(self)
+        num_octaves = 3
+        first_octave = 3
+        for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
+            octave = first_octave+(key_nr+2)//7
+            def key_pressed(event, note=key, octave=octave):
+                gui.pressed(event, note, octave, False)
+            def key_released(event, note=key, octave=octave):
+                gui.pressed(event, note, octave, True)
+            if key:
+                b = tk.Button(black_keys, bg='black', fg='lightgray', width=2, height=3, text=key, relief=tk.RAISED, borderwidth=2)
+                b.bind("<ButtonPress-1>", key_pressed)
+                b.bind("<ButtonRelease-1>", key_released)
+                b.pack(side=tk.LEFT, padx="5p")
+            else:
+                tk.Button(black_keys, width=2, height=3, text="", relief=tk.FLAT, borderwidth=2, state="disabled").pack(side=tk.LEFT, padx="5p")
+        black_keys.pack(side=tk.TOP, anchor=tk.W, padx="13p")
+        for key_nr, key in enumerate("CDEFGAB"*num_octaves):
+            octave = first_octave+(key_nr+2)//7
+            def key_pressed(event, note=key, octave=octave):
+                gui.pressed(event, note, octave, False)
+            def key_released(event, note=key, octave=octave):
+                gui.pressed(event, note, octave, True)
+            b = tk.Button(white_keys, bg='white', fg='gray', width=4, height=4, text=key, relief=tk.RAISED, borderwidth=2)
+            b.bind("<ButtonPress-1>", key_pressed)
+            b.bind("<ButtonRelease-1>", key_released)
+            b.pack(side=tk.LEFT)
+        white_keys.pack(side=tk.TOP, anchor=tk.W, pady=(0, 10))
+
+
 class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
-        self.synth = WaveSynth()
+        self.synth = WaveSynth(samplewidth=2)
         self.master.title("Synthesizer")
         tk.Label(master, text="This shows a few of the possible oscillators and how they can be combined.").pack(side=tk.TOP)
-        num_oscillators = 5
+        self.osc_frame = tk.Frame(self)
+        self.piano_frame = tk.Frame(self)
+        f = tk.Frame(self.osc_frame)
+        tk.Button(f, text="+ OSC -->", command=self.add_osc_to_gui).pack()
+        tk.Label(f, text="To speaker:").pack(pady=10)
+        self.to_speaker_lb = tk.Listbox(f, width=8, height=6, selectmode=tk.MULTIPLE, exportselection=0)
+        self.to_speaker_lb.pack()
+        f.pack(side=tk.RIGHT)
         self.oscillators = []
-        fm_sources = []
-        for n in range(num_oscillators):
-            self.oscillators.append(OscillatorGUI(self, "Oscillator "+str(n+1), fm_sources=fm_sources, pwm_sources=fm_sources))
-            fm_sources.append("osc "+str(n+1))
+        self.add_osc_to_gui()
+        self.add_osc_to_gui()
+        self.add_osc_to_gui()
+        self.piano = PianoKeyboard(self.piano_frame, self)
+        self.piano.pack(side=tk.BOTTOM)
+        self.osc_frame.pack(side=tk.TOP, padx=10)
+        self.piano_frame.pack(side=tk.TOP)
+        self.statusbar = tk.Label(self, text="<status>", relief=tk.RIDGE)
+        self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.pack()
+
+    def add_osc_to_gui(self):
+        osc_nr = len(self.oscillators)
+        fm_sources = ["osc "+str(n+1) for n in range(osc_nr)]
+        osc_pane = OscillatorGUI(self.osc_frame, self, "Oscillator "+str(osc_nr+1), fm_sources=fm_sources, pwm_sources=fm_sources)
+        self.oscillators.append(osc_pane)
+        self.to_speaker_lb.insert(tk.END, "osc "+str(osc_nr+1))
 
     def create_osc(self, from_gui, all_oscillators):
         oscs = {
@@ -139,7 +201,7 @@ class SynthGUI(tk.Frame):
         waveform = from_gui.input_waveformtype.get()
         freq = from_gui.input_freq.get()
         amp = from_gui.input_amp.get()
-        phase = from_gui.input_phase.get()*math.pi*2
+        phase = from_gui.input_phase.get()
         bias = from_gui.input_bias.get()
         pw = from_gui.input_pw.get()
         fm_choice = from_gui.input_fm.get()
@@ -166,12 +228,12 @@ class SynthGUI(tk.Frame):
         return o
 
     def do_play(self, osc):
+        duration = 1
+        osc.set_title_status("TO SPEAKER")
+        osc.after(duration*1000, lambda: osc.set_title_status(None))
         o = self.create_osc(osc, all_oscillators=self.oscillators)
-        o = iter(o)
-        scale = 2**(8*self.synth.samplewidth-1)
-        frames = [int(next(o)*scale) for _ in range(self.synth.samplerate)]
-        sample = Sample.from_array(frames, self.synth.samplerate, 1).fadein(0.05).fadeout(0.1)
-        with Output(self.synth.samplerate, self.synth.samplewidth, 1) as out:
+        sample = self.generate_sample(o, 1)
+        with Output(self.synth.samplerate, self.synth.samplewidth, duration) as out:
             out.play_sample(sample, async=True)
 
     def do_plot(self, osc):
@@ -179,7 +241,7 @@ class SynthGUI(tk.Frame):
         o = iter(o)
         frames = [next(o) for _ in range(self.synth.samplerate)]
         if not plot:
-            tkmsgbox.showerror("matplotlib not installed", "To plot things, you need to have matplotlib installed")
+            self.statusbar["text"] = "Cannot plot! To plot things, you need to have matplotlib installed!"
             return
         plot.figure(figsize=(16, 4))
         plot.title("Waveform")
@@ -187,6 +249,35 @@ class SynthGUI(tk.Frame):
         plot.show()
         # @todo properly integrate matplotlib in the tkinter gui because the above causes gui freeze problems
         # see http://matplotlib.org/examples/user_interfaces/embedding_in_tk2.html
+
+    def generate_sample(self, oscillator, duration):
+        o = iter(oscillator)
+        scale = 2**(8*self.synth.samplewidth-1)
+        frames = [int(next(o)*scale) for _ in range(int(self.synth.samplerate*duration))]
+        return Sample.from_array(frames, self.synth.samplerate, 1).fadein(0.05).fadeout(0.1)
+
+    def pressed(self, event, note, octave, released=False):
+        self.statusbar["text"] = "ok"
+        freq = note_freq(note, octave)
+        to_speaker = self.to_speaker_lb.curselection()
+        to_speaker = [self.oscillators[i] for i in to_speaker]
+        if not to_speaker:
+            self.statusbar["text"] = "No oscillators connected to speaker output!"
+            return
+        if released:
+            for osc in to_speaker:
+                osc.set_title_status(None)
+            return
+        for osc in to_speaker:
+            osc.input_freq.set(freq)
+            osc.set_title_status("TO SPEAKER")
+        oscs = [self.create_osc(osc, all_oscillators=self.oscillators) for osc in to_speaker]
+        mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
+        sample = self.generate_sample(mixed_osc, 0.5)
+        if sample.samplewidth != self.synth.samplewidth:
+            sample.make_16bit()
+        with Output(self.synth.samplerate, self.synth.samplewidth, 1) as out:
+            out.play_sample(sample, async=True)
 
 
 if __name__ == "__main__":

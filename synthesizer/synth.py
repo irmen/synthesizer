@@ -12,10 +12,29 @@ from math import sin, pi, floor, fabs, log
 from .sample import Sample
 
 
-__all__ = ["key_freq", "WaveSynth", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
+__all__ = ["key_num", "key_freq", "note_freq",
+           "WaveSynth", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
            "Pulse", "Harmonics", "WhiteNoise", "Linear",
            "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare",
            "EnvelopeFilter", "MixingFilter", "AmpMudulationFilter", "DelayFilter", "EchoFilter", "ClipFilter", "AbsFilter"]
+
+
+def key_num(note, octave):
+    notes = {
+        "A":   1,
+        "A#":  2,
+        "B":   3,
+        "C":   4,
+        "C#":  5,
+        "D":   6,
+        "D#":  7,
+        "E":   8,
+        "F":   9,
+        "F#": 10,
+        "G":  11,
+        "G#": 12
+    }
+    return (octave-1)*12 + notes[note.upper()]
 
 
 def key_freq(key_number, a4=440.0):
@@ -25,6 +44,17 @@ def key_freq(key_number, a4=440.0):
     https://en.wikipedia.org/wiki/Piano_key_frequencies
     """
     return 2**((key_number-49)/12) * a4
+
+
+def note_freq(note, octave=None, a4=440.0):
+    """
+    Return the frequency for the given note in the octave.
+    Note can be like 'c#4' (= c# in 4th octave) or just 'c#' + specify octave separately.
+    """
+    if not octave:
+        octave = int(note[-1:])
+        note = note[:-1]
+    return key_freq(key_num(note, octave), a4)
 
 
 class WaveSynth:
