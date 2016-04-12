@@ -130,9 +130,11 @@ class OscillatorGUI(tk.Frame):
         row +=1
         self.harmonics_label = tk.Label(f, text="harmonics\n(num,fraction\npairs)", justify=tk.RIGHT)
         self.harmonics_label.grid(row=row, column=0, sticky=tk.E)
+        self.harmonics_label.grid_remove()
         self.harmonics_text = tk.Text(f, width=16, height=5, font=("helvetica", 10))
         self.harmonics_text.insert(tk.INSERT, "1,1   2,1/2\n3,1/3  4,1/4\n5,1/5  6,1/6\n7,1/7  8,1/8")
         self.harmonics_text.grid(row=row, column=1)
+        self.harmonics_text.grid_remove()
         if fm_sources:
             row += 1
             self.fm_label = tk.Label(f, text="FM")
