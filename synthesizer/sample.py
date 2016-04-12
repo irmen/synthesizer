@@ -768,6 +768,13 @@ class Output:
         def add_to_queue(self, sample):
             self.queue.put(sample)
 
+        def wipe_queue(self):
+            try:
+                while True:
+                    self.queue.get(block=False)
+            except queue.Empty:
+                pass
+
         def close(self):
             if self.stream:
                 self.stream.close()
@@ -858,6 +865,10 @@ class Output:
             for sample in samples:
                 Sample.wave_write_append(out, sample)
             Sample.wave_write_end(out)
+
+    def wipe_queue(self):
+        """Remove all pending samples to be played from the queue"""
+        self.outputter.wipe_queue()
 
 
 # noinspection PyAttributeOutsideInit

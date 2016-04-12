@@ -7,7 +7,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import platform
 import tkinter as tk
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
-from synthesizer.synth import WaveSynth, note_freq, MixingFilter
+from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter
 from synthesizer.sample import Sample, Output
 try:
     import matplotlib
@@ -33,8 +33,8 @@ class OscillatorGUI(tk.Frame):
         rightframe = tk.Frame(self.oscframe)
         rightframe.pack(side=tk.RIGHT, anchor=tk.N)
         self.make_inputs_frame(rightframe, fm_sources, pwm_sources)
-        tk.Button(rightframe, text="Play", command=lambda: gui.do_play(self)).pack(side=tk.RIGHT, pady=10)
-        tk.Button(rightframe, text="Plot", command=lambda: gui.do_plot(self)).pack(side=tk.RIGHT, pady=10)
+        tk.Button(rightframe, text="Play", command=lambda: gui.do_play(self)).pack(side=tk.RIGHT, pady=10, padx=(0, 8))
+        tk.Button(rightframe, text="Plot", command=lambda: gui.do_plot(self)).pack(side=tk.RIGHT, pady=10, padx=(0, 8))
         self.pack(side=tk.LEFT, anchor=tk.N, padx=10, pady=10)
 
     # noinspection PyAttributeOutsideInit
@@ -68,7 +68,7 @@ class OscillatorGUI(tk.Frame):
         self.freq_entry = tk.Entry(f, width=10, textvariable=self.input_freq)
         self.freq_entry.grid(row=row, column=1)
         row += 1
-        self.keys_label = tk.Label(f, text="from keys?")
+        self.keys_label = tk.Label(f, text="from piano?")
         self.keys_label.grid(row=row, column=0, sticky=tk.E)
         self.keys_checkbox = tk.Checkbutton(f, variable=self.input_freq_keys, command=self.from_keys_selected)
         self.keys_checkbox.grid(row=row, column=1)
@@ -80,24 +80,24 @@ class OscillatorGUI(tk.Frame):
         row += 1
         self.amp_label = tk.Label(f, text="amp")
         self.amp_label.grid(row=row, column=0, sticky=tk.E)
-        self.amp_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0, resolution=.01)
+        self.amp_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0, resolution=.01, width=10, length=120)
         self.amp_slider.grid(row=row, column=1)
         row += 1
         self.pw_label = tk.Label(f, text="pulsewidth")
         self.pw_label.grid(row=row, column=0, sticky=tk.E)
         self.pw_label.grid_remove()
-        self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999, resolution=.001)
+        self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999, resolution=.001, width=10, length=120)
         self.pw_slider.grid(row=row, column=1)
         self.pw_slider.grid_remove()
         row += 1
         self.phase_label = tk.Label(f, text="phase")
         self.phase_label.grid(row=row, column=0, sticky=tk.E)
-        self.phase_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_phase, from_=0, to=1.0, resolution=.01)
+        self.phase_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_phase, from_=0, to=1.0, resolution=.01, width=10, length=120)
         self.phase_slider.grid(row=row, column=1)
         row += 1
         self.bias_label = tk.Label(f, text="bias")
         self.bias_label.grid(row=row, column=0, sticky=tk.E)
-        self.bias_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_bias, from_=-1, to=1, resolution=.01)
+        self.bias_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_bias, from_=-1, to=1, resolution=.01, width=10, length=120)
         self.bias_slider.grid(row=row, column=1)
         row += 1
         self.lin_start_label = tk.Label(f, text="start")
@@ -128,10 +128,10 @@ class OscillatorGUI(tk.Frame):
         self.lin_max_entry.grid(row=row, column=1)
         self.lin_max_entry.grid_remove()
         row +=1
-        self.harmonics_label = tk.Label(f, text="harmonics\n(num,fraction\npairs)", justify=tk.RIGHT)
+        self.harmonics_label = tk.Label(f, text="harmonics\n(num,fraction)\npairs", justify=tk.RIGHT)
         self.harmonics_label.grid(row=row, column=0, sticky=tk.E)
         self.harmonics_label.grid_remove()
-        self.harmonics_text = tk.Text(f, width=16, height=5, font=("helvetica", 10))
+        self.harmonics_text = tk.Text(f, width=15, height=5)
         self.harmonics_text.insert(tk.INSERT, "1,1   2,1/2\n3,1/3  4,1/4\n5,1/5  6,1/6\n7,1/7  8,1/8")
         self.harmonics_text.grid(row=row, column=1)
         self.harmonics_text.grid_remove()
@@ -251,7 +251,7 @@ class OscillatorGUI(tk.Frame):
         self.ratio_entry["state"] = state
 
 
-class PianoKeyboard(tk.Frame):
+class PianoKeyboardGUI(tk.Frame):
     # XXX the keyboard buttons are all wrong on OSX because they can't be resized/styled there... :(
     def __init__(self, master, gui):
         super().__init__(master)
@@ -286,6 +286,86 @@ class PianoKeyboard(tk.Frame):
         white_keys.pack(side=tk.TOP, anchor=tk.W, pady=(0, 10))
 
 
+class EchoFilterGUI(tk.LabelFrame):
+    # XXX this doesn't seem to work very well somehow with the piano key triggered tones, not sure what's going on
+    def __init__(self, master, gui):
+        super().__init__(master, text="output: Echo / Reverb")
+        self.input_enabled = tk.BooleanVar()
+        self.input_after = tk.DoubleVar()
+        self.input_after.set(0.05)
+        self.input_amount = tk.IntVar()
+        self.input_amount.set(5)
+        self.input_delay = tk.DoubleVar()
+        self.input_delay.set(0.05)
+        self.input_decay = tk.DoubleVar()
+        self.input_decay.set(0.6)
+        row = 0
+        tk.Label(self, text="enable?").grid(row=row, column=0)
+        tk.Checkbutton(self, variable=self.input_enabled).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="after").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_after, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="amount").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_amount, from_=1, to=10, resolution=1, width=10, length=120).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="delay").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_delay, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="decay").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.01, to=2.0, resolution=.1, width=10, length=120).grid(row=row, column=1)
+
+
+class AmpModulationFilterGUI(tk.LabelFrame):
+    def __init__(self, master, gui):
+        super().__init__(master, text="output: Vibrato")
+        self.input_modulator = tk.StringVar()
+        tk.Label(self, text="modulator").grid(row=0, column=0)
+        values = ["<none>", "osc 1", "osc 2", "osc 3", "osc 4", "osc 5"]
+        menu = tk.OptionMenu(self, self.input_modulator, *values)
+        menu["width"] = 10
+        menu.grid(row=0, column=1)
+        self.input_modulator.set("<none>")
+
+
+class EnvelopeFilterGUI(tk.LabelFrame):
+    def __init__(self, master, name, gui):
+        super().__init__(master, text="ADSR Envelope "+name)
+        self.input_source = tk.StringVar()
+        self.input_attack = tk.DoubleVar()
+        self.input_attack.set(0.05)
+        self.input_decay = tk.DoubleVar()
+        self.input_decay.set(0.5)
+        self.input_sustain = tk.DoubleVar()
+        self.input_sustain.set(1)
+        self.input_sustain_level = tk.DoubleVar()
+        self.input_sustain_level.set(0.5)
+        self.input_release = tk.DoubleVar()
+        self.input_release.set(1)
+        row = 0
+        tk.Label(self, text="apply to").grid(row=row, column=0)
+        values = ["<none>", "osc 1", "osc 2", "osc 3", "osc 4", "osc 5"]
+        menu = tk.OptionMenu(self, self.input_source, *values)
+        menu["width"] = 10
+        menu.grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="attack").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_attack, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="decay").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="sustain").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="sustain lvl").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain_level, from_=0.0, to=1.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="release").grid(row=row, column=0)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_release, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        self.input_source.set("<none>")
+
+
 class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
@@ -293,24 +373,37 @@ class SynthGUI(tk.Frame):
         self.master.title("Synthesizer")
         tk.Label(master, text="This shows a few of the possible oscillators and how they can be combined.").pack(side=tk.TOP)
         self.osc_frame = tk.Frame(self)
-        self.piano_frame = tk.Frame(self)
-        f = tk.Frame(self.osc_frame)
-        tk.Button(f, text="+ OSC -->", command=self.add_osc_to_gui).pack()
-        tk.Label(f, text="To speaker:").pack(pady=10)
-        self.to_speaker_lb = tk.Listbox(f, width=8, height=6, selectmode=tk.MULTIPLE, exportselection=0)
-        self.to_speaker_lb.pack()
-        f.pack(side=tk.RIGHT)
         self.oscillators = []
-        self.add_osc_to_gui()
-        self.add_osc_to_gui()
-        self.add_osc_to_gui()
-        self.piano = PianoKeyboard(self.piano_frame, self)
+        self.piano_frame = tk.Frame(self)
+        self.piano = PianoKeyboardGUI(self.piano_frame, self)
         self.piano.pack(side=tk.BOTTOM)
+        filter_frame = tk.LabelFrame(self, text="Filters etc.", padx=10, pady=10)
+        self.envelope_filter1 = EnvelopeFilterGUI(filter_frame, "1", self)
+        self.envelope_filter2 = EnvelopeFilterGUI(filter_frame, "2", self)
+        self.amp_filter = AmpModulationFilterGUI(filter_frame, self)
+        self.echo_filter = EchoFilterGUI(filter_frame, self)
+        self.envelope_filter1.pack(side=tk.LEFT, anchor=tk.N)
+        self.envelope_filter2.pack(side=tk.LEFT, anchor=tk.N)
+        self.amp_filter.pack(side=tk.LEFT, anchor=tk.N)
+        self.echo_filter.pack(side=tk.LEFT, anchor=tk.N)
+        misc_frame = tk.Frame(filter_frame, padx=10, pady=10)
+        tk.Button(misc_frame, text="Add Oscillator", command=self.add_osc_to_gui).pack()
+        tk.Label(misc_frame, text="To Speaker:").pack(pady=5)
+        self.to_speaker_lb = tk.Listbox(misc_frame, width=8, height=6, selectmode=tk.MULTIPLE, exportselection=0)
+        self.to_speaker_lb.pack()
+        self.add_osc_to_gui()
+        self.add_osc_to_gui()
+        self.add_osc_to_gui()
+        self.to_speaker_lb.select_set(2)
         self.osc_frame.pack(side=tk.TOP, padx=10)
-        self.piano_frame.pack(side=tk.TOP)
+        filter_frame.pack(side=tk.TOP)
+        misc_frame.pack(side=tk.RIGHT)
+        self.piano_frame.pack(side=tk.TOP, padx=10, pady=10)
         self.statusbar = tk.Label(self, text="<status>", relief=tk.RIDGE)
         self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.pack()
+        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, queuesize=2)
+        self.playing_note = None
 
     def add_osc_to_gui(self):
         osc_nr = len(self.oscillators)
@@ -320,52 +413,70 @@ class SynthGUI(tk.Frame):
         self.to_speaker_lb.insert(tk.END, "osc "+str(osc_nr+1))
 
     def create_osc(self, from_gui, all_oscillators):
-        waveform = from_gui.input_waveformtype.get()
-        amp = from_gui.input_amp.get()
-        bias = from_gui.input_bias.get()
-        if waveform == "noise":
-            return WhiteNoise(amplitude=amp, bias=bias, samplerate=self.synth.samplerate)
-        elif waveform == "linear":
-            startlevel = from_gui.input_lin_start.get()
-            increment = from_gui.input_lin_increment.get()
-            minvalue = from_gui.input_lin_min.get()
-            maxvalue = from_gui.input_lin_max.get()
-            return Linear(startlevel, increment, minvalue, maxvalue)
-        else:
-            freq = from_gui.input_freq.get()
-            phase = from_gui.input_phase.get()
-            pw = from_gui.input_pw.get()
-            fm_choice = from_gui.input_fm.get()
-            pwm_choice = from_gui.input_pwm.get()
-            if fm_choice in (None, "", "<none>"):
-                fm = None
-            elif fm_choice.startswith("osc"):
-                osc_num = int(fm_choice.split()[1])
-                fm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+        def create_unfiltered_osc():
+            waveform = from_gui.input_waveformtype.get()
+            amp = from_gui.input_amp.get()
+            bias = from_gui.input_bias.get()
+            if waveform == "noise":
+                return WhiteNoise(amplitude=amp, bias=bias, samplerate=self.synth.samplerate)
+            elif waveform == "linear":
+                startlevel = from_gui.input_lin_start.get()
+                increment = from_gui.input_lin_increment.get()
+                minvalue = from_gui.input_lin_min.get()
+                maxvalue = from_gui.input_lin_max.get()
+                return Linear(startlevel, increment, minvalue, maxvalue)
             else:
-                raise ValueError("invalid fm choice")
-            if pwm_choice in (None, "", "<none>"):
-                pwm = None
-            elif pwm_choice.startswith("osc"):
-                osc_num = int(pwm_choice.split()[1])
-                pwm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
-            else:
-                raise ValueError("invalid fm choice")
-            if waveform == "pulse":
-                return Pulse(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
-            elif waveform == "harmonics":
-                harmonics = self.parse_harmonics(from_gui.harmonics_text.get(1.0, tk.END))
-                return Harmonics(frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
-            else:
-                o = {
-                    "sine": Sine,
-                    "triangle": Triangle,
-                    "sawtooth": Sawtooth,
-                    "sawtooth_h": SawtoothH,
-                    "square": Square,
-                    "square_h": SquareH,
-                    }[waveform]
-                return o(frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+                freq = from_gui.input_freq.get()
+                phase = from_gui.input_phase.get()
+                pw = from_gui.input_pw.get()
+                fm_choice = from_gui.input_fm.get()
+                pwm_choice = from_gui.input_pwm.get()
+                if fm_choice in (None, "", "<none>"):
+                    fm = None
+                elif fm_choice.startswith("osc"):
+                    osc_num = int(fm_choice.split()[1])
+                    fm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+                else:
+                    raise ValueError("invalid fm choice")
+                if pwm_choice in (None, "", "<none>"):
+                    pwm = None
+                elif pwm_choice.startswith("osc"):
+                    osc_num = int(pwm_choice.split()[1])
+                    pwm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+                else:
+                    raise ValueError("invalid fm choice")
+                if waveform == "pulse":
+                    return Pulse(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
+                elif waveform == "harmonics":
+                    harmonics = self.parse_harmonics(from_gui.harmonics_text.get(1.0, tk.END))
+                    return Harmonics(frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+                else:
+                    o = {
+                        "sine": Sine,
+                        "triangle": Triangle,
+                        "sawtooth": Sawtooth,
+                        "sawtooth_h": SawtoothH,
+                        "square": Square,
+                        "square_h": SquareH,
+                        }[waveform]
+                    return o(frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+        def envelope(osc, envelope_gui):
+            adsr_src = envelope_gui.input_source.get()
+            if adsr_src not in (None, "", "<none>"):
+                osc_num = int(adsr_src.split()[1])
+                if from_gui is self.oscillators[osc_num-1]:
+                    attack = envelope_gui.input_attack.get()
+                    decay = envelope_gui.input_decay.get()
+                    sustain = envelope_gui.input_sustain.get()
+                    sustain_level = envelope_gui.input_sustain_level.get()
+                    release = envelope_gui.input_release.get()
+                    return EnvelopeFilter(osc, attack, decay, sustain, sustain_level, release, True)
+            return osc
+        osc = create_unfiltered_osc()
+        osc = envelope(osc, self.envelope_filter1)
+        osc = envelope(osc, self.envelope_filter2)
+        return osc
+
 
     def parse_harmonics(self, harmonics):
         parsed = []
@@ -388,7 +499,8 @@ class SynthGUI(tk.Frame):
         osc.set_title_status("TO SPEAKER")
         osc.after(duration*1000, lambda: osc.set_title_status(None))
         o = self.create_osc(osc, all_oscillators=self.oscillators)
-        sample = self.generate_sample(o, 1)
+        o = self.apply_filters(o)
+        sample = self.generate_sample(iter(o), 1)
         with Output(self.synth.samplerate, self.synth.samplewidth, duration) as out:
             out.play_sample(sample, async=True)
 
@@ -406,11 +518,33 @@ class SynthGUI(tk.Frame):
         # @todo properly integrate matplotlib in the tkinter gui because the above causes gui freeze problems
         # see http://matplotlib.org/examples/user_interfaces/embedding_in_tk2.html
 
-    def generate_sample(self, oscillator, duration):
-        o = iter(oscillator)
+    def generate_sample(self, oscillator, duration, use_fade=False):
+        o = oscillator # iter(oscillator)
         scale = 2**(8*self.synth.samplewidth-1)
         frames = [int(next(o)*scale) for _ in range(int(self.synth.samplerate*duration))]
-        return Sample.from_array(frames, self.synth.samplerate, 1).fadein(0.05).fadeout(0.1)
+        sample = Sample.from_array(frames, self.synth.samplerate, 1)
+        if use_fade:
+            sample.fadein(0.05).fadeout(0.1)
+        return sample
+
+    def continue_play_note(self, oscillator, first=True):
+        if not self.playing_note:
+            sample = self.generate_sample(oscillator, 0.1).fadeout(0.1)
+            if sample.samplewidth != self.synth.samplewidth:
+                sample.make_16bit()
+            self.output.play_sample(sample, async=True)
+            return
+        if first:
+            sample = self.generate_sample(oscillator, 0.1)
+            sample.fadein(0.05)
+            if sample.samplewidth != self.synth.samplewidth:
+                sample.make_16bit()
+            self.output.play_sample(sample, async=True)
+        sample = self.generate_sample(oscillator, 0.1)
+        if sample.samplewidth != self.synth.samplewidth:
+            sample.make_16bit()
+        self.output.play_sample(sample, async=True)
+        self.after(50, lambda: self.continue_play_note(oscillator, False))
 
     def pressed(self, event, note, octave, released=False):
         self.statusbar["text"] = "ok"
@@ -421,6 +555,7 @@ class SynthGUI(tk.Frame):
             self.statusbar["text"] = "No oscillators connected to speaker output!"
             return
         if released:
+            self.playing_note = False
             for osc in to_speaker:
                 osc.set_title_status(None)
             return
@@ -433,13 +568,31 @@ class SynthGUI(tk.Frame):
                 return
             else:
                 osc.set_title_status("TO SPEAKER")
-        oscs = [self.create_osc(osc, all_oscillators=self.oscillators) for osc in to_speaker]
+        oscs = [self.create_osc(osc, self.oscillators) for osc in to_speaker]
         mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
-        sample = self.generate_sample(mixed_osc, 0.5)
-        if sample.samplewidth != self.synth.samplewidth:
-            sample.make_16bit()
-        with Output(self.synth.samplerate, self.synth.samplewidth, 1) as out:
-            out.play_sample(sample, async=True)
+        mixed_osc = self.apply_filters(mixed_osc)
+        self.playing_note = True
+        self.output.wipe_queue()
+        self.after_idle(lambda: self.continue_play_note(iter(mixed_osc)))
+        # sample = self.generate_sample(mixed_osc, 0.5)
+        # if sample.samplewidth != self.synth.samplewidth:
+        #     sample.make_16bit()
+        # with Output(self.synth.samplerate, self.synth.samplewidth, 1) as out:
+        #     out.play_sample(sample, async=True)
+
+    def apply_filters(self, output_oscillator):
+        amp_mod = self.amp_filter.input_modulator.get()
+        if amp_mod not in (None, "", "<none>"):
+            osc_num = int(amp_mod.split()[1])
+            modulator = self.create_osc(self.oscillators[osc_num-1], self.oscillators)
+            output_oscillator = AmpMudulationFilter(output_oscillator, iter(modulator))
+        if self.echo_filter.input_enabled.get():
+            after = self.echo_filter.input_after.get()
+            amount = self.echo_filter.input_amount.get()
+            delay = self.echo_filter.input_delay.get()
+            decay = self.echo_filter.input_decay.get()
+            output_oscillator = EchoFilter(output_oscillator, after, amount, delay, decay)
+        return output_oscillator
 
 
 if __name__ == "__main__":
