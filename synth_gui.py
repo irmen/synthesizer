@@ -29,10 +29,7 @@ class OscillatorGUI(tk.Frame):
         self.input_waveformtype = tk.StringVar()
         self.input_waveformtype.set("sine")
         for w in waveforms:
-            b = tk.Radiobutton(leftframe, text=w, variable=self.input_waveformtype, value=w, command=self.waveform_selected)
-            if w == "harmonics":
-                b.configure(state="disabled")
-            b.pack(anchor=tk.W)
+            tk.Radiobutton(leftframe, text=w, variable=self.input_waveformtype, value=w, command=self.waveform_selected).pack(anchor=tk.W)
         rightframe = tk.Frame(self.oscframe)
         rightframe.pack(side=tk.RIGHT, anchor=tk.N)
         self.make_inputs_frame(rightframe, fm_sources, pwm_sources)
@@ -67,73 +64,79 @@ class OscillatorGUI(tk.Frame):
         self.input_lin_max.set(1.0)
         row = 0
         self.freq_label = tk.Label(f, text="freq Hz")
-        self.freq_label.grid(row=row, column=0)
+        self.freq_label.grid(row=row, column=0, sticky=tk.E)
         self.freq_entry = tk.Entry(f, width=10, textvariable=self.input_freq)
         self.freq_entry.grid(row=row, column=1)
         row += 1
         self.keys_label = tk.Label(f, text="from keys?")
-        self.keys_label.grid(row=row, column=0)
+        self.keys_label.grid(row=row, column=0, sticky=tk.E)
         self.keys_checkbox = tk.Checkbutton(f, variable=self.input_freq_keys, command=self.from_keys_selected)
         self.keys_checkbox.grid(row=row, column=1)
         row += 1
         self.ratio_label = tk.Label(f, text="freq ratio")
-        self.ratio_label.grid(row=row, column=0)
+        self.ratio_label.grid(row=row, column=0, sticky=tk.E)
         self.ratio_entry = tk.Entry(f, width=10, textvariable=self.input_freq_keys_ratio)
         self.ratio_entry.grid(row=row, column=1)
         row += 1
         self.amp_label = tk.Label(f, text="amp")
-        self.amp_label.grid(row=row, column=0)
+        self.amp_label.grid(row=row, column=0, sticky=tk.E)
         self.amp_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0, resolution=.01)
         self.amp_slider.grid(row=row, column=1)
         row += 1
         self.pw_label = tk.Label(f, text="pulsewidth")
-        self.pw_label.grid(row=row, column=0)
+        self.pw_label.grid(row=row, column=0, sticky=tk.E)
         self.pw_label.grid_remove()
         self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999, resolution=.001)
         self.pw_slider.grid(row=row, column=1)
         self.pw_slider.grid_remove()
         row += 1
         self.phase_label = tk.Label(f, text="phase")
-        self.phase_label.grid(row=row, column=0)
+        self.phase_label.grid(row=row, column=0, sticky=tk.E)
         self.phase_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_phase, from_=0, to=1.0, resolution=.01)
         self.phase_slider.grid(row=row, column=1)
         row += 1
         self.bias_label = tk.Label(f, text="bias")
-        self.bias_label.grid(row=row, column=0)
+        self.bias_label.grid(row=row, column=0, sticky=tk.E)
         self.bias_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_bias, from_=-1, to=1, resolution=.01)
         self.bias_slider.grid(row=row, column=1)
         row += 1
         self.lin_start_label = tk.Label(f, text="start")
-        self.lin_start_label.grid(row=row, column=0)
+        self.lin_start_label.grid(row=row, column=0, sticky=tk.E)
         self.lin_start_label.grid_remove()
         self.lin_start_entry = tk.Entry(f, width=10, textvariable=self.input_lin_start)
         self.lin_start_entry.grid(row=row, column=1)
         self.lin_start_entry.grid_remove()
         row += 1
         self.lin_increment_label = tk.Label(f, text="increment")
-        self.lin_increment_label.grid(row=row, column=0)
+        self.lin_increment_label.grid(row=row, column=0, sticky=tk.E)
         self.lin_increment_label.grid_remove()
         self.lin_increment_entry = tk.Entry(f, width=10, textvariable=self.input_lin_increment)
         self.lin_increment_entry.grid(row=row, column=1)
         self.lin_increment_entry.grid_remove()
         row += 1
         self.lin_min_label = tk.Label(f, text="min")
-        self.lin_min_label.grid(row=row, column=0)
+        self.lin_min_label.grid(row=row, column=0, sticky=tk.E)
         self.lin_min_label.grid_remove()
         self.lin_min_entry = tk.Entry(f, width=10, textvariable=self.input_lin_min)
         self.lin_min_entry.grid(row=row, column=1)
         self.lin_min_entry.grid_remove()
         row += 1
         self.lin_max_label = tk.Label(f, text="max")
-        self.lin_max_label.grid(row=row, column=0)
+        self.lin_max_label.grid(row=row, column=0, sticky=tk.E)
         self.lin_max_label.grid_remove()
         self.lin_max_entry = tk.Entry(f, width=10, textvariable=self.input_lin_max)
         self.lin_max_entry.grid(row=row, column=1)
         self.lin_max_entry.grid_remove()
+        row +=1
+        self.harmonics_label = tk.Label(f, text="harmonics\n(num,fraction\npairs)", justify=tk.RIGHT)
+        self.harmonics_label.grid(row=row, column=0, sticky=tk.E)
+        self.harmonics_text = tk.Text(f, width=16, height=5, font=("helvetica", 10))
+        self.harmonics_text.insert(tk.INSERT, "1,1   2,1/2\n3,1/3  4,1/4\n5,1/5  6,1/6\n7,1/7  8,1/8")
+        self.harmonics_text.grid(row=row, column=1)
         if fm_sources:
             row += 1
             self.fm_label = tk.Label(f, text="FM")
-            self.fm_label.grid(row=row, column=0)
+            self.fm_label.grid(row=row, column=0, sticky=tk.E)
             values = ["<none>"]
             values.extend(fm_sources)
             self.fm_select = tk.OptionMenu(f, self.input_fm, *values)
@@ -143,7 +146,7 @@ class OscillatorGUI(tk.Frame):
         if pwm_sources:
             row += 1
             self.pwm_label = tk.Label(f, text="PWM")
-            self.pwm_label.grid(row=row, column=0)
+            self.pwm_label.grid(row=row, column=0, sticky=tk.E)
             self.pwm_label.grid_remove()
             values = ["<none>"]
             values.extend(pwm_sources)
@@ -187,6 +190,13 @@ class OscillatorGUI(tk.Frame):
         self.lin_max_entry.grid_remove()
 
         wf = self.input_waveformtype.get()
+        if wf == "harmonics":
+            self.harmonics_label.grid()
+            self.harmonics_text.grid()
+        else:
+            self.harmonics_label.grid_remove()
+            self.harmonics_text.grid_remove()
+
         if wf in ("noise", "linear"):
             # remove most of the input fields
             self.freq_label.grid_remove()
@@ -341,6 +351,9 @@ class SynthGUI(tk.Frame):
                 raise ValueError("invalid fm choice")
             if waveform == "pulse":
                 return Pulse(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
+            elif waveform == "harmonics":
+                harmonics = self.parse_harmonics(from_gui.harmonics_text.get(1.0, tk.END))
+                return Harmonics(frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
             else:
                 o = {
                     "sine": Sine,
@@ -349,9 +362,21 @@ class SynthGUI(tk.Frame):
                     "sawtooth_h": SawtoothH,
                     "square": Square,
                     "square_h": SquareH,
-                    "harmonics": Harmonics,
                     }[waveform]
                 return o(frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+
+    def parse_harmonics(self, harmonics):
+        parsed = []
+        for harmonic in harmonics.split():
+            num, frac = harmonic.split(",")
+            num = int(num)
+            if '/' in frac:
+                numerator, denominator = frac.split("/")
+            else:
+                numerator, denominator = frac, 1
+            frac = float(numerator)/float(denominator)
+            parsed.append((num, frac))
+        return parsed
 
     def do_play(self, osc):
         if osc.input_waveformtype.get() == "linear":
