@@ -15,8 +15,6 @@ try:
     import matplotlib.pyplot as plot
 except ImportError:
     plot = None
-if platform.system() == "Darwin":
-    print("Sorry but the piano keyboard buttons are messed up on OSX due to not being able to resize buttons...")   # @todo fix that
 
 
 class OscillatorGUI(tk.Frame):
@@ -27,19 +25,25 @@ class OscillatorGUI(tk.Frame):
         self.oscframe.pack(side=tk.LEFT)
         leftframe = tk.Frame(self.oscframe)
         leftframe.pack(side=tk.LEFT, anchor=tk.N)
-        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "harmonics", "noise", "linear"]
+        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "noise", "linear", "harmonics"]
         self.input_waveformtype = tk.StringVar()
         self.input_waveformtype.set("sine")
         for w in waveforms:
             b = tk.Radiobutton(leftframe, text=w, variable=self.input_waveformtype, value=w, command=self.waveform_selected)
-            if w in ("harmonics", "noise", "linear"):
+            if w == "harmonics":
                 b.configure(state="disabled")
             b.pack(anchor=tk.W)
         rightframe = tk.Frame(self.oscframe)
         rightframe.pack(side=tk.RIGHT, anchor=tk.N)
-        f = tk.LabelFrame(rightframe, text="inputs")
-        f.pack(side=tk.TOP)
-        # freq, amplitude, phase, bias
+        self.make_inputs_frame(rightframe, fm_sources, pwm_sources)
+        tk.Button(rightframe, text="Play", command=lambda: gui.do_play(self)).pack(side=tk.RIGHT, pady=10)
+        tk.Button(rightframe, text="Plot", command=lambda: gui.do_plot(self)).pack(side=tk.RIGHT, pady=10)
+        self.pack(side=tk.LEFT, anchor=tk.N, padx=10, pady=10)
+
+    # noinspection PyAttributeOutsideInit
+    def make_inputs_frame(self, master, fm_sources, pwm_sources):
+        f = tk.LabelFrame(master, text="inputs")
+        # freq, amplitude, phase, bias, pw, fm, and other settings
         self.input_freq = tk.DoubleVar()
         self.input_freq.set(440.0)
         self.input_amp = tk.DoubleVar()
@@ -50,42 +54,105 @@ class OscillatorGUI(tk.Frame):
         self.input_pw.set(0.1)
         self.input_fm = tk.StringVar()
         self.input_pwm = tk.StringVar()
-        tk.Label(f, text="freq Hz").grid(row=0, column=0)
-        tk.Entry(f, width=10, textvariable=self.input_freq).grid(row=0, column=1)
-        tk.Label(f, text="amp").grid(row=1, column=0)
-        tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0, resolution=.01).grid(row=1, column=1)
+        self.input_freq_keys = tk.BooleanVar()
+        self.input_freq_keys.set(True)
+        self.input_freq_keys_ratio = tk.DoubleVar()
+        self.input_freq_keys_ratio.set(1.0)
+        self.input_lin_start = tk.DoubleVar()
+        self.input_lin_increment = tk.DoubleVar()
+        self.input_lin_increment.set(0.00002)
+        self.input_lin_min = tk.DoubleVar()
+        self.input_lin_min.set(-1.0)
+        self.input_lin_max = tk.DoubleVar()
+        self.input_lin_max.set(1.0)
+        row = 0
+        self.freq_label = tk.Label(f, text="freq Hz")
+        self.freq_label.grid(row=row, column=0)
+        self.freq_entry = tk.Entry(f, width=10, textvariable=self.input_freq)
+        self.freq_entry.grid(row=row, column=1)
+        row += 1
+        self.keys_label = tk.Label(f, text="from keys?")
+        self.keys_label.grid(row=row, column=0)
+        self.keys_checkbox = tk.Checkbutton(f, variable=self.input_freq_keys, command=self.from_keys_selected)
+        self.keys_checkbox.grid(row=row, column=1)
+        row += 1
+        self.ratio_label = tk.Label(f, text="freq ratio")
+        self.ratio_label.grid(row=row, column=0)
+        self.ratio_entry = tk.Entry(f, width=10, textvariable=self.input_freq_keys_ratio)
+        self.ratio_entry.grid(row=row, column=1)
+        row += 1
+        self.amp_label = tk.Label(f, text="amp")
+        self.amp_label.grid(row=row, column=0)
+        self.amp_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0, resolution=.01)
+        self.amp_slider.grid(row=row, column=1)
+        row += 1
         self.pw_label = tk.Label(f, text="pulsewidth")
-        self.pw_label.grid(row=2, column=0)
+        self.pw_label.grid(row=row, column=0)
         self.pw_label.grid_remove()
         self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999, resolution=.001)
-        self.pw_slider.grid(row=2, column=1)
+        self.pw_slider.grid(row=row, column=1)
         self.pw_slider.grid_remove()
-        tk.Label(f, text="phase").grid(row=3, column=0)
-        tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_phase, from_=0, to=1.0, resolution=.01).grid(row=3, column=1)
-        tk.Label(f, text="bias").grid(row=4, column=0)
-        tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_bias, from_=-1, to=1, resolution=.01).grid(row=4, column=1)
+        row += 1
+        self.phase_label = tk.Label(f, text="phase")
+        self.phase_label.grid(row=row, column=0)
+        self.phase_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_phase, from_=0, to=1.0, resolution=.01)
+        self.phase_slider.grid(row=row, column=1)
+        row += 1
+        self.bias_label = tk.Label(f, text="bias")
+        self.bias_label.grid(row=row, column=0)
+        self.bias_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_bias, from_=-1, to=1, resolution=.01)
+        self.bias_slider.grid(row=row, column=1)
+        row += 1
+        self.lin_start_label = tk.Label(f, text="start")
+        self.lin_start_label.grid(row=row, column=0)
+        self.lin_start_label.grid_remove()
+        self.lin_start_entry = tk.Entry(f, width=10, textvariable=self.input_lin_start)
+        self.lin_start_entry.grid(row=row, column=1)
+        self.lin_start_entry.grid_remove()
+        row += 1
+        self.lin_increment_label = tk.Label(f, text="increment")
+        self.lin_increment_label.grid(row=row, column=0)
+        self.lin_increment_label.grid_remove()
+        self.lin_increment_entry = tk.Entry(f, width=10, textvariable=self.input_lin_increment)
+        self.lin_increment_entry.grid(row=row, column=1)
+        self.lin_increment_entry.grid_remove()
+        row += 1
+        self.lin_min_label = tk.Label(f, text="min")
+        self.lin_min_label.grid(row=row, column=0)
+        self.lin_min_label.grid_remove()
+        self.lin_min_entry = tk.Entry(f, width=10, textvariable=self.input_lin_min)
+        self.lin_min_entry.grid(row=row, column=1)
+        self.lin_min_entry.grid_remove()
+        row += 1
+        self.lin_max_label = tk.Label(f, text="max")
+        self.lin_max_label.grid(row=row, column=0)
+        self.lin_max_label.grid_remove()
+        self.lin_max_entry = tk.Entry(f, width=10, textvariable=self.input_lin_max)
+        self.lin_max_entry.grid(row=row, column=1)
+        self.lin_max_entry.grid_remove()
         if fm_sources:
-            tk.Label(f, text="FM").grid(row=5, column=0)
+            row += 1
+            self.fm_label = tk.Label(f, text="FM")
+            self.fm_label.grid(row=row, column=0)
             values = ["<none>"]
             values.extend(fm_sources)
-            menu = tk.OptionMenu(f, self.input_fm, *values)
-            menu["width"] = 10
-            menu.grid(row=5, column=1)
+            self.fm_select = tk.OptionMenu(f, self.input_fm, *values)
+            self.fm_select["width"] = 10
+            self.fm_select.grid(row=row, column=1)
             self.input_fm.set("<none>")
         if pwm_sources:
+            row += 1
             self.pwm_label = tk.Label(f, text="PWM")
-            self.pwm_label.grid(row=6, column=0)
+            self.pwm_label.grid(row=row, column=0)
             self.pwm_label.grid_remove()
             values = ["<none>"]
             values.extend(pwm_sources)
             self.pwm_select = tk.OptionMenu(f, self.input_pwm, *values, command=self.pwm_selected)
             self.pwm_select["width"] = 10
-            self.pwm_select.grid(row=6, column=1)
+            self.pwm_select.grid(row=row, column=1)
             self.pwm_select.grid_remove()
             self.input_pwm.set("<none>")
-        tk.Button(rightframe, text="Play", command=lambda: gui.do_play(self)).pack(side=tk.RIGHT, pady=10)
-        tk.Button(rightframe, text="Plot", command=lambda: gui.do_plot(self)).pack(side=tk.RIGHT, pady=10)
-        self.pack(side=tk.LEFT, anchor=tk.N, padx=10, pady=10)
+        f.pack(side=tk.TOP)
 
     def set_title_status(self, status):
         title = self._title
@@ -94,7 +161,60 @@ class OscillatorGUI(tk.Frame):
         self.oscframe["text"] = title
 
     def waveform_selected(self, *args):
+        # restore everything to the basic input set of the sine wave
+        self.freq_label.grid()
+        self.freq_entry.grid()
+        self.keys_label.grid()
+        self.keys_checkbox.grid()
+        self.ratio_label.grid()
+        self.ratio_entry.grid()
+        self.phase_label.grid()
+        self.phase_slider.grid()
+        self.amp_label.grid()
+        self.amp_slider.grid()
+        self.bias_label.grid()
+        self.bias_slider.grid()
+        if hasattr(self, "fm_label"):
+            self.fm_label.grid()
+            self.fm_select.grid()
+        self.lin_start_label.grid_remove()
+        self.lin_start_entry.grid_remove()
+        self.lin_increment_label.grid_remove()
+        self.lin_increment_entry.grid_remove()
+        self.lin_min_label.grid_remove()
+        self.lin_min_entry.grid_remove()
+        self.lin_max_label.grid_remove()
+        self.lin_max_entry.grid_remove()
+
         wf = self.input_waveformtype.get()
+        if wf in ("noise", "linear"):
+            # remove most of the input fields
+            self.freq_label.grid_remove()
+            self.freq_entry.grid_remove()
+            self.keys_label.grid_remove()
+            self.keys_checkbox.grid_remove()
+            self.ratio_label.grid_remove()
+            self.ratio_entry.grid_remove()
+            self.phase_label.grid_remove()
+            self.phase_slider.grid_remove()
+            if hasattr(self, "fm_label"):
+                self.fm_label.grid_remove()
+                self.fm_select.grid_remove()
+            if wf == "linear":
+                # remove more stuff and show the linear fields
+                self.amp_label.grid_remove()
+                self.amp_slider.grid_remove()
+                self.bias_label.grid_remove()
+                self.bias_slider.grid_remove()
+                self.lin_start_label.grid()
+                self.lin_start_entry.grid()
+                self.lin_increment_label.grid()
+                self.lin_increment_entry.grid()
+                self.lin_min_label.grid()
+                self.lin_min_entry.grid()
+                self.lin_max_label.grid()
+                self.lin_max_entry.grid()
+
         if wf == "pulse":
             self.pw_label.grid()
             self.pw_slider.grid()
@@ -109,12 +229,14 @@ class OscillatorGUI(tk.Frame):
                 self.pwm_select.grid_remove()
 
     def pwm_selected(self, *args):
-        if self.input_pwm.get() != "<none>":
-            self.pw_label.grid_remove()
-            self.pw_slider.grid_remove()
-        else:
-            self.pw_label.grid()
-            self.pw_slider.grid()
+        state = "normal" if self.input_pwm.get() == "<none>" else "disabled"
+        self.pw_label["state"]=state
+        self.pw_slider["state"]=state
+
+    def from_keys_selected(self, *args):
+        state = "normal" if self.input_freq_keys.get() else "disabled"
+        self.ratio_label["state"] = state
+        self.ratio_entry["state"] = state
 
 
 class PianoKeyboard(tk.Frame):
@@ -186,48 +308,55 @@ class SynthGUI(tk.Frame):
         self.to_speaker_lb.insert(tk.END, "osc "+str(osc_nr+1))
 
     def create_osc(self, from_gui, all_oscillators):
-        oscs = {
-            "sine": Sine,
-            "triangle": Triangle,
-            "pulse": Pulse,
-            "sawtooth": Sawtooth,
-            "sawtooth_h": SawtoothH,
-            "square": Square,
-            "square_h": SquareH,
-            "harmonics": Harmonics,
-            "noise": WhiteNoise,
-            "linear": Linear
-            }
         waveform = from_gui.input_waveformtype.get()
-        freq = from_gui.input_freq.get()
         amp = from_gui.input_amp.get()
-        phase = from_gui.input_phase.get()
         bias = from_gui.input_bias.get()
-        pw = from_gui.input_pw.get()
-        fm_choice = from_gui.input_fm.get()
-        pwm_choice = from_gui.input_pwm.get()
-        if fm_choice in (None, "", "<none>"):
-            fm = None
-        elif fm_choice.startswith("osc"):
-            osc_num = int(fm_choice.split()[1])
-            fm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+        if waveform == "noise":
+            return WhiteNoise(amplitude=amp, bias=bias, samplerate=self.synth.samplerate)
+        elif waveform == "linear":
+            startlevel = from_gui.input_lin_start.get()
+            increment = from_gui.input_lin_increment.get()
+            minvalue = from_gui.input_lin_min.get()
+            maxvalue = from_gui.input_lin_max.get()
+            return Linear(startlevel, increment, minvalue, maxvalue)
         else:
-            raise ValueError("invalid fm choice")
-        if pwm_choice in (None, "", "<none>"):
-            pwm = None
-        elif pwm_choice.startswith("osc"):
-            osc_num = int(pwm_choice.split()[1])
-            pwm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
-        else:
-            raise ValueError("invalid fm choice")
-        o = oscs[waveform]
-        if waveform == "pulse":
-            o = o(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
-        else:
-            o = o(frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
-        return o
+            freq = from_gui.input_freq.get()
+            phase = from_gui.input_phase.get()
+            pw = from_gui.input_pw.get()
+            fm_choice = from_gui.input_fm.get()
+            pwm_choice = from_gui.input_pwm.get()
+            if fm_choice in (None, "", "<none>"):
+                fm = None
+            elif fm_choice.startswith("osc"):
+                osc_num = int(fm_choice.split()[1])
+                fm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+            else:
+                raise ValueError("invalid fm choice")
+            if pwm_choice in (None, "", "<none>"):
+                pwm = None
+            elif pwm_choice.startswith("osc"):
+                osc_num = int(pwm_choice.split()[1])
+                pwm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+            else:
+                raise ValueError("invalid fm choice")
+            if waveform == "pulse":
+                return Pulse(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
+            else:
+                o = {
+                    "sine": Sine,
+                    "triangle": Triangle,
+                    "sawtooth": Sawtooth,
+                    "sawtooth_h": SawtoothH,
+                    "square": Square,
+                    "square_h": SquareH,
+                    "harmonics": Harmonics,
+                    }[waveform]
+                return o(frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
 
     def do_play(self, osc):
+        if osc.input_waveformtype.get() == "linear":
+            self.statusbar["text"] = "cannot output linear osc to speakers"
+            return
         duration = 1
         osc.set_title_status("TO SPEAKER")
         osc.after(duration*1000, lambda: osc.set_title_status(None))
@@ -268,9 +397,15 @@ class SynthGUI(tk.Frame):
             for osc in to_speaker:
                 osc.set_title_status(None)
             return
+        for osc in self.oscillators:
+            if osc.input_freq_keys.get():
+                osc.input_freq.set(freq*osc.input_freq_keys_ratio.get())
         for osc in to_speaker:
-            osc.input_freq.set(freq)
-            osc.set_title_status("TO SPEAKER")
+            if osc.input_waveformtype.get() == "linear":
+                self.statusbar["text"] = "cannot output linear osc to speakers"
+                return
+            else:
+                osc.set_title_status("TO SPEAKER")
         oscs = [self.create_osc(osc, all_oscillators=self.oscillators) for osc in to_speaker]
         mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
         sample = self.generate_sample(mixed_osc, 0.5)
@@ -283,4 +418,9 @@ class SynthGUI(tk.Frame):
 if __name__ == "__main__":
     root = tk.Tk()
     app = SynthGUI(master=root)
+    if platform.system() == "Darwin":
+        # @todo fix this....
+        warning = "Sorry but the piano keyboard buttons are messed up on OSX due to not being able to resize buttons..."
+        print(warning)
+        app.statusbar["text"] = warning
     app.mainloop()
