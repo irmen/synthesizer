@@ -16,7 +16,8 @@ __all__ = ["key_num", "key_freq", "note_freq",
            "WaveSynth", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
            "Pulse", "Harmonics", "WhiteNoise", "Linear",
            "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare",
-           "EnvelopeFilter", "MixingFilter", "AmpMudulationFilter", "DelayFilter", "EchoFilter", "ClipFilter", "AbsFilter"]
+           "EnvelopeFilter", "MixingFilter", "AmpMudulationFilter", "DelayFilter", "EchoFilter",
+           "ClipFilter", "AbsFilter", "NullFilter"]
 
 
 def key_num(note, octave):
@@ -448,6 +449,15 @@ class AbsFilter(Oscillator):
     def generator(self):
         for v in self._source:
             yield fabs(v)
+
+
+class NullFilter(Oscillator):
+    """Wraps an oscillator but does nothing."""
+    def __init__(self, source):
+        super().__init__(source)
+
+    def generator(self):
+        yield from self._source
 
 
 class Sine(Oscillator):

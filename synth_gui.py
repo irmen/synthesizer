@@ -7,7 +7,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import platform
 import tkinter as tk
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
-from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter
+from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter, NullFilter
 from synthesizer.sample import Sample, Output
 try:
     import matplotlib
@@ -16,6 +16,8 @@ try:
 except ImportError:
     plot = None
 
+
+synth_samplerate = 44100    # try halving this to 22050 if sound stutters (reduces CPU load)
 
 class OscillatorGUI(tk.Frame):
     def __init__(self, master, gui, title, fm_sources=None, pwm_sources=None):
@@ -301,31 +303,56 @@ class EchoFilterGUI(tk.LabelFrame):
         self.input_decay.set(0.6)
         row = 0
         tk.Label(self, text="enable?").grid(row=row, column=0)
-        tk.Checkbutton(self, variable=self.input_enabled).grid(row=row, column=1)
+        tk.Checkbutton(self, variable=self.input_enabled).grid(row=row, column=1, sticky=tk.E)
         row += 1
-        tk.Label(self, text="after").grid(row=row, column=0)
+        tk.Label(self, text="after").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_after, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="amount").grid(row=row, column=0)
+        tk.Label(self, text="amount").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_amount, from_=1, to=10, resolution=1, width=10, length=120).grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="delay").grid(row=row, column=0)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_delay, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Label(self, text="delay").grid(row=row, column=0, sticky=tk.E)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_delay, from_=0.0, to=1.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="decay").grid(row=row, column=0)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.01, to=2.0, resolution=.1, width=10, length=120).grid(row=row, column=1)
+        tk.Label(self, text="decay").grid(row=row, column=0, sticky=tk.E)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.01, to=1.5, resolution=.1, width=10, length=120).grid(row=row, column=1)
 
 
-class AmpModulationFilterGUI(tk.LabelFrame):
+class TremoloFilterGUI(tk.LabelFrame):
     def __init__(self, master, gui):
-        super().__init__(master, text="output: Vibrato")
-        self.input_modulator = tk.StringVar()
-        tk.Label(self, text="modulator").grid(row=0, column=0)
-        values = ["<none>", "osc 1", "osc 2", "osc 3", "osc 4", "osc 5"]
-        menu = tk.OptionMenu(self, self.input_modulator, *values)
+        super().__init__(master, text="output: Tremolo")
+        self.input_waveform = tk.StringVar()
+        self.input_waveform.set("<off>")
+        self.input_rate = tk.DoubleVar()
+        self.input_depth = tk.DoubleVar()
+        row = 0
+        tk.Label(self, text="waveform").grid(row=row, column=0)
+        values = ["<off>", "sine", "triangle", "sawtooth", "square"]
+        menu = tk.OptionMenu(self, self.input_waveform, *values)
         menu["width"] = 10
-        menu.grid(row=0, column=1)
-        self.input_modulator.set("<none>")
+        menu.grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="rate").grid(row=row, column=0, sticky=tk.E)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.0, to=10.0, resolution=.1, width=10, length=100).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="depth").grid(row=row, column=0, sticky=tk.E)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_depth, from_=0.0, to=1.0, resolution=.02, width=10, length=100).grid(row=row, column=1)
+    def filter(self, source):
+        wave = self.input_waveform.get()
+        freq = self.input_rate.get()
+        amp = self.input_depth.get() / 2.0
+        bias = 1.0 - amp
+        if amp == 0.0 or freq == 0.0 or wave in (None, "", "<none>", "<off>"):
+            return source
+        if wave == "sine":
+            modulator = Sine(freq, amp, bias=bias)
+        elif wave == "triangle":
+            modulator = Triangle(freq, amp, bias=bias)
+        elif wave == "sawtooth":
+            modulator = SawtoothH(freq, 6, amp, bias=bias)
+        elif wave == "square":
+            modulator = SquareH(freq, 6, amp, bias=bias)
+        return AmpMudulationFilter(source, iter(modulator))
 
 
 class EnvelopeFilterGUI(tk.LabelFrame):
@@ -343,33 +370,40 @@ class EnvelopeFilterGUI(tk.LabelFrame):
         self.input_release = tk.DoubleVar()
         self.input_release.set(1)
         row = 0
-        tk.Label(self, text="apply to").grid(row=row, column=0)
+        tk.Label(self, text="apply to").grid(row=row, column=0, sticky=tk.E)
         values = ["<none>", "osc 1", "osc 2", "osc 3", "osc 4", "osc 5"]
         menu = tk.OptionMenu(self, self.input_source, *values)
         menu["width"] = 10
         menu.grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="attack").grid(row=row, column=0)
+        tk.Label(self, text="attack").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_attack, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="decay").grid(row=row, column=0)
+        tk.Label(self, text="decay").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="sustain").grid(row=row, column=0)
+        tk.Label(self, text="sustain").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="sustain lvl").grid(row=row, column=0)
+        tk.Label(self, text="sustain lvl").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain_level, from_=0.0, to=1.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         row += 1
-        tk.Label(self, text="release").grid(row=row, column=0)
+        tk.Label(self, text="release").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_release, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         self.input_source.set("<none>")
+    def filter(self, source):
+        attack = self.input_attack.get()
+        decay = self.input_decay.get()
+        sustain = self.input_sustain.get()
+        sustain_level = self.input_sustain_level.get()
+        release = self.input_release.get()
+        return EnvelopeFilter(source, attack, decay, sustain, sustain_level, release, False)
 
 
 class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
-        self.synth = WaveSynth(samplewidth=2)
+        self.synth = WaveSynth(samplewidth=2, samplerate=synth_samplerate)
         self.master.title("Synthesizer")
         tk.Label(master, text="This shows a few of the possible oscillators and how they can be combined.").pack(side=tk.TOP)
         self.osc_frame = tk.Frame(self)
@@ -380,11 +414,11 @@ class SynthGUI(tk.Frame):
         filter_frame = tk.LabelFrame(self, text="Filters etc.", padx=10, pady=10)
         self.envelope_filter1 = EnvelopeFilterGUI(filter_frame, "1", self)
         self.envelope_filter2 = EnvelopeFilterGUI(filter_frame, "2", self)
-        self.amp_filter = AmpModulationFilterGUI(filter_frame, self)
+        self.tremolo_filter = TremoloFilterGUI(filter_frame, self)
         self.echo_filter = EchoFilterGUI(filter_frame, self)
         self.envelope_filter1.pack(side=tk.LEFT, anchor=tk.N)
         self.envelope_filter2.pack(side=tk.LEFT, anchor=tk.N)
-        self.amp_filter.pack(side=tk.LEFT, anchor=tk.N)
+        self.tremolo_filter.pack(side=tk.LEFT, anchor=tk.N)
         self.echo_filter.pack(side=tk.LEFT, anchor=tk.N)
         misc_frame = tk.Frame(filter_frame, padx=10, pady=10)
         tk.Button(misc_frame, text="Add Oscillator", command=self.add_osc_to_gui).pack()
@@ -465,12 +499,7 @@ class SynthGUI(tk.Frame):
             if adsr_src not in (None, "", "<none>"):
                 osc_num = int(adsr_src.split()[1])
                 if from_gui is self.oscillators[osc_num-1]:
-                    attack = envelope_gui.input_attack.get()
-                    decay = envelope_gui.input_decay.get()
-                    sustain = envelope_gui.input_sustain.get()
-                    sustain_level = envelope_gui.input_sustain_level.get()
-                    release = envelope_gui.input_release.get()
-                    return EnvelopeFilter(osc, attack, decay, sustain, sustain_level, release, True)
+                    return envelope_gui.filter(osc)
             return osc
         osc = create_unfiltered_osc()
         osc = envelope(osc, self.envelope_filter1)
@@ -574,18 +603,9 @@ class SynthGUI(tk.Frame):
         self.playing_note = True
         self.output.wipe_queue()
         self.after_idle(lambda: self.continue_play_note(iter(mixed_osc)))
-        # sample = self.generate_sample(mixed_osc, 0.5)
-        # if sample.samplewidth != self.synth.samplewidth:
-        #     sample.make_16bit()
-        # with Output(self.synth.samplerate, self.synth.samplewidth, 1) as out:
-        #     out.play_sample(sample, async=True)
 
     def apply_filters(self, output_oscillator):
-        amp_mod = self.amp_filter.input_modulator.get()
-        if amp_mod not in (None, "", "<none>"):
-            osc_num = int(amp_mod.split()[1])
-            modulator = self.create_osc(self.oscillators[osc_num-1], self.oscillators)
-            output_oscillator = AmpMudulationFilter(output_oscillator, iter(modulator))
+        output_oscillator = self.tremolo_filter.filter(output_oscillator)
         if self.echo_filter.input_enabled.get():
             after = self.echo_filter.input_after.get()
             amount = self.echo_filter.input_amount.get()

@@ -768,12 +768,14 @@ class Output:
         def add_to_queue(self, sample):
             self.queue.put(sample)
 
+        _wipe_lock = threading.Lock()
         def wipe_queue(self):
-            try:
-                while True:
-                    self.queue.get(block=False)
-            except queue.Empty:
-                pass
+            with self._wipe_lock:
+                try:
+                    while True:
+                        self.queue.get(block=False)
+                except queue.Empty:
+                    pass
 
         def close(self):
             if self.stream:
