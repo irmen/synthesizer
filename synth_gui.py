@@ -7,7 +7,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import platform
 import tkinter as tk
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
-from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter, NullFilter
+from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter
 from synthesizer.sample import Sample, Output
 try:
     import matplotlib
@@ -17,30 +17,13 @@ except ImportError:
     plot = None
 
 
-class OscillatorGUI(tk.Frame):
+class OscillatorGUI(tk.LabelFrame):
     def __init__(self, master, gui, title, fm_sources=None, pwm_sources=None):
-        super().__init__(master)
+        super().__init__(master, text=title, padx=8, pady=8)
         self._title = title
-        self.oscframe = tk.LabelFrame(self, text=title)
-        self.oscframe.pack(side=tk.LEFT)
-        leftframe = tk.Frame(self.oscframe)
-        leftframe.pack(side=tk.LEFT, anchor=tk.N)
-        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "noise", "linear", "harmonics"]
+        f = tk.Frame(self)
         self.input_waveformtype = tk.StringVar()
         self.input_waveformtype.set("sine")
-        for w in waveforms:
-            tk.Radiobutton(leftframe, text=w, variable=self.input_waveformtype, value=w, command=self.waveform_selected).pack(anchor=tk.W)
-        rightframe = tk.Frame(self.oscframe)
-        rightframe.pack(side=tk.RIGHT, anchor=tk.N)
-        self.make_inputs_frame(rightframe, fm_sources, pwm_sources)
-        tk.Button(rightframe, text="Play", command=lambda: gui.do_play(self)).pack(side=tk.RIGHT, pady=10, padx=(0, 8))
-        tk.Button(rightframe, text="Plot", command=lambda: gui.do_plot(self)).pack(side=tk.RIGHT, pady=10, padx=(0, 8))
-        self.pack(side=tk.LEFT, anchor=tk.N, padx=10, pady=10)
-
-    # noinspection PyAttributeOutsideInit
-    def make_inputs_frame(self, master, fm_sources, pwm_sources):
-        f = tk.LabelFrame(master, text="inputs")
-        # freq, amplitude, phase, bias, pw, fm, and other settings
         self.input_freq = tk.DoubleVar()
         self.input_freq.set(440.0)
         self.input_amp = tk.DoubleVar()
@@ -63,6 +46,12 @@ class OscillatorGUI(tk.Frame):
         self.input_lin_max = tk.DoubleVar()
         self.input_lin_max.set(1.0)
         row = 0
+        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "noise", "linear", "harmonics"]
+        tk.Label(f, text="waveform").grid(row=row, column=0)
+        waveform = tk.OptionMenu(f, self.input_waveformtype, *waveforms, command=self.waveform_selected)
+        waveform["width"] = 10
+        waveform.grid(row=row, column=1)
+        row += 1
         self.freq_label = tk.Label(f, text="freq Hz")
         self.freq_label.grid(row=row, column=0, sticky=tk.E)
         self.freq_entry = tk.Entry(f, width=10, textvariable=self.input_freq)
@@ -157,13 +146,18 @@ class OscillatorGUI(tk.Frame):
             self.pwm_select.grid(row=row, column=1)
             self.pwm_select.grid_remove()
             self.input_pwm.set("<none>")
+
         f.pack(side=tk.TOP)
+        f=tk.Frame(self, pady=4)
+        tk.Button(f, text="Play", command=lambda: gui.do_play(self)).pack(side=tk.RIGHT, padx=5)
+        tk.Button(f, text="Plot", command=lambda: gui.do_plot(self)).pack(side=tk.RIGHT, padx=5)
+        f.pack(side=tk.TOP, anchor=tk.E)
 
     def set_title_status(self, status):
         title = self._title
         if status:
             title = "{} - [{}]".format(self._title, status)
-        self.oscframe["text"] = title
+        self["text"] = title
 
     def waveform_selected(self, *args):
         # restore everything to the basic input set of the sine wave
@@ -402,7 +396,6 @@ class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.master.title("Synthesizer")
-        tk.Label(master, text="This shows a few of the possible oscillators and how they can be combined.").pack(side=tk.TOP)
         self.osc_frame = tk.Frame(self)
         self.oscillators = []
         self.piano_frame = tk.Frame(self)
@@ -412,12 +405,19 @@ class SynthGUI(tk.Frame):
         self.envelope_filters = [
             EnvelopeFilterGUI(filter_frame, "1", self),
             EnvelopeFilterGUI(filter_frame, "2", self),
-            EnvelopeFilterGUI(filter_frame, "2", self) ]
-        self.tremolo_filter = TremoloFilterGUI(filter_frame, self)
+            EnvelopeFilterGUI(filter_frame, "3", self) ]
         self.echo_filter = EchoFilterGUI(filter_frame, self)
         for ev in self.envelope_filters:
             ev.pack(side=tk.LEFT, anchor=tk.N)
-        self.tremolo_filter.pack(side=tk.LEFT, anchor=tk.N)
+        f = tk.Frame(filter_frame)
+        self.tremolo_filter = TremoloFilterGUI(f, self)
+        self.tremolo_filter.pack(side=tk.TOP)
+        tk.Label(f, text="A4 tuning:").pack(pady=(5,0))
+        self.a4_choice = tk.IntVar()
+        self.a4_choice.set(440)
+        tk.Radiobutton(f, variable=self.a4_choice, value=440, text="440 Hz").pack()
+        tk.Radiobutton(f, variable=self.a4_choice, value=432, text="432 Hz").pack()
+        f.pack(side=tk.LEFT, anchor=tk.N)
         self.echo_filter.pack(side=tk.LEFT, anchor=tk.N)
         misc_frame = tk.Frame(filter_frame, padx=10)
         tk.Button(misc_frame, text="Add Oscillator", command=self.add_osc_to_gui).pack()
@@ -427,12 +427,13 @@ class SynthGUI(tk.Frame):
         tk.Label(misc_frame, text="Samplerate:").pack(pady=(5,0))
         self.samplerate_choice = tk.IntVar()
         self.samplerate_choice.set(44100)
-        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=44100, text="44.1 kHz", pady=0, command=self.create_synth).pack(anchor=tk.W, pady=0)
-        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=22050, text="22 kHz", pady=0, command=self.create_synth).pack(anchor=tk.W, pady=0)
+        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=44100, text="44.1 kHz", command=self.create_synth).pack(anchor=tk.W)
+        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=22050, text="22 kHz", command=self.create_synth).pack(anchor=tk.W)
         self.add_osc_to_gui()
         self.add_osc_to_gui()
         self.add_osc_to_gui()
-        self.to_speaker_lb.select_set(2)
+        self.add_osc_to_gui()
+        self.to_speaker_lb.select_set(3)
         self.osc_frame.pack(side=tk.TOP, padx=10)
         filter_frame.pack(side=tk.TOP)
         misc_frame.pack(side=tk.RIGHT)
@@ -455,6 +456,7 @@ class SynthGUI(tk.Frame):
         osc_nr = len(self.oscillators)
         fm_sources = ["osc "+str(n+1) for n in range(osc_nr)]
         osc_pane = OscillatorGUI(self.osc_frame, self, "Oscillator "+str(osc_nr+1), fm_sources=fm_sources, pwm_sources=fm_sources)
+        osc_pane.pack(side=tk.LEFT, anchor=tk.N, padx=10, pady=10)
         self.oscillators.append(osc_pane)
         self.to_speaker_lb.insert(tk.END, "osc "+str(osc_nr+1))
 
@@ -591,7 +593,8 @@ class SynthGUI(tk.Frame):
 
     def pressed(self, event, note, octave, released=False):
         self.statusbar["text"] = "ok"
-        freq = note_freq(note, octave)
+        a4freq = self.a4_choice.get()
+        freq = note_freq(note, octave, a4freq)
         to_speaker = self.to_speaker_lb.curselection()
         to_speaker = [self.oscillators[i] for i in to_speaker]
         if not to_speaker:

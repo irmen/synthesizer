@@ -21,7 +21,7 @@ There's also a waveform synthesizer that can generate different wave form sample
 sine, triangle, sawtooth, square, pulse wave, harmonics and white noise.
 It also supports Frequency Modulation, Pulse-width modulation, and ADSR envelopes using LFOs.
 
-![Synth GUI screenshot](./screenshot.jpg?raw=true "Screenshot of the Synth GUI")
+![Synth GUI screenshot](./screenshot.png?raw=true "Screenshot of the Synth GUI")
 
 ## how it works
 
