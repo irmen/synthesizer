@@ -421,6 +421,7 @@ class EchoFilter(Oscillator):
         for echo in echo_oscs[1:]:
             echo = DelayFilter(echo, echo_delay)
             echo = AmpMudulationFilter(echo, itertools.repeat(amp))
+            # @todo sometimes mixing the echos causes pops and clicks. Perhaps solvable by using a (very fast) fadein on the echo osc?
             echos.append(echo)
             echo_delay += self._delay
             amp *= self._decay

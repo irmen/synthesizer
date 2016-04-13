@@ -47,7 +47,7 @@ class OscillatorGUI(tk.LabelFrame):
         self.input_lin_max.set(1.0)
         row = 0
         waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "noise", "linear", "harmonics"]
-        tk.Label(f, text="waveform").grid(row=row, column=0)
+        tk.Label(f, text="waveform").grid(row=row, column=0, sticky=tk.E)
         waveform = tk.OptionMenu(f, self.input_waveformtype, *waveforms, command=self.waveform_selected)
         waveform["width"] = 10
         waveform.grid(row=row, column=1)
@@ -281,7 +281,6 @@ class PianoKeyboardGUI(tk.Frame):
 
 
 class EchoFilterGUI(tk.LabelFrame):
-    # XXX this doesn't seem to work very well somehow with the piano key triggered tones, not sure what's going on
     def __init__(self, master, gui):
         super().__init__(master, text="output: Echo / Reverb")
         self.input_enabled = tk.BooleanVar()
@@ -636,7 +635,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = SynthGUI(master=root)
     if platform.system() == "Darwin":
-        # @todo fix this....
+        # @todo fix the piano keyboard on osx....
         warning = "Sorry but the piano keyboard buttons are messed up on OSX due to not being able to resize buttons..."
         print(warning)
         app.statusbar["text"] = warning
