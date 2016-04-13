@@ -17,8 +17,6 @@ except ImportError:
     plot = None
 
 
-synth_samplerate = 44100    # try halving this to 22050 if sound stutters (reduces CPU load)
-
 class OscillatorGUI(tk.Frame):
     def __init__(self, master, gui, title, fm_sources=None, pwm_sources=None):
         super().__init__(master)
@@ -259,7 +257,7 @@ class PianoKeyboardGUI(tk.Frame):
         super().__init__(master)
         black_keys = tk.Frame(self)
         white_keys = tk.Frame(self)
-        num_octaves = 3
+        num_octaves = 4
         first_octave = 3
         for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
             octave = first_octave+(key_nr+2)//7
@@ -403,7 +401,6 @@ class EnvelopeFilterGUI(tk.LabelFrame):
 class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
-        self.synth = WaveSynth(samplewidth=2, samplerate=synth_samplerate)
         self.master.title("Synthesizer")
         tk.Label(master, text="This shows a few of the possible oscillators and how they can be combined.").pack(side=tk.TOP)
         self.osc_frame = tk.Frame(self)
@@ -412,19 +409,26 @@ class SynthGUI(tk.Frame):
         self.piano = PianoKeyboardGUI(self.piano_frame, self)
         self.piano.pack(side=tk.BOTTOM)
         filter_frame = tk.LabelFrame(self, text="Filters etc.", padx=10, pady=10)
-        self.envelope_filter1 = EnvelopeFilterGUI(filter_frame, "1", self)
-        self.envelope_filter2 = EnvelopeFilterGUI(filter_frame, "2", self)
+        self.envelope_filters = [
+            EnvelopeFilterGUI(filter_frame, "1", self),
+            EnvelopeFilterGUI(filter_frame, "2", self),
+            EnvelopeFilterGUI(filter_frame, "2", self) ]
         self.tremolo_filter = TremoloFilterGUI(filter_frame, self)
         self.echo_filter = EchoFilterGUI(filter_frame, self)
-        self.envelope_filter1.pack(side=tk.LEFT, anchor=tk.N)
-        self.envelope_filter2.pack(side=tk.LEFT, anchor=tk.N)
+        for ev in self.envelope_filters:
+            ev.pack(side=tk.LEFT, anchor=tk.N)
         self.tremolo_filter.pack(side=tk.LEFT, anchor=tk.N)
         self.echo_filter.pack(side=tk.LEFT, anchor=tk.N)
-        misc_frame = tk.Frame(filter_frame, padx=10, pady=10)
+        misc_frame = tk.Frame(filter_frame, padx=10)
         tk.Button(misc_frame, text="Add Oscillator", command=self.add_osc_to_gui).pack()
-        tk.Label(misc_frame, text="To Speaker:").pack(pady=5)
-        self.to_speaker_lb = tk.Listbox(misc_frame, width=8, height=6, selectmode=tk.MULTIPLE, exportselection=0)
+        tk.Label(misc_frame, text="To Speaker:").pack(pady=(5, 0))
+        self.to_speaker_lb = tk.Listbox(misc_frame, width=8, height=5, selectmode=tk.MULTIPLE, exportselection=0)
         self.to_speaker_lb.pack()
+        tk.Label(misc_frame, text="Samplerate:").pack(pady=(5,0))
+        self.samplerate_choice = tk.IntVar()
+        self.samplerate_choice.set(44100)
+        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=44100, text="44.1 kHz", pady=0, command=self.create_synth).pack(anchor=tk.W, pady=0)
+        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=22050, text="22 kHz", pady=0, command=self.create_synth).pack(anchor=tk.W, pady=0)
         self.add_osc_to_gui()
         self.add_osc_to_gui()
         self.add_osc_to_gui()
@@ -436,8 +440,16 @@ class SynthGUI(tk.Frame):
         self.statusbar = tk.Label(self, text="<status>", relief=tk.RIDGE)
         self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.pack()
-        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, queuesize=2)
+        self.synth = self.output = None
+        self.create_synth()
         self.playing_note = None
+
+    def create_synth(self):
+        samplerate = self.samplerate_choice.get()
+        self.synth = WaveSynth(samplewidth=2, samplerate=samplerate)
+        if self.output is not None:
+            self.output.close()
+        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, queuesize=2)
 
     def add_osc_to_gui(self):
         osc_nr = len(self.oscillators)
@@ -502,10 +514,9 @@ class SynthGUI(tk.Frame):
                     return envelope_gui.filter(osc)
             return osc
         osc = create_unfiltered_osc()
-        osc = envelope(osc, self.envelope_filter1)
-        osc = envelope(osc, self.envelope_filter2)
+        for ev in self.envelope_filters:
+            osc = envelope(osc, ev)
         return osc
-
 
     def parse_harmonics(self, harmonics):
         parsed = []
@@ -560,6 +571,7 @@ class SynthGUI(tk.Frame):
         if not self.playing_note:
             sample = self.generate_sample(oscillator, 0.1).fadeout(0.1)
             if sample.samplewidth != self.synth.samplewidth:
+                print("16 bit overflow!!!")  # XXX
                 sample.make_16bit()
             self.output.play_sample(sample, async=True)
             return
@@ -567,10 +579,12 @@ class SynthGUI(tk.Frame):
             sample = self.generate_sample(oscillator, 0.1)
             sample.fadein(0.05)
             if sample.samplewidth != self.synth.samplewidth:
+                print("16 bit overflow!!!")  # XXX
                 sample.make_16bit()
             self.output.play_sample(sample, async=True)
         sample = self.generate_sample(oscillator, 0.1)
         if sample.samplewidth != self.synth.samplewidth:
+            print("16 bit overflow!!!")  # XXX
             sample.make_16bit()
         self.output.play_sample(sample, async=True)
         self.after(50, lambda: self.continue_play_note(oscillator, False))
