@@ -253,6 +253,11 @@ class PianoKeyboardGUI(tk.Frame):
         white_keys = tk.Frame(self)
         num_octaves = 4
         first_octave = 3
+        # somehow the button spacing differs per platform, try to compensate a bit:
+        if platform.system() == "Windows":
+            black_padx = "5p"
+        else:
+            black_padx = "6p"
         for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
             octave = first_octave+(key_nr+2)//7
             def key_pressed(event, note=key, octave=octave):
@@ -263,9 +268,9 @@ class PianoKeyboardGUI(tk.Frame):
                 b = tk.Button(black_keys, bg='black', fg='lightgray', width=2, height=3, padx=0, pady=0, text=key, relief=tk.RAISED, borderwidth=1)
                 b.bind("<ButtonPress-1>", key_pressed)
                 b.bind("<ButtonRelease-1>", key_released)
-                b.pack(side=tk.LEFT, padx="6p", pady=0)
+                b.pack(side=tk.LEFT, padx=black_padx, pady=0)
             else:
-                tk.Button(black_keys, width=2, height=3, padx=0, pady=0, text="", relief=tk.FLAT, borderwidth=1, state="disabled").pack(side=tk.LEFT, padx="6p")
+                tk.Button(black_keys, width=2, height=3, padx=0, pady=0, text="", relief=tk.FLAT, borderwidth=1, state="disabled").pack(side=tk.LEFT, padx=black_padx)
         black_keys.pack(side=tk.TOP, anchor=tk.W, padx="13p", pady=0)
         for key_nr, key in enumerate("CDEFGAB"*num_octaves):
             octave = first_octave+(key_nr+2)//7
@@ -342,9 +347,9 @@ class TremoloFilterGUI(tk.LabelFrame):
         elif wave == "triangle":
             modulator = Triangle(freq, amp, bias=bias, samplerate=samplerate)
         elif wave == "sawtooth":
-            modulator = SawtoothH(freq, 6, amp, bias=bias, samplerate=samplerate)
+            modulator = SawtoothH(freq, 9, amp, bias=bias, samplerate=samplerate)
         elif wave == "square":
-            modulator = SquareH(freq, 6, amp, bias=bias, samlerate=samplerate)
+            modulator = SquareH(freq, 9, amp, bias=bias, samplerate=samplerate)
         return AmpMudulationFilter(source, iter(modulator))
 
 
