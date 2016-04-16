@@ -260,23 +260,23 @@ class PianoKeyboardGUI(tk.Frame):
             def key_released(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, True)
             if key:
-                b = tk.Button(black_keys, bg='black', fg='lightgray', width=2, height=3, text=key, relief=tk.RAISED, borderwidth=2)
+                b = tk.Button(black_keys, bg='black', fg='lightgray', width=2, height=3, padx=0, pady=0, text=key, relief=tk.RAISED, borderwidth=1)
                 b.bind("<ButtonPress-1>", key_pressed)
                 b.bind("<ButtonRelease-1>", key_released)
-                b.pack(side=tk.LEFT, padx="5p")
+                b.pack(side=tk.LEFT, padx="6p", pady=0)
             else:
-                tk.Button(black_keys, width=2, height=3, text="", relief=tk.FLAT, borderwidth=2, state="disabled").pack(side=tk.LEFT, padx="5p")
-        black_keys.pack(side=tk.TOP, anchor=tk.W, padx="13p")
+                tk.Button(black_keys, width=2, height=3, padx=0, pady=0, text="", relief=tk.FLAT, borderwidth=1, state="disabled").pack(side=tk.LEFT, padx="6p")
+        black_keys.pack(side=tk.TOP, anchor=tk.W, padx="13p", pady=0)
         for key_nr, key in enumerate("CDEFGAB"*num_octaves):
             octave = first_octave+(key_nr+2)//7
             def key_pressed(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, False)
             def key_released(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, True)
-            b = tk.Button(white_keys, bg='white', fg='gray', width=4, height=4, text=key, relief=tk.RAISED, borderwidth=2)
+            b = tk.Button(white_keys, bg='white', fg='gray', width=4, height=4, padx=0, pady=0, text=key, relief=tk.RAISED, borderwidth=1)
             b.bind("<ButtonPress-1>", key_pressed)
             b.bind("<ButtonRelease-1>", key_released)
-            b.pack(side=tk.LEFT)
+            b.pack(side=tk.LEFT, padx=0, pady=0)
         white_keys.pack(side=tk.TOP, anchor=tk.W, pady=(0, 10))
 
 
@@ -312,6 +312,7 @@ class EchoFilterGUI(tk.LabelFrame):
 class TremoloFilterGUI(tk.LabelFrame):
     def __init__(self, master, gui):
         super().__init__(master, text="output: Tremolo")
+        self.gui = gui
         self.input_waveform = tk.StringVar()
         self.input_waveform.set("<off>")
         self.input_rate = tk.DoubleVar()
@@ -332,17 +333,18 @@ class TremoloFilterGUI(tk.LabelFrame):
         wave = self.input_waveform.get()
         freq = self.input_rate.get()
         amp = self.input_depth.get() / 2.0
+        samplerate = self.gui.synth.samplerate
         bias = 1.0 - amp
         if amp == 0.0 or freq == 0.0 or wave in (None, "", "<none>", "<off>"):
             return source
         if wave == "sine":
-            modulator = Sine(freq, amp, bias=bias)
+            modulator = Sine(freq, amp, bias=bias, samplerate=samplerate)
         elif wave == "triangle":
-            modulator = Triangle(freq, amp, bias=bias)
+            modulator = Triangle(freq, amp, bias=bias, samplerate=samplerate)
         elif wave == "sawtooth":
-            modulator = SawtoothH(freq, 6, amp, bias=bias)
+            modulator = SawtoothH(freq, 6, amp, bias=bias, samplerate=samplerate)
         elif wave == "square":
-            modulator = SquareH(freq, 6, amp, bias=bias)
+            modulator = SquareH(freq, 6, amp, bias=bias, samlerate=samplerate)
         return AmpMudulationFilter(source, iter(modulator))
 
 

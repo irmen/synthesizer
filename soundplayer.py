@@ -26,7 +26,7 @@ def play_console(filename_or_stream):
         nchannels = wav.getnchannels()
         bar_width = 60
         lowest_level = -50.0
-        update_rate = 20
+        update_rate = 20   # lower this if you hear the sound crackle!
         levelmeter = LevelMeter(rms_mode=False, lowest=lowest_level)
         with Output(samplerate, samplewidth, nchannels, int(update_rate/4)) as out:
             while True:
@@ -79,7 +79,7 @@ class LevelGUI(tk.Frame):
         frame.pack()
         self.info.pack(side=tk.TOP)
         self.pack()
-        self.update_rate = 20
+        self.update_rate = 19   # lower this if you hear the sound crackle!
         self.open_audio_file(audio_source)
         self.after_idle(self.update)
 
