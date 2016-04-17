@@ -407,6 +407,7 @@ class EchoFilter(Oscillator):
         self._amount = amount
         self._delay = delay
         self._decay = decay
+        self.echo_duration = self._after + self._amount*self._delay
 
     def generator(self):
         oscillator = iter(self._source)

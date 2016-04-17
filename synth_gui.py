@@ -4,8 +4,10 @@ GUI For the synthesizer components, including a piano keyboard.
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
+import time
 import platform
 import tkinter as tk
+from threading import Semaphore
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
 from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter
 from synthesizer.sample import Sample, Output
@@ -308,10 +310,19 @@ class EchoFilterGUI(tk.LabelFrame):
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_amount, from_=1, to=10, resolution=1, width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="delay").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_delay, from_=0.0, to=1.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_delay, from_=0.0, to=0.5, resolution=.01, width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="decay").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.01, to=1.5, resolution=.1, width=10, length=120).grid(row=row, column=1)
+
+    def filter(self, source):
+        if self.input_enabled.get():
+            after = self.input_after.get()
+            amount = self.input_amount.get()
+            delay = self.input_delay.get()
+            decay = self.input_decay.get()
+            return EchoFilter(source, after, amount, delay, decay)
+        return source
 
 
 class TremoloFilterGUI(tk.LabelFrame):
@@ -402,6 +413,7 @@ class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.master.title("Synthesizer")
+        self.keypress_sema = Semaphore(1)
         self.osc_frame = tk.Frame(self)
         self.oscillators = []
         self.piano_frame = tk.Frame(self)
@@ -569,47 +581,65 @@ class SynthGUI(tk.Frame):
     def generate_sample(self, oscillator, duration, use_fade=False):
         o = oscillator # iter(oscillator)
         scale = 2**(8*self.synth.samplewidth-1)
-        frames = [int(next(o)*scale) for _ in range(int(self.synth.samplerate*duration))]
-        sample = Sample.from_array(frames, self.synth.samplerate, 1)
-        if use_fade:
-            sample.fadein(0.05).fadeout(0.1)
-        return sample
+        try:
+            frames = [int(next(o)*scale) for _ in range(int(self.synth.samplerate*duration))]
+        except StopIteration:
+            return None
+        else:
+            sample = Sample.from_array(frames, self.synth.samplerate, 1)
+            if use_fade:
+                sample.fadein(0.05).fadeout(0.1)
+            return sample
 
     def continue_play_note(self, oscillator, first=True):
+        if self.echos_ending_time and time.time() >= self.echos_ending_time:
+            self.stop_playing_note()
         if not self.playing_note:
             sample = self.generate_sample(oscillator, 0.1).fadeout(0.1)
-            if sample.samplewidth != self.synth.samplewidth:
-                print("16 bit overflow!!!")  # XXX
-                sample.make_16bit()
-            self.output.play_sample(sample, async=True)
+            if sample:
+                if sample.samplewidth != self.synth.samplewidth:
+                    print("16 bit overflow!")  # XXX
+                    sample.make_16bit()
+                self.output.play_sample(sample, async=True)
             return
         if first:
             sample = self.generate_sample(oscillator, 0.1)
-            sample.fadein(0.05)
+            if sample:
+                sample.fadein(0.05)
+                if sample.samplewidth != self.synth.samplewidth:
+                    print("16 bit overflow!")  # XXX
+                    sample.make_16bit()
+                self.output.play_sample(sample, async=True)
+        sample = self.generate_sample(oscillator, 0.1)
+        if sample:
             if sample.samplewidth != self.synth.samplewidth:
-                print("16 bit overflow!!!")  # XXX
+                print("16 bit overflow!")  # XXX
                 sample.make_16bit()
             self.output.play_sample(sample, async=True)
-        sample = self.generate_sample(oscillator, 0.1)
-        if sample.samplewidth != self.synth.samplewidth:
-            print("16 bit overflow!!!")  # XXX
-            sample.make_16bit()
-        self.output.play_sample(sample, async=True)
-        self.after(50, lambda: self.continue_play_note(oscillator, False))
+            self.after(50, lambda: self.continue_play_note(oscillator, False))
+
+    def stop_playing_note(self):
+        self.playing_note = False
+        to_speaker = [self.oscillators[i] for i in self.to_speaker_lb.curselection()]
+        for osc in to_speaker:
+            osc.set_title_status(None)
+        self.keypress_sema.release()
 
     def pressed(self, event, note, octave, released=False):
         self.statusbar["text"] = "ok"
         a4freq = self.a4_choice.get()
         freq = note_freq(note, octave, a4freq)
-        to_speaker = self.to_speaker_lb.curselection()
-        to_speaker = [self.oscillators[i] for i in to_speaker]
+        to_speaker = [self.oscillators[i] for i in self.to_speaker_lb.curselection()]
         if not to_speaker:
             self.statusbar["text"] = "No oscillators connected to speaker output!"
             return
         if released:
-            self.playing_note = False
-            for osc in to_speaker:
-                osc.set_title_status(None)
+            # only stop sound immediately if no echo filter is enabled
+            if not self.echos_ending_time:
+                self.stop_playing_note()
+            return
+        if not self.keypress_sema.acquire(blocking=False):
+            self.statusbar["text"] = "can't play new note - previous one still playing (monophonic, sorry)"
             return
         for osc in self.oscillators:
             if osc.input_freq_keys.get():
@@ -623,18 +653,18 @@ class SynthGUI(tk.Frame):
         oscs = [self.create_osc(osc, self.oscillators) for osc in to_speaker]
         mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
         mixed_osc = self.apply_filters(mixed_osc)
+        current_echos_duration = getattr(mixed_osc, "echo_duration", 0)
+        if current_echos_duration>0:
+            self.echos_ending_time = time.time() + current_echos_duration
+        else:
+            self.echos_ending_time = 0
         self.playing_note = True
         self.output.wipe_queue()
         self.after_idle(lambda: self.continue_play_note(iter(mixed_osc)))
 
     def apply_filters(self, output_oscillator):
         output_oscillator = self.tremolo_filter.filter(output_oscillator)
-        if self.echo_filter.input_enabled.get():
-            after = self.echo_filter.input_after.get()
-            amount = self.echo_filter.input_amount.get()
-            delay = self.echo_filter.input_delay.get()
-            decay = self.echo_filter.input_decay.get()
-            output_oscillator = EchoFilter(output_oscillator, after, amount, delay, decay)
+        output_oscillator = self.echo_filter.filter(output_oscillator)
         return output_oscillator
 
 
