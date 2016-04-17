@@ -252,7 +252,7 @@ def echo_sample():
     with Output(s.samplerate, s.samplewidth, s.nchannels) as out:
         e = s.copy().echo(1, 4, 0.5, 0.4)   # echo
         out.play_sample(e)
-        e = s.copy().echo(1, 30, 0.15, 0.5)    # reverberation
+        e = s.copy().echo(1, 30, 0.15, 0.5)    # simple "reverberation" (simulated using fast echos)
         out.play_sample(e)
 
 

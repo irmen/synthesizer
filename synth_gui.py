@@ -289,7 +289,7 @@ class PianoKeyboardGUI(tk.Frame):
 
 class EchoFilterGUI(tk.LabelFrame):
     def __init__(self, master, gui):
-        super().__init__(master, text="output: Echo / Reverb")
+        super().__init__(master, text="output: Echo / Delay")
         self.input_enabled = tk.BooleanVar()
         self.input_after = tk.DoubleVar()
         self.input_after.set(0.05)
