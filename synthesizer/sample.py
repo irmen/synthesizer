@@ -203,13 +203,18 @@ class Sample:
     def copy(self):
         """Returns a copy of the sample (unlocked)."""
         cpy = Sample()
-        cpy.__frames = self.__frames
-        cpy.__samplewidth = self.__samplewidth
-        cpy.__samplerate = self.__samplerate
-        cpy.__nchannels = self.__nchannels
-        cpy.__filename = self.__filename
-        cpy.__locked = False
+        cpy.copy_from(self)
         return cpy
+
+    def copy_from(self, other):
+        """Overwrite the current sample with a copy of the other."""
+        assert not self.__locked
+        self.__frames = other.__frames
+        self.__samplewidth = other.__samplewidth
+        self.__samplerate = other.__samplerate
+        self.__nchannels = other.__nchannels
+        self.__filename = other.__filename
+        return self
 
     def lock(self):
         """Lock the sample against modifications."""
