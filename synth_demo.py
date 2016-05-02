@@ -462,33 +462,6 @@ def harmonics():
     plot.show()
 
 
-def fft():
-    # @todo experimental fft filtering
-    import matplotlib.pyplot as plot
-    import numpy.fft
-    synth = WaveSynth()
-    sample = synth.sawtooth_h(440, 1)
-    plot.specgram(sample.get_frame_array(), Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
-    plot.show()
-    fft = numpy.fft.rfft(sample.get_frame_array())
-    plot.plot(fft)
-    plot.show()
-    # brick wall bandpass filtering 1000-3000 hz:
-    for i in range(0, 1000):
-        fft[i] = 0
-    for i in range(3000, len(fft)):
-        fft[i] = 0
-    plot.plot(fft)
-    plot.show()
-    filtered = numpy.fft.irfft(fft)
-    plot.specgram(filtered, Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
-    plot.show()
-    sample2 = Sample.from_array(filtered.astype(numpy.int16), synth.samplerate, 1)
-    with Output.for_sample(sample) as out:
-        out.play_sample(sample)
-        out.play_sample(sample2)
-
-
 if __name__ == "__main__":
     harmonics()
     osc_bench()
@@ -509,4 +482,3 @@ if __name__ == "__main__":
     bias()
     stereo_pan()
     vibrato()
-    fft()
