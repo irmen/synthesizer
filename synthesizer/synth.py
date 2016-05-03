@@ -45,6 +45,8 @@ note_alias = {
 
 
 major_chords = {
+    # from https://en.wikipedia.org/wiki/Major_seventh_chord
+    # a one in the number tuple means that the note is from the next higher octave
     'C':  (('C', 'E', 'G', 'B'),       (0, 0, 0, 0)),
     'C#': (('C#', 'E#', 'G#', 'B#'),   (0, 0, 0, 1)),
     'D':  (('D', 'F#', 'A', 'C'),      (0, 0, 0, 1)),
