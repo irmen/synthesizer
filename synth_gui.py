@@ -10,6 +10,7 @@ import tkinter as tk
 from threading import Semaphore
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
 from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter
+from synthesizer.synth import major_chord_keys
 from synthesizer.sample import Sample, Output
 try:
     import matplotlib
@@ -261,7 +262,7 @@ class PianoKeyboardGUI(tk.Frame):
         else:
             black_padx = "6p"
         for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
-            octave = first_octave+(key_nr+2)//7
+            octave = first_octave+key_nr//7
             def key_pressed(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, False)
             def key_released(event, note=key, octave=octave):
@@ -275,7 +276,7 @@ class PianoKeyboardGUI(tk.Frame):
                 tk.Button(black_keys, width=2, height=3, padx=0, pady=0, text="", relief=tk.FLAT, borderwidth=1, state="disabled").pack(side=tk.LEFT, padx=black_padx)
         black_keys.pack(side=tk.TOP, anchor=tk.W, padx="13p", pady=0)
         for key_nr, key in enumerate("CDEFGAB"*num_octaves):
-            octave = first_octave+(key_nr+2)//7
+            octave = first_octave+key_nr//7
             def key_pressed(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, False)
             def key_released(event, note=key, octave=octave):
@@ -364,6 +365,36 @@ class TremoloFilterGUI(tk.LabelFrame):
         return AmpMudulationFilter(source, iter(modulator))
 
 
+class ArpeggioFilterGUI(tk.LabelFrame):
+    def __init__(self, master, gui):
+        super().__init__(master, text="keys: Chords / Arpeggio")
+        self.gui = gui
+        self.input_enabled = tk.StringVar()
+        self.input_enabled.set("off")
+        self.input_rate = tk.DoubleVar()    # speed of note triggers
+        self.input_ratio = tk.DoubleVar()   # how many % the note is on vs off
+        row = 0
+        tk.Label(self, text="Major Chords Arp").grid(row=row, column=0, columnspan=2)
+        row += 1
+        tk.Radiobutton(self, variable=self.input_enabled, value="off", text="off", pady=0).grid(row=row, column=1, sticky=tk.W)
+        row += 1
+        tk.Radiobutton(self, variable=self.input_enabled, value="chords3", text="Chords Maj. 3", pady=0).grid(row=row, column=1, sticky=tk.W)
+        row += 1
+        tk.Radiobutton(self, variable=self.input_enabled, value="chords4", text="Chords Maj. 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
+        row += 1
+        tk.Radiobutton(self, variable=self.input_enabled, value="arpeggio3", text="Arpeggio 3", pady=0).grid(row=row, column=1, sticky=tk.W)
+        row += 1
+        tk.Radiobutton(self, variable=self.input_enabled, value="arpeggio4", text="Arpeggio 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
+        row += 1
+        tk.Label(self, text="rate").grid(row=row, column=0, sticky=tk.E)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.02, to=1.0, resolution=.01, width=10, length=100).grid(row=row, column=1)
+        row += 1
+        tk.Label(self, text="ratio").grid(row=row, column=0, sticky=tk.E)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_ratio, from_=0.01, to=1.0, resolution=.01, width=10, length=100).grid(row=row, column=1)
+    def filter(self, source):
+        return source
+
+
 class EnvelopeFilterGUI(tk.LabelFrame):
     def __init__(self, master, name, gui):
         super().__init__(master, text="ADSR Envelope "+name)
@@ -427,14 +458,17 @@ class SynthGUI(tk.Frame):
         self.echo_filter = EchoFilterGUI(filter_frame, self)
         for ev in self.envelope_filters:
             ev.pack(side=tk.LEFT, anchor=tk.N)
+        self.arp_filter = ArpeggioFilterGUI(filter_frame, self)
+        self.arp_filter.pack(side=tk.LEFT, anchor=tk.N)
         f = tk.Frame(filter_frame)
         self.tremolo_filter = TremoloFilterGUI(f, self)
         self.tremolo_filter.pack(side=tk.TOP)
-        tk.Label(f, text="A4 tuning:").pack(pady=(5,0))
+        lf = tk.LabelFrame(f, text="A4 tuning")
         self.a4_choice = tk.IntVar()
         self.a4_choice.set(440)
-        tk.Radiobutton(f, variable=self.a4_choice, value=440, text="440 Hz").pack()
-        tk.Radiobutton(f, variable=self.a4_choice, value=432, text="432 Hz").pack()
+        tk.Radiobutton(lf, variable=self.a4_choice, value=440, text="440 Hz", pady=0).pack(side=tk.LEFT)
+        tk.Radiobutton(lf, variable=self.a4_choice, value=432, text="432 Hz", pady=0).pack(side=tk.LEFT)
+        lf.pack(pady=(5,0))
         f.pack(side=tk.LEFT, anchor=tk.N)
         self.echo_filter.pack(side=tk.LEFT, anchor=tk.N)
         misc_frame = tk.Frame(filter_frame, padx=10)
@@ -442,11 +476,12 @@ class SynthGUI(tk.Frame):
         tk.Label(misc_frame, text="To Speaker:").pack(pady=(5, 0))
         self.to_speaker_lb = tk.Listbox(misc_frame, width=8, height=5, selectmode=tk.MULTIPLE, exportselection=0)
         self.to_speaker_lb.pack()
-        tk.Label(misc_frame, text="Samplerate:").pack(pady=(5,0))
+        lf = tk.LabelFrame(misc_frame, text="Samplerate")
         self.samplerate_choice = tk.IntVar()
         self.samplerate_choice.set(44100)
-        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=44100, text="44.1 kHz", command=self.create_synth).pack(anchor=tk.W)
-        tk.Radiobutton(misc_frame, variable=self.samplerate_choice, value=22050, text="22 kHz", command=self.create_synth).pack(anchor=tk.W)
+        tk.Radiobutton(lf, variable=self.samplerate_choice, value=44100, text="44.1 kHz", pady=0, command=self.create_synth).pack(anchor=tk.W)
+        tk.Radiobutton(lf, variable=self.samplerate_choice, value=22050, text="22 kHz", pady=0, command=self.create_synth).pack(anchor=tk.W)
+        lf.pack(pady=(5,0))
         self.add_osc_to_gui()
         self.add_osc_to_gui()
         self.add_osc_to_gui()
@@ -462,6 +497,7 @@ class SynthGUI(tk.Frame):
         self.synth = self.output = None
         self.create_synth()
         self.playing_note = None
+        self.current_note = None
 
     def create_synth(self):
         samplerate = self.samplerate_choice.get()
@@ -480,6 +516,22 @@ class SynthGUI(tk.Frame):
 
     def create_osc(self, from_gui, all_oscillators):
         def create_unfiltered_osc():
+            def create_chord_osc(clazz, **arguments):
+                if self.arp_filter.input_enabled.get().startswith("chords"):
+                    chord_keys = major_chord_keys(self.current_note[0], self.current_note[1])
+                    if self.arp_filter.input_enabled.get() == "chords3":
+                        chord_keys = list(chord_keys)[:-1]
+                    chord_freqs = [note_freq(note, octave) for note, octave in chord_keys]
+                    self.statusbar["text"]="major chord: "+" ".join(note for note, octave in chord_keys)
+                    oscillators = []
+                    arguments["amplitude"] /= len(chord_freqs)
+                    for f in chord_freqs:
+                        arguments["frequency"] = f
+                        oscillators.append(clazz(**arguments))
+                    return MixingFilter(*oscillators)
+                else:
+                    # no chord, return one osc for only the given frequency
+                    return clazz(**arguments)
             waveform = from_gui.input_waveformtype.get()
             amp = from_gui.input_amp.get()
             bias = from_gui.input_bias.get()
@@ -512,10 +564,10 @@ class SynthGUI(tk.Frame):
                 else:
                     raise ValueError("invalid fm choice")
                 if waveform == "pulse":
-                    return Pulse(frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
+                    return create_chord_osc(Pulse, frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
                 elif waveform == "harmonics":
                     harmonics = self.parse_harmonics(from_gui.harmonics_text.get(1.0, tk.END))
-                    return Harmonics(frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+                    return create_chord_osc(Harmonics, frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
                 else:
                     o = {
                         "sine": Sine,
@@ -525,7 +577,7 @@ class SynthGUI(tk.Frame):
                         "square": Square,
                         "square_h": SquareH,
                         }[waveform]
-                    return o(frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+                    return create_chord_osc(o, frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
         def envelope(osc, envelope_gui):
             adsr_src = envelope_gui.input_source.get()
             if adsr_src not in (None, "", "<none>"):
@@ -594,6 +646,7 @@ class SynthGUI(tk.Frame):
     def continue_play_note(self, oscillator, first=True):
         if self.echos_ending_time and time.time() >= self.echos_ending_time:
             self.stop_playing_note()
+            return
         if not self.playing_note:
             sample = self.generate_sample(oscillator, 0.1).fadeout(0.1)
             if sample:
@@ -629,6 +682,7 @@ class SynthGUI(tk.Frame):
         self.statusbar["text"] = "ok"
         a4freq = self.a4_choice.get()
         freq = note_freq(note, octave, a4freq)
+        self.current_note = (note, octave, freq)
         to_speaker = [self.oscillators[i] for i in self.to_speaker_lb.curselection()]
         if not to_speaker:
             self.statusbar["text"] = "No oscillators connected to speaker output!"

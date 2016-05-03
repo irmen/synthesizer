@@ -1,21 +1,23 @@
 import time
 from collections import OrderedDict
 from synthesizer.sample import Output, Sample
-from synthesizer.synth import WaveSynth, key_freq
+from synthesizer.synth import WaveSynth, key_freq, octave_notes, major_chord_keys, note_freq, key_num
 from synthesizer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, SawtoothH, WhiteNoise, Linear, Harmonics
 from synthesizer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle
 from synthesizer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter, DelayFilter
 
 
 # some note frequencies for octaves 1 to 7
-octave_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-notes1 = OrderedDict((note, key_freq(4+i)) for i, note in enumerate(octave_notes))
-notes2 = OrderedDict((note, key_freq(16+i)) for i, note in enumerate(octave_notes))
-notes3 = OrderedDict((note, key_freq(28+i)) for i, note in enumerate(octave_notes))
-notes4 = OrderedDict((note, key_freq(40+i)) for i, note in enumerate(octave_notes))
-notes5 = OrderedDict((note, key_freq(52+i)) for i, note in enumerate(octave_notes))
-notes6 = OrderedDict((note, key_freq(64+i)) for i, note in enumerate(octave_notes))
-notes7 = OrderedDict((note, key_freq(76+i)) for i, note in enumerate(octave_notes))
+notes=[
+    None,
+    OrderedDict((note, key_freq(4+i)) for i, note in enumerate(octave_notes)),
+    OrderedDict((note, key_freq(16+i)) for i, note in enumerate(octave_notes)),
+    OrderedDict((note, key_freq(28+i)) for i, note in enumerate(octave_notes)),
+    OrderedDict((note, key_freq(40+i)) for i, note in enumerate(octave_notes)),
+    OrderedDict((note, key_freq(52+i)) for i, note in enumerate(octave_notes)),
+    OrderedDict((note, key_freq(64+i)) for i, note in enumerate(octave_notes)),
+    OrderedDict((note, key_freq(76+i)) for i, note in enumerate(octave_notes))
+]
 
 
 def demo_tones():
@@ -23,17 +25,17 @@ def demo_tones():
     with Output(nchannels=1) as out:
         for wave in [synth.square_h, synth.square, synth.sine, synth.triangle, synth.sawtooth, synth.sawtooth_h]:
             print(wave.__name__)
-            for note, freq in list(notes4.items())[6:]:
+            for note, freq in list(notes[4].items())[6:]:
                 print("   {:f} hz".format(freq))
                 sample = wave(freq, duration=0.4).fadein(0.02).fadeout(0.1)
                 out.play_sample(sample)
         print("pulse")
-        for note, freq in list(notes4.items())[6:]:
+        for note, freq in list(notes[4].items())[6:]:
             print("   {:f} hz".format(freq))
             sample = synth.pulse(freq, duration=0.4, pulsewidth=0.1).fadein(0.02).fadeout(0.1)
             out.play_sample(sample)
         print("harmonics (only even)")
-        for note, freq in list(notes3.items())[6:]:
+        for note, freq in list(notes[3].items())[6:]:
             print("   {:f} hz".format(freq))
             harmonics = [(n, 1/n) for n in range(1, 5*2, 2)]
             sample = synth.harmonics(freq, 0.4, harmonics).fadein(0.02).fadeout(0.1)
@@ -462,6 +464,20 @@ def harmonics():
     plot.show()
 
 
+def chords():
+    synth = WaveSynth()
+    with Output(nchannels=1) as out:
+        for rootnote in octave_notes:
+            chord_keys = major_chord_keys(rootnote, 4)
+            print("chord", rootnote, ["{0} {1}".format(note, octave) for note, octave in chord_keys])
+            freqs = [notes[octave][key] for key, octave in chord_keys]
+            for i in range(1, len(freqs)):
+                assert freqs[i] > freqs[i-1]
+            samples = [synth.sine(freq, 1.5, amplitude=0.333) for freq in freqs]
+            s = samples[0].mix(samples[1]).mix(samples[2]).fadein(0.1).fadeout(0.1)
+            out.play_sample(s)
+
+
 if __name__ == "__main__":
     harmonics()
     osc_bench()
@@ -482,3 +498,4 @@ if __name__ == "__main__":
     bias()
     stereo_pan()
     vibrato()
+    chords()

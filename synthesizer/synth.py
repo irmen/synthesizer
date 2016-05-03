@@ -12,7 +12,7 @@ from math import sin, pi, floor, fabs, log
 from .sample import Sample
 
 
-__all__ = ["key_num", "key_freq", "note_freq",
+__all__ = ["key_num", "key_freq", "note_freq", "octave_notes", "note_alias", "major_chords", "major_chord_keys",
            "WaveSynth", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
            "Pulse", "Harmonics", "WhiteNoise", "Linear",
            "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare",
@@ -20,11 +20,56 @@ __all__ = ["key_num", "key_freq", "note_freq",
            "ClipFilter", "AbsFilter", "NullFilter"]
 
 
+octave_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+
+note_alias = {
+    'C': 'C',
+    'C#': 'C#',
+    'C##': 'D',
+    'D': 'D',
+    'D#': 'D#',
+    'E': 'E',
+    'E#': 'F',
+    'F': 'F',
+    'F#': 'F#',
+    'F##': 'G',
+    'G': 'G',
+    'G#': 'G#',
+    'G##': 'A',
+    'A': 'A',
+    'A#': 'A#',
+    'B': 'B',
+    'B#': 'C'
+}
+
+
+major_chords = {
+    'C':  (('C', 'E', 'G', 'B'),       (0, 0, 0, 0)),
+    'C#': (('C#', 'E#', 'G#', 'B#'),   (0, 0, 0, 1)),
+    'D':  (('D', 'F#', 'A', 'C'),      (0, 0, 0, 1)),
+    'D#': (('D#', 'F##', 'A#', 'C##'), (0, 0, 0, 1)),
+    'E':  (('E', 'G#', 'B', 'D#'),     (0, 0, 0, 1)),
+    'F':  (('F', 'A', 'C', 'E'),       (0, 0, 1, 1)),
+    'F#': (('F#', 'A#', 'C#', 'E#'),   (0, 0, 1, 1)),
+    'G':  (('G', 'B', 'D', 'F#'),      (0, 0, 1, 1)),
+    'G#': (('G#', 'B#', 'D#', 'F##'),  (0, 1, 1, 1)),
+    'A':  (('A', 'C#', 'E', 'G#'),     (0, 1, 1, 1)),
+    'A#': (('A#', 'C##', 'E#', 'G##'), (0, 1, 1, 1)),
+    'B':  (('B', 'D#', 'F#', 'A#'),    (0, 1, 1, 1)),
+}
+
+
+def major_chord_keys(rootnote, octave):
+    keys, octaves = major_chords[rootnote.upper()]
+    return (note_alias[keys[0]], octave+octaves[0]),\
+           (note_alias[keys[1]], octave+octaves[1]),\
+           (note_alias[keys[2]], octave+octaves[2]),\
+           (note_alias[keys[3]], octave+octaves[3])
+
+
 def key_num(note, octave):
     notes = {
-        "A":   1,
-        "A#":  2,
-        "B":   3,
         "C":   4,
         "C#":  5,
         "D":   6,
@@ -33,7 +78,10 @@ def key_num(note, octave):
         "F":   9,
         "F#": 10,
         "G":  11,
-        "G#": 12
+        "G#": 12,
+        "A":  13,
+        "A#": 14,
+        "B":  15,
     }
     return (octave-1)*12 + notes[note.upper()]
 
