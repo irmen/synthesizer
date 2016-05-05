@@ -434,6 +434,12 @@ class EnvelopeFilterGUI(tk.LabelFrame):
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_release, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
         self.input_source.set("<none>")
 
+    @property
+    def duration(self):
+        if self.input_source.get() in (None, "", "<none>"):
+            return 0
+        return self.input_attack.get() + self.input_decay.get() + self.input_sustain.get() + self.input_release.get()
+
     def filter(self, source):
         attack = self.input_attack.get()
         decay = self.input_decay.get()
@@ -686,6 +692,22 @@ class SynthGUI(tk.Frame):
             self.output.play_sample(sample, async=True)
             self.after_idle(lambda: self.continue_play_note(oscillator, False))
 
+    def render_and_play_note(self, oscillator):
+        duration = 0
+        for ev in self.envelope_filters:
+            duration = max(duration, ev.duration)
+        if duration == 0:
+            duration = 4
+        sample = self.generate_sample(oscillator, duration)
+        if sample:
+            sample.fadein(0.05).fadeout(0.05)
+            if sample.samplewidth != self.synth.samplewidth:
+                print("16 bit overflow!")  # XXX
+                sample.make_16bit()
+            self.output.play_sample(sample, async=True)
+        self.statusbar["text"] = "ok"
+        self.stop_playing_note()
+
     def stop_playing_note(self):
         self.playing_note = False
         to_speaker = [self.oscillators[i] for i in self.to_speaker_lb.curselection()]
@@ -698,9 +720,6 @@ class SynthGUI(tk.Frame):
         a4freq = self.a4_choice.get()
         freq = note_freq(note, octave, a4freq)
         self.current_note = (note, octave, freq)
-        if self.rendering_choice.get() == "render":
-            self.statusbar["text"] = ">>>render output not yet implemented<<<"
-            raise NotImplementedError("only realtime keyboard response implemented at this time")  # XXX
         to_speaker = [self.oscillators[i] for i in self.to_speaker_lb.curselection()]
         if not to_speaker:
             self.statusbar["text"] = "No oscillators connected to speaker output!"
@@ -732,7 +751,11 @@ class SynthGUI(tk.Frame):
             self.echos_ending_time = 0
         self.playing_note = True
         self.output.wipe_queue()
-        self.after_idle(lambda: self.continue_play_note(iter(mixed_osc)))
+        if self.rendering_choice.get() == "render":
+            self.statusbar["text"] = "rendering note sample..."
+            self.after_idle(lambda: self.render_and_play_note(iter(mixed_osc)))
+        else:
+            self.after_idle(lambda: self.continue_play_note(iter(mixed_osc)))
 
     def apply_filters(self, output_oscillator):
         output_oscillator = self.tremolo_filter.filter(output_oscillator)
