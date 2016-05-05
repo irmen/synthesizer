@@ -706,7 +706,7 @@ class SynthGUI(tk.Frame):
             duration = max(duration, ev.duration)
         if duration == 0:
             duration = max_duration
-        duration = max(duration, max_duration)
+        duration = min(duration, max_duration)
         sample = self.generate_sample(oscillator, duration)
         if sample:
             sample.fadein(0.05).fadeout(0.05)
