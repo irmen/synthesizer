@@ -293,13 +293,13 @@ class EchoFilterGUI(tk.LabelFrame):
         super().__init__(master, text="output: Echo / Delay")
         self.input_enabled = tk.BooleanVar()
         self.input_after = tk.DoubleVar()
-        self.input_after.set(0.05)
+        self.input_after.set(0.00)
         self.input_amount = tk.IntVar()
-        self.input_amount.set(5)
+        self.input_amount.set(6)
         self.input_delay = tk.DoubleVar()
-        self.input_delay.set(0.05)
+        self.input_delay.set(0.2)
         self.input_decay = tk.DoubleVar()
-        self.input_decay.set(0.6)
+        self.input_decay.set(0.7)
         row = 0
         tk.Label(self, text="enable?").grid(row=row, column=0)
         tk.Checkbutton(self, variable=self.input_enabled).grid(row=row, column=1, sticky=tk.W)
@@ -334,6 +334,8 @@ class TremoloFilterGUI(tk.LabelFrame):
         self.input_waveform.set("<off>")
         self.input_rate = tk.DoubleVar()
         self.input_depth = tk.DoubleVar()
+        self.input_rate.set(5)
+        self.input_depth.set(80)
         row = 0
         tk.Label(self, text="waveform").grid(row=row, column=0)
         values = ["<off>", "sine", "triangle", "sawtooth", "square"]
@@ -370,8 +372,8 @@ class ArpeggioFilterGUI(tk.LabelFrame):
     def __init__(self, master, gui):
         super().__init__(master, text="keys: Chords / Arpeggio")
         self.gui = gui
-        self.input_enabled = tk.StringVar()
-        self.input_enabled.set("off")
+        self.input_mode = tk.StringVar()
+        self.input_mode.set("off")
         self.input_rate = tk.DoubleVar()    # duration of note triggers
         self.input_rate.set(0.2)
         self.input_ratio = tk.IntVar()   # how many % the note is on vs off
@@ -379,21 +381,25 @@ class ArpeggioFilterGUI(tk.LabelFrame):
         row = 0
         tk.Label(self, text="Major Chords Arp").grid(row=row, column=0, columnspan=2)
         row += 1
-        tk.Radiobutton(self, variable=self.input_enabled, value="off", text="off", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="off", text="off", pady=0, command=self.mode_off_selected).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_enabled, value="chords3", text="Chords Maj. 3", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="chords3", text="Chords Maj. 3", pady=0).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_enabled, value="chords4", text="Chords Maj. 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="chords4", text="Chords Maj. 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_enabled, value="arpeggio3", text="Arpeggio 3", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio3", text="Arpeggio 3", pady=0).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_enabled, value="arpeggio4", text="Arpeggio 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio4", text="Arpeggio 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
         row += 1
         tk.Label(self, text="rate").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.02, to=.5, resolution=.01, width=10, length=100).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="ratio").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_ratio, from_=1, to=100, resolution=1, width=10, length=100).grid(row=row, column=1)
+
+    def mode_off_selected(self):
+        self.gui.arpeggio_playing = False   # stop any arpeggio that may be running
+        self.gui.statusbar["text"] = "ok"
 
 
 class EnvelopeFilterGUI(tk.LabelFrame):
@@ -539,9 +545,9 @@ class SynthGUI(tk.Frame):
     def create_osc(self, from_gui, all_oscillators, is_audio=False):
         def create_unfiltered_osc():
             def create_chord_osc(clazz, **arguments):
-                if is_audio and self.arp_filter.input_enabled.get().startswith("chords"):
+                if is_audio and self.arp_filter.input_mode.get().startswith("chords"):
                     chord_keys = major_chord_keys(self.current_note[0], self.current_note[1])
-                    if self.arp_filter.input_enabled.get() == "chords3":
+                    if self.arp_filter.input_mode.get() == "chords3":
                         chord_keys = list(chord_keys)[:-1]
                     a4freq = self.a4_choice.get()
                     chord_freqs = [note_freq(note, octave, a4freq) for note, octave in chord_keys]
@@ -723,12 +729,12 @@ class SynthGUI(tk.Frame):
                 self.arpeggio_playing = False
             return
         a4freq = self.a4_choice.get()
-        if self.arp_filter.input_enabled.get().startswith("arp"):
+        if self.arp_filter.input_mode.get().startswith("arp"):
             if released:
                 self._pressed([0,1,2], released=True)
                 return
             chord_keys = major_chord_keys(note, octave)
-            if self.arp_filter.input_enabled.get() == "arpeggio3":
+            if self.arp_filter.input_mode.get() == "arpeggio3":
                 chord_keys = list(chord_keys)[:-1]
             chord_freqs = [note_freq(note, octave, a4freq) for note, octave in chord_keys]
             self.statusbar["text"]="arpeggio: "+" ".join(note for note, octave in chord_keys)
