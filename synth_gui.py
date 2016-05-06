@@ -1,13 +1,20 @@
 """
 GUI For the synthesizer components, including a piano keyboard.
+Implements a set of LFOs with all of their parameters,
+a set of ADSR envelope filters,
+and a few other output filters such as tremolo and echo.
+You can play simple notes, chords, or let an arpeggiator run the notes.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
 import time
 import platform
+import collections
 import tkinter as tk
+from tkinter.filedialog import askopenfile, asksaveasfile
 from threading import Semaphore
+from configparser import ConfigParser
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
 from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter
 from synthesizer.synth import major_chord_keys
@@ -498,7 +505,6 @@ class SynthGUI(tk.Frame):
         f.pack(side=tk.LEFT, anchor=tk.N)
         self.echo_filter.pack(side=tk.LEFT, anchor=tk.N)
         misc_frame = tk.Frame(filter_frame, padx=10)
-        tk.Button(misc_frame, text="Add Oscillator", command=self.add_osc_to_gui).pack()
         tk.Label(misc_frame, text="To Speaker:").pack(pady=(5, 0))
         self.to_speaker_lb = tk.Listbox(misc_frame, width=8, height=5, selectmode=tk.MULTIPLE, exportselection=0)
         self.to_speaker_lb.pack()
@@ -508,14 +514,14 @@ class SynthGUI(tk.Frame):
         tk.Radiobutton(lf, variable=self.a4_choice, value=440, text="440 Hz", pady=0).pack()
         tk.Radiobutton(lf, variable=self.a4_choice, value=432, text="432 Hz", pady=0).pack()
         lf.pack(pady=(4,0))
-        self.add_osc_to_gui()
-        self.add_osc_to_gui()
-        self.add_osc_to_gui()
-        self.add_osc_to_gui()
-        self.to_speaker_lb.select_set(3)
+        tk.Button(misc_frame, text="Load preset", command=self.load_preset).pack()
+        tk.Button(misc_frame, text="Save presset", command=self.save_preset).pack()
+        for _ in range(5):
+            self.add_osc_to_gui()
+        self.to_speaker_lb.select_set(4)
         self.osc_frame.pack(side=tk.TOP, padx=10)
         filter_frame.pack(side=tk.TOP)
-        misc_frame.pack(side=tk.RIGHT)
+        misc_frame.pack(side=tk.RIGHT,anchor=tk.N)
         self.piano_frame.pack(side=tk.TOP, padx=10, pady=10)
         self.statusbar = tk.Label(self, text="<status>", relief=tk.RIDGE)
         self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
@@ -813,6 +819,25 @@ class SynthGUI(tk.Frame):
         output_oscillator = self.tremolo_filter.filter(output_oscillator)
         output_oscillator = self.echo_filter.filter(output_oscillator)
         return output_oscillator
+
+    def load_preset(self):
+        print("LOAD") # @todo
+        file = askopenfile(filetypes=[("Synth presets", "*.ini")])
+        print(file)
+        cf = ConfigParser()
+        cf.read_file(file)
+        print(cf)
+        file.close()
+
+    def save_preset(self):
+        print("SAVE") # @todo
+        file = asksaveasfile(filetypes=[("Synth presets", "*.ini")])
+        cf = ConfigParser(dict_type=collections.OrderedDict)
+        cf["DERP"] = {
+            "foo": 42
+        }
+        cf.write(file)
+        file.close()
 
 
 if __name__ == "__main__":
