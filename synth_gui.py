@@ -515,7 +515,7 @@ class SynthGUI(tk.Frame):
         tk.Radiobutton(lf, variable=self.a4_choice, value=432, text="432 Hz", pady=0).pack()
         lf.pack(pady=(4,0))
         tk.Button(misc_frame, text="Load preset", command=self.load_preset).pack()
-        tk.Button(misc_frame, text="Save presset", command=self.save_preset).pack()
+        tk.Button(misc_frame, text="Save preset", command=self.save_preset).pack()
         for _ in range(5):
             self.add_osc_to_gui()
         self.to_speaker_lb.select_set(4)
@@ -821,21 +821,82 @@ class SynthGUI(tk.Frame):
         return output_oscillator
 
     def load_preset(self):
-        print("LOAD") # @todo
         file = askopenfile(filetypes=[("Synth presets", "*.ini")])
-        print(file)
         cf = ConfigParser()
         cf.read_file(file)
-        print(cf)
         file.close()
+        # general settings
+        self.samplerate_choice.set(cf["settings"]["samplerate"])
+        self.rendering_choice.set(cf["settings"]["rendering"])
+        self.a4_choice.set(cf["settings"]["a4tuning"])
+        self.to_speaker_lb.selection_clear(0, tk.END)
+        to_speaker = cf["settings"]["to_speaker"]
+        to_speaker = tuple(to_speaker.split(','))
+        for o in to_speaker:
+            self.to_speaker_lb.selection_set(int(o)-1)
+        for section in cf.sections():
+            if section.startswith("oscillator"):
+                num = int(section.split('_')[1])-1
+                osc = self.oscillators[num]
+                for name, value in cf[section].items():
+                    getattr(osc, name).set(value)
+                osc.waveform_selected()
+            elif section.startswith("envelope"):
+                num = int(section.split('_')[1])-1
+                env = self.envelope_filters[num]
+                for name, value in cf[section].items():
+                    getattr(env, name).set(value)
+            elif section == "arpeggio":
+                for name, value in cf[section].items():
+                    getattr(self.arp_filter, name).set(value)
+            elif section == "tremolo":
+                for name, value in cf[section].items():
+                    getattr(self.tremolo_filter, name).set(value)
+            elif section == "echo":
+                for name, value in cf[section].items():
+                    getattr(self.echo_filter, name).set(value)
+        self.statusbar["text"] = "preset loaded."
+
 
     def save_preset(self):
-        print("SAVE") # @todo
         file = asksaveasfile(filetypes=[("Synth presets", "*.ini")])
         cf = ConfigParser(dict_type=collections.OrderedDict)
-        cf["DERP"] = {
-            "foo": 42
-        }
+        # general settings
+        cf.add_section("settings")
+        cf["settings"]["samplerate"] = str(self.samplerate_choice.get())
+        cf["settings"]["rendering"] = self.rendering_choice.get()
+        cf["settings"]["to_speaker"] = ",".join(str(v+1) for v in self.to_speaker_lb.curselection())
+        cf["settings"]["a4tuning"] = str(self.a4_choice.get())
+        # oscillators
+        for num, osc in enumerate(self.oscillators, 1):
+            section = "oscillator_"+str(num)
+            cf.add_section(section)
+            for name, var in vars(osc).items():
+                if name.startswith("input_"):
+                    cf[section][name] = str(var.get())
+        # adsr envelopes
+        for num, filter in enumerate(self.envelope_filters, 1):
+            section = "envelope_"+str(num)
+            cf.add_section(section)
+            for name, var in vars(filter).items():
+                if name.startswith("input_"):
+                    cf[section][name] = str(var.get())
+        # echo
+        cf.add_section("echo")
+        for name, var in vars(self.echo_filter).items():
+            if name.startswith("input_"):
+                cf["echo"][name] = str(var.get())
+        # tremolo
+        cf.add_section("tremolo")
+        for name, var in vars(self.tremolo_filter).items():
+            if name.startswith("input_"):
+                cf["tremolo"][name] = str(var.get())
+        # arpeggio
+        cf.add_section("arpeggio")
+        for name, var in vars(self.arp_filter).items():
+            if name.startswith("input_"):
+                cf["arpeggio"][name] = str(var.get())
+
         cf.write(file)
         file.close()
 
