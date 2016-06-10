@@ -1,0 +1,7 @@
+[MESSAGES CONTROL]
+disable=missing-docstring
+
+[BASIC]
+include-naming-hint=yes
+max-line-length=120
+good-names=f,fm,pw,i,j,k,x,y,z,t,ex,bar,_

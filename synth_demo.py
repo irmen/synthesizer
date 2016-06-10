@@ -8,7 +8,7 @@ from synthesizer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter,
 
 
 # some note frequencies for octaves 1 to 7
-notes=[
+notes = [
     None,
     OrderedDict((note, key_freq(4+i)) for i, note in enumerate(octave_notes)),
     OrderedDict((note, key_freq(16+i)) for i, note in enumerate(octave_notes)),
@@ -336,9 +336,11 @@ def stereo_pan():
 def osc_bench():
     rate = 44100
     duration = 2.0
+
     def get_values(osc):
         oscv = iter(osc)
         values = [next(oscv) for _ in range(int(rate*duration))]
+
     fm = FastSine(220)
     print("GENERATING {:g} SECONDS SAMPLE DATA {:d} HZ USING LFO.".format(duration, rate))
     print("  WAVEFORM: with-FM / no-FM / optimized")
@@ -434,12 +436,14 @@ def osc_bench():
 def vibrato():
     synth = WaveSynth()
     duration = 3
+
     def make_sample(freq):
         fmfm = Linear(0, 0.002, max_value=99999)
         fm = Sine(0.05, amplitude=0.5, fm_lfo=fmfm)
         s1 = synth.sawtooth(freq, duration, amplitude=0.6, fm_lfo=fm)
         s1.envelope(0.01, 0.1, 0.6, 2)
         return s1
+
     with Output(synth.samplerate, nchannels=1) as out:
         for f in [220, 330, 440]:
             sample = make_sample(f)

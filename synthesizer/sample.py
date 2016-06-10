@@ -112,7 +112,7 @@ class Sample:
                     raise TypeError("the sample values must be integer")
         else:
             if any(array_or_list):
-                if not type(array_or_list[0]) is int:
+                if type(array_or_list[0]) is not int:
                     raise TypeError("the sample values must be integer")
         samplewidth = array_or_list.itemsize
         assert 2 <= samplewidth <= 4
@@ -196,9 +196,9 @@ class Sample:
         return Sample.get_array(self.samplewidth, self.__frames)
 
     @staticmethod
-    def get_array(samplewidth, initializer=[]):
+    def get_array(samplewidth, initializer=None):
         """Returns an array with the correct type code, optionally initialized with values."""
-        return array.array(samplewidths_to_arraycode[samplewidth], initializer)
+        return array.array(samplewidths_to_arraycode[samplewidth], initializer or [])
 
     def copy(self):
         """Returns a copy of the sample (unlocked)."""
@@ -741,8 +741,8 @@ class Output:
             super().__init__(name="soundoutputter", daemon=True)
             self.audio = pyaudio.PyAudio()
             self.stream = self.audio.open(
-                    format=self.pyaudio_format_from_width(samplewidth),
-                    channels=nchannels, rate=samplerate, output=True)
+                format=self.pyaudio_format_from_width(samplewidth),
+                channels=nchannels, rate=samplerate, output=True)
             self.queue = queue.Queue(maxsize=queuesize)
 
         def pyaudio_format_from_width(self, width):
