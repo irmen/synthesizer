@@ -17,6 +17,7 @@ import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthesizer.sample import Sample, Output, LevelMeter
+from synthesizer.tools import WavFileStream
 
 
 def play_console(filename_or_stream):
@@ -42,7 +43,7 @@ def play_console(filename_or_stream):
                 db_level = int(bar_width-bar_width*db_mixed/lowest_level)
                 peak_indicator = int(bar_width-bar_width*peak_mixed/lowest_level)
                 db_meter = ("#"*db_level).ljust(bar_width)
-                db_meter = db_meter[:peak_indicator]+'!'+db_meter[peak_indicator:]
+                db_meter = db_meter[:peak_indicator]+':'+db_meter[peak_indicator:]
                 print("{:d} dB |{:s}| 0 dB".format(int(lowest_level), db_meter), end="\r")
     print("\ndone")
     input("Enter to exit:")
@@ -128,19 +129,8 @@ def play_gui(file_or_stream):
     app.mainloop()
 
 
-def convert_to_wav(filename):
-    print("Using ffmpeg to convert input file to .wav stream...")
-    import subprocess
-    command = ["ffmpeg", "-hide_banner", "-loglevel", "panic", "-i", filename, "-f", "wav", "-"]
-    converter = subprocess.Popen(command, stdout=subprocess.PIPE)
-    return converter.stdout
-
-
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit("give audio file to play as an argument.")
-    filename = sys.argv[1]
-    if not filename.endswith(".wav"):
-        play_gui(convert_to_wav(filename))
-    else:
-        play_gui(filename)
+    with WavFileStream(sys.argv[1]) as stream:
+        play_console(stream)
