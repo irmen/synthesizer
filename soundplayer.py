@@ -17,7 +17,7 @@ import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthesizer.sample import Sample, Output, LevelMeter
-from synthesizer.tools import WavFileStream
+from synthesizer.tools import AudiofileToWavStream
 
 
 def play_console(filename_or_stream):
@@ -132,5 +132,6 @@ def play_gui(file_or_stream):
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit("give audio file to play as an argument.")
-    with WavFileStream(sys.argv[1]) as stream:
-        play_console(stream)
+    # make sure we read the audio as 16 bits 44.1 khz wav pcm, so Python's wave module can process
+    with AudiofileToWavStream(sys.argv[1], channels=2, samplerate=44100, sampleformat="16") as stream:
+        play_gui(stream)
