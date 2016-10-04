@@ -179,6 +179,31 @@ class EndlessWavReader(wave.Wave_read):
         self.source.close()
 
 
+class SampleStream:
+    """
+    Turns a wav reader that produces frames, into a stream of Sample objects.
+    """
+    def __init__(self, wav_reader, buffer_size):
+        self.source = wav_reader
+        self.samplewidth = wav_reader.getsampwidth()
+        self.samplerate = wav_reader.getframerate()
+        self.nchannels = wav_reader.getnchannels()
+        self.buffer_size = buffer_size
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        while True:
+            frames = self.source.readframes(self.buffer_size)
+            if not frames:
+                break
+            return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
+
+    def close(self):
+        self.source.close()
+
+
 class StreamMixer:
     """
     Mixes one or more wav audio streams into one output.
@@ -186,10 +211,10 @@ class StreamMixer:
     """
     buffer_size = 4096   # number of frames in a buffer
     def __init__(self, streams, endless=False, samplewidth=Sample.norm_samplewidth, samplerate=Sample.norm_samplerate, nchannels=Sample.norm_nchannels):
-        self.wave_streams = []
+        self.sample_streams = []
         for stream in streams:
             self.add_stream(stream, endless)
-        if len(self.wave_streams) < 1:
+        if len(self.sample_streams) < 1:
             raise ValueError("must have at least one stream")
         # assume all wave streams are the same parameters
         self.samplewidth = samplewidth
@@ -201,11 +226,11 @@ class StreamMixer:
         ws = wave.open(stream, 'r')
         if endless:
             ws = EndlessWavReader(ws)
-        self.wave_streams.append(ws)
+        self.sample_streams.append(SampleStream(ws, self.buffer_size))
 
     def remove_stream(self, stream):
         stream.close()
-        self.wave_streams.remove(stream)
+        self.sample_streams.remove(stream)
 
     def add_sample(self, sample):
         assert sample.samplewidth == self.samplewidth
@@ -223,27 +248,21 @@ class StreamMixer:
         self.close()
 
     def close(self):
-        for stream in self.wave_streams:
+        for stream in self.sample_streams:
             stream.close()
-        del self.wave_streams
+        del self.sample_streams
 
     def __iter__(self):
         """
         Yields tuple(timestamp, Sample) that represent the mixed audio streams.
         """
         while True:
-            stream_frames = {ws: ws.readframes(self.buffer_size) for ws in self.wave_streams}
-            mixed_sample = None
-            for ws, frames in stream_frames.items():
-                if len(frames)==0:
-                    self.remove_stream(ws)
+            mixed_sample = Sample.from_raw_frames(b"", self.samplewidth, self.samplerate, self.nchannels)
+            for sample_stream in self.sample_streams:
+                sample = next(sample_stream)
+                if sample:
+                    mixed_sample.mix(sample)
                 else:
-                    sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
-                    if mixed_sample:
-                        mixed_sample.mix(sample)
-                    else:
-                        mixed_sample = sample
-            if not mixed_sample:
-                break
+                    self.remove_stream(sample_stream)
             self.timestamp += mixed_sample.duration
             yield self.timestamp, mixed_sample
