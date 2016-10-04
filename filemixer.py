@@ -7,12 +7,12 @@ from synthesizer.sample import Output, Sample, LevelMeter
 def main(args):
     if len(args) < 1:
         raise SystemExit("Mixes one or more audio files. Arguments: inputfile...")
-    wav_streams = [AudiofileToWavStream(filename).convert() for filename in args]
+    wav_streams = [AudiofileToWavStream(filename) for filename in args]
     with StreamMixer(wav_streams, endless=True) as mixer:
         mixed_samples = iter(mixer)
         with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels) as output:
             levelmeter = LevelMeter(rms_mode=False, lowest=-50)
-            temp_stream = AudiofileToWavStream("samples/909_crash.wav").convert()
+            temp_stream = AudiofileToWavStream("samples/909_crash.wav")
             for timestamp, sample in mixed_samples:
                 levelmeter.update(sample)
                 output.play_sample(sample)

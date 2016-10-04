@@ -225,11 +225,6 @@ class Sample:
         """Calculate the raw frame bytes index for the sample at the given timestamp."""
         return self.nchannels*self.samplewidth*int(self.samplerate*seconds)
 
-    @staticmethod
-    def get_frame_idx(seconds, samplewidth=norm_samplewidth, samplerate=norm_samplerate, numchannels=norm_nchannels):
-        """Calculate the raw frame bytes index for a sample with the given parameters."""
-        return numchannels*samplewidth*int(samplerate*seconds)
-
     def load_wav(self, file_or_stream):
         """Loads sample data from the wav file. You can use a filename or a stream object."""
         assert not self.__locked

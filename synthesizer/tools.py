@@ -14,18 +14,21 @@ from functools import namedtuple
 from .sample import Sample
 
 
-__all__ = ["AudiofileToWavStream", "EndlessWavStream", "StreamMixer"]
+__all__ = ["AudiofileToWavStream", "EndlessStream", "EndlessWavReader", "StreamMixer"]
 
 
 AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat"])
 
 
-class AudiofileToWavStream:
+class AudiofileToWavStream(io.RawIOBase):
     """
     Streams WAV PCM audio data from the given sound source file.
     If the file is not already a .wav, and/or you want to resample it,
     ffmpeg/ffprobe are used to convert it in the background.
     For HQ resampling, ffmpeg has to be built with libsoxr support.
+
+    Input: audio file of any supported format
+    Output: stream of audio data in WAV PCM format
     """
     ffmpeg_executable = "ffmpeg"
     ffprobe_executable = "ffprobe"
@@ -75,6 +78,7 @@ class AudiofileToWavStream:
                         "ulaw": "pcm_mulaw"
                     }[sampleformat]
                 self.sampleformat_options = ["-acodec", codec]
+        self.start_stream()
 
     def probe_format(self):
         command = [self.ffprobe_executable, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-i", self.filename]
@@ -94,7 +98,7 @@ class AudiofileToWavStream:
         fileformat = probe["format"]["format_name"]
         return AudioFormatProbe(samplerate, nchannels, sampleformat, fileformat)
 
-    def convert(self):
+    def start_stream(self):
         if not self.conversion_required:
             if self.outputfilename:
                 with open(self.filename, "rb") as source:
@@ -116,30 +120,43 @@ class AudiofileToWavStream:
             self.stream = converter.stdout
         return self.stream
 
-    def __enter__(self):
-        if self.outputfilename:
-            raise RuntimeError("convert to file cannot be used as a contextmanager")
-        return self.convert()
+    def read(self, bytes):
+        return self.stream.read(bytes)
 
-    def __exit__(self, *args):
+    def close(self):
         self.stream.close()
 
 
-class EndlessWavStream:
+class EndlessStream(io.RawIOBase):
     """
-    Stream of wav audio data that can be endless (silence until stopped)
-    Takes ownership of the source stream that is wrapped.
+    Turns source stream into an endles stream by adding zero bytes at the end util closed.
     """
-    def __init__(self, source, silence_frames):
+    def __init__(self, source):
         self.source = source
-        self.silence_frames = silence_frames
-        self.source_exhausted = False
 
-    def __enter__(self):
-        return self
+    def read(self, size):
+        data = self.source.read(size)
+        if data:
+            return data
+        return b"\0" * size
 
-    def __exit__(self, *args):
+    def close(self):
         self.source.close()
+
+
+class EndlessWavReader(wave.Wave_read):
+    """
+    Turns wav reader into endless wav reader by adding silence frames at the end until closed.
+    """
+    def __init__(self, wav_read):
+        self.source = wav_read
+        self._nchannels = wav_read._nchannels
+        self._nframes = wav_read._nframes
+        self._sampwidth = wav_read._sampwidth
+        self._framerate = wav_read._framerate
+        self._comptype = wav_read._comptype
+        self._compname = wav_read._compname
+        self.source_exhausted = False
 
     def readframes(self, nframes):
         if not self.source_exhausted:
@@ -147,7 +164,16 @@ class EndlessWavStream:
             if frames:
                 return frames
             self.source_exhausted = True
-        return self.silence_frames
+        return b"\0"*self._nchannels*self._sampwidth*nframes  # silence frames
+
+    def rewind(self):
+        raise IOError("cannot rewind an infinite wav")
+
+    def getnframes(self):
+        raise IOError("cannot get file size of infinite wav")
+
+    def setpos(self, pos):
+        raise IOError("cannot seek in infinite wav")
 
     def close(self):
         self.source.close()
@@ -159,30 +185,27 @@ class StreamMixer:
     Takes ownership of the source streams that are being mixed, and will close them for you as needed.
     """
     buffer_size = 4096   # number of frames in a buffer
-    def __init__(self, streams, endless=False):
-        self.wave_streams = {}   # wavestream -> source stream
+    def __init__(self, streams, endless=False, samplewidth=Sample.norm_samplewidth, samplerate=Sample.norm_samplerate, nchannels=Sample.norm_nchannels):
+        self.wave_streams = []
         for stream in streams:
-            self.add_stream(stream)
+            self.add_stream(stream, endless)
         if len(self.wave_streams) < 1:
             raise ValueError("must have at least one stream")
         # assume all wave streams are the same parameters
-        ws = list(self.wave_streams)[0]
-        self.samplewidth = ws.getsampwidth()
-        self.samplerate = ws.getframerate()
-        self.nchannels = ws.getnchannels()
+        self.samplewidth = samplewidth
+        self.samplerate = samplerate
+        self.nchannels = nchannels
         self.timestamp = 0.0
-        if endless:
-            self.endless()
 
-    def add_stream(self, stream):
-        wave_stream = wave.open(stream, 'r')
-        self.wave_streams[wave_stream] = stream
-        return stream
+    def add_stream(self, stream, endless=False):
+        ws = wave.open(stream, 'r')
+        if endless:
+            ws = EndlessWavReader(ws)
+        self.wave_streams.append(ws)
 
     def remove_stream(self, stream):
         stream.close()
-        original_stream = self.wave_streams.pop(stream)
-        original_stream.close()
+        self.wave_streams.remove(stream)
 
     def add_sample(self, sample):
         assert sample.samplewidth == self.samplewidth
@@ -199,20 +222,15 @@ class StreamMixer:
     def __exit__(self, *args):
         self.close()
 
-    def endless(self):
-        """Activate endless streams. This mode cannot be undone."""
-        silence_frames = b"\0"*Sample.get_frame_idx(self.buffer_size/self.samplerate, self.samplewidth, self.samplerate, self.nchannels)
-        wrapped_streams = {}
-        for ws, original in self.wave_streams.items():
-            wrapped_streams[EndlessWavStream(ws, silence_frames)] = original
-        self.wave_streams = wrapped_streams
-
     def close(self):
-        for stream in list(self.wave_streams.keys()):
-            self.remove_stream(stream)
+        for stream in self.wave_streams:
+            stream.close()
         del self.wave_streams
 
     def __iter__(self):
+        """
+        Yields tuple(timestamp, Sample) that represent the mixed audio streams.
+        """
         while True:
             stream_frames = {ws: ws.readframes(self.buffer_size) for ws in self.wave_streams}
             mixed_sample = None

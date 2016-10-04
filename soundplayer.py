@@ -127,3 +127,4 @@ if __name__ == "__main__":
         raise SystemExit("give audio file to play as an argument.")
     with AudiofileToWavStream(sys.argv[1]) as stream:
         play_gui(stream)
+    print("Done.")
