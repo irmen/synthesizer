@@ -125,6 +125,5 @@ def play_gui(file_or_stream):
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit("give audio file to play as an argument.")
-    # make sure we read the audio as 16 bits 44.1 khz wav pcm, so Python's wave module can process
-    with AudiofileToWavStream(sys.argv[1], channels=2, samplerate=44100, sampleformat="16") as stream:
-        play_console(stream)
+    with AudiofileToWavStream(sys.argv[1]) as stream:
+        play_gui(stream)

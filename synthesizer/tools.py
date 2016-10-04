@@ -10,10 +10,14 @@ import json
 import wave
 import os
 import io
+from functools import namedtuple
 from .sample import Sample
 
 
 __all__ = ["AudiofileToWavStream", "EndlessWavStream", "StreamMixer"]
+
+
+AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat"])
 
 
 class AudiofileToWavStream:
@@ -26,7 +30,8 @@ class AudiofileToWavStream:
     ffmpeg_executable = "ffmpeg"
     ffprobe_executable = "ffprobe"
 
-    def __init__(self, filename, outputfilename=None, samplerate=None, channels=None, sampleformat=None, hqresample=True):
+    def __init__(self, filename, outputfilename=None, samplerate=Sample.norm_samplerate,
+                 channels=Sample.norm_nchannels, sampleformat=str(8*Sample.norm_samplewidth), hqresample=True):
         self.filename = filename
         if not os.path.isfile(filename):
             raise FileNotFoundError(filename)
@@ -39,9 +44,10 @@ class AudiofileToWavStream:
         if self.ffprobe_executable:
             try:
                 # probe the existing file format, to see if we can avoid needless conversion
-                probe_samplerate, probe_channels, probe_sampleformat = self.probe_format()
-                self.conversion_required = probe_samplerate!=samplerate or probe_channels!=channels or probe_sampleformat!=sampleformat
-            except (subprocess.CalledProcessError, IOError, OSError) as x:
+                probe = self.probe_format()
+                self.conversion_required = probe.rate!=samplerate or probe.channels!=channels \
+                                           or probe.sampformat!=sampleformat or probe.fileformat!="wav"
+            except (subprocess.CalledProcessError, IOError, OSError):
                 pass
         if self.conversion_required:
             if samplerate:
@@ -82,7 +88,8 @@ class AudiofileToWavStream:
             "s32": "32",
             "fltp": "float",
             }.get(stream["sample_fmt"], "<unknown>")
-        return samplerate, nchannels, sampleformat
+        fileformat = probe["format"]["format_name"]
+        return AudioFormatProbe(samplerate, nchannels, sampleformat, fileformat)
 
     def convert(self):
         if not self.conversion_required:
@@ -152,7 +159,7 @@ class StreamMixer:
     def __init__(self, streams, endless=False):
         self.wave_streams = {}   # wavestream -> source stream
         for stream in streams:
-            self.add_stream(stream, False)
+            self.add_stream(stream)
         if len(self.wave_streams) < 1:
             raise ValueError("must have at least one stream")
         # assume all wave streams are the same parameters
@@ -160,20 +167,16 @@ class StreamMixer:
         self.samplewidth = ws.getsampwidth()
         self.samplerate = ws.getframerate()
         self.nchannels = ws.getnchannels()
-        self.temporary_streams = set()
         self.timestamp = 0.0
         if endless:
             self.endless()
 
-    def add_stream(self, stream, close_when_done=True):
+    def add_stream(self, stream):
         wave_stream = wave.open(stream, 'r')
         self.wave_streams[wave_stream] = stream
-        if close_when_done:
-            self.temporary_streams.add(wave_stream)
         return stream
 
     def remove_stream(self, stream):
-        self.temporary_streams.remove(stream)
         stream.close()
         original_stream = self.wave_streams.pop(stream)
         original_stream.close()
@@ -185,7 +188,7 @@ class StreamMixer:
         stream = io.BytesIO()
         sample.write_wav(stream)
         stream.seek(0, io.SEEK_SET)
-        self.add_stream(stream, True)
+        self.add_stream(stream)
 
     def __enter__(self):
         return self
@@ -202,18 +205,16 @@ class StreamMixer:
         self.wave_streams = wrapped_streams
 
     def close(self):
-        for stream, original_stream in self.wave_streams.items():
-            stream.close()
-            original_stream.close()
+        for stream in list(self.wave_streams.keys()):
+            self.remove_stream(stream)
         del self.wave_streams
-        del self.temporary_streams
 
     def __iter__(self):
         while True:
             stream_frames = {ws: ws.readframes(self.buffer_size) for ws in self.wave_streams}
             mixed_sample = None
             for ws, frames in stream_frames.items():
-                if len(frames)==0 and ws in self.temporary_streams:
+                if len(frames)==0:
                     self.remove_stream(ws)
                 else:
                     sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
