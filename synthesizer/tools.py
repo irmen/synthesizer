@@ -54,6 +54,9 @@ class AudiofileToWavStream:
                 samplerate = int(samplerate)
                 assert 2000 <= samplerate <= 200000
                 if hqresample:
+                    buildconf = subprocess.check_output([self.ffmpeg_executable, "-v", "error", "-buildconf"]).decode()
+                    if "--enable-libsoxr" not in buildconf:
+                        raise RuntimeError("ffmpeg isn't compiled with libsoxr, so hq resampling is not supported")
                     self.resample_options = ["-af", "aresample=resampler=soxr", "-ar", str(samplerate)]
                 else:
                     self.resample_options = ["-ar", str(samplerate)]
