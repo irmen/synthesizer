@@ -907,7 +907,7 @@ class LevelMeter:
         self.level_left = self.level_right = 0.0
         self._time = 0.0
 
-    def process(self, sample):
+    def update(self, sample):
         """
         Process a sample and calculate new levels (Left/Right) and new peak levels.
         This works best if you use short sample fragments (say < 0.1 seconds).
@@ -935,3 +935,16 @@ class LevelMeter:
         self.level_right = right
         self._time = time
         return left, self.peak_left, right, self.peak_right
+
+    def print(self, bar_width=60):
+        """
+        Prints the current level meter to the console.
+        Left and right levels are joined into one master level.
+        """
+        db_mixed = (self.level_left+self.level_right)/2
+        peak_mixed = (self.peak_left+self.peak_right)/2
+        db_level = int(bar_width-bar_width*db_mixed/self._lowest)
+        peak_indicator = int(bar_width-bar_width*peak_mixed/self._lowest)
+        db_meter = ("#"*db_level).ljust(bar_width)
+        db_meter = db_meter[:peak_indicator]+':'+db_meter[peak_indicator:]
+        print(" {:d} dB |{:s}| 0 dB".format(int(self._lowest), db_meter), end="\r")

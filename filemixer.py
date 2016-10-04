@@ -1,13 +1,13 @@
 import sys
+import time
 from synthesizer.tools import AudiofileToWavStream, StreamMixer
-from synthesizer.sample import Output, Sample
+from synthesizer.sample import Output, Sample, LevelMeter
 
 
 def get_wav_stream(filename):
     stream = AudiofileToWavStream(filename, samplerate=Sample.norm_samplerate,
                                 channels=Sample.norm_nchannels,
                                 sampleformat=str(8*Sample.norm_samplewidth))
-    print(stream.filename)
     return stream.convert()
 
 
@@ -18,11 +18,18 @@ def main(args):
     with StreamMixer(wav_streams, endless=True) as mixer:
         mixed_samples = iter(mixer)
         with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels) as output:
+            levelmeter = LevelMeter(rms_mode=False, lowest=-50)
+            temp_stream = get_wav_stream("samples/909_crash.wav")
             for timestamp, sample in mixed_samples:
-                if 10.0 <= timestamp <= 10.1:
-                    stream = get_wav_stream("samples/909_crash.wav")
-                    mixer.add_stream(stream, close_when_done=True)
+                levelmeter.update(sample)
                 output.play_sample(sample)
+                time.sleep(sample.duration*0.4)
+                levelmeter.print(bar_width=60)
+                if 5.0 <= timestamp <= 5.1:
+                    mixer.add_stream(temp_stream)
+                if 10.0 <= timestamp <= 10.1:
+                    sample = Sample("samples/909_crash.wav").normalize()
+                    mixer.add_sample(sample)
     print("done.")
 
 

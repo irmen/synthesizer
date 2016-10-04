@@ -8,6 +8,8 @@ import subprocess
 import shutil
 import json
 import wave
+import os
+import io
 from .sample import Sample
 
 
@@ -19,12 +21,15 @@ class AudiofileToWavStream:
     Streams WAV PCM audio data from the given sound source file.
     If the file is not already a .wav, and/or you want to resample it,
     ffmpeg/ffprobe are used to convert it in the background.
+    For HQ resampling, ffmpeg has to be built with libsoxr support.
     """
     ffmpeg_executable = "ffmpeg"
     ffprobe_executable = "ffprobe"
 
     def __init__(self, filename, outputfilename=None, samplerate=None, channels=None, sampleformat=None, hqresample=True):
         self.filename = filename
+        if not os.path.isfile(filename):
+            raise FileNotFoundError(filename)
         self.outputfilename = outputfilename
         self.stream = None
         self.resample_options = []
@@ -88,7 +93,7 @@ class AudiofileToWavStream:
                 return
             self.stream = open(self.filename, "rb")
         else:
-            command = [self.ffmpeg_executable, "-v", "error", "-hide_banner", "-loglevel", "panic", "-i", self.filename, "-f", "wav"]
+            command = [self.ffmpeg_executable, "-v", "error", "-hide_banner", "-loglevel", "error", "-i", self.filename, "-f", "wav"]
             command.extend(self.resample_options)
             command.extend(self.downmix_options)
             command.extend(self.sampleformat_options)
@@ -147,7 +152,7 @@ class StreamMixer:
     def __init__(self, streams, endless=False):
         self.wave_streams = {}   # wavestream -> source stream
         for stream in streams:
-            self.add_stream(stream)
+            self.add_stream(stream, False)
         if len(self.wave_streams) < 1:
             raise ValueError("must have at least one stream")
         # assume all wave streams are the same parameters
@@ -160,7 +165,7 @@ class StreamMixer:
         if endless:
             self.endless()
 
-    def add_stream(self, stream, close_when_done=False):
+    def add_stream(self, stream, close_when_done=True):
         wave_stream = wave.open(stream, 'r')
         self.wave_streams[wave_stream] = stream
         if close_when_done:
@@ -172,6 +177,15 @@ class StreamMixer:
         stream.close()
         original_stream = self.wave_streams.pop(stream)
         original_stream.close()
+
+    def add_sample(self, sample):
+        assert sample.samplewidth == self.samplewidth
+        assert sample.samplerate == self.samplerate
+        assert sample.nchannels == self.nchannels
+        stream = io.BytesIO()
+        sample.write_wav(stream)
+        stream.seek(0, io.SEEK_SET)
+        self.add_stream(stream, True)
 
     def __enter__(self):
         return self

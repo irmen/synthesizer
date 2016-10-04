@@ -26,9 +26,8 @@ def play_console(filename_or_stream):
         samplerate = wav.getframerate()
         nchannels = wav.getnchannels()
         bar_width = 60
-        lowest_level = -50.0
         update_rate = 20   # lower this if you hear the sound crackle!
-        levelmeter = LevelMeter(rms_mode=False, lowest=lowest_level)
+        levelmeter = LevelMeter(rms_mode=False, lowest=-50.0)
         with Output(samplerate, samplewidth, nchannels, int(update_rate/4)) as out:
             while True:
                 frames = wav.readframes(samplerate//update_rate)
@@ -36,15 +35,9 @@ def play_console(filename_or_stream):
                     break
                 sample = Sample.from_raw_frames(frames, wav.getsampwidth(), wav.getframerate(), wav.getnchannels())
                 out.play_sample(sample, async=True)
-                time.sleep(sample.duration/3)   # print the peak meter more or less halfway during the sample
-                level_l, peak_l, level_r, peak_r = levelmeter.process(sample)
-                db_mixed = (level_l+level_r)/2
-                peak_mixed = (peak_l+peak_r)/2
-                db_level = int(bar_width-bar_width*db_mixed/lowest_level)
-                peak_indicator = int(bar_width-bar_width*peak_mixed/lowest_level)
-                db_meter = ("#"*db_level).ljust(bar_width)
-                db_meter = db_meter[:peak_indicator]+':'+db_meter[peak_indicator:]
-                print("{:d} dB |{:s}| 0 dB".format(int(lowest_level), db_meter), end="\r")
+                levelmeter.update(sample)
+                time.sleep(sample.duration*0.4)   # print the peak meter more or less halfway during the sample
+                levelmeter.print(bar_width)
     print("\ndone")
     input("Enter to exit:")
 
@@ -105,7 +98,7 @@ class LevelGUI(tk.Frame):
         sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
         self.audio_out.play_sample(sample, async=True)
         time.sleep(sample.duration/3)   # print the peak meter more or less halfway during the sample
-        left, peak_l, right, peak_r = self.levelmeter.process(sample)
+        left, peak_l, right, peak_r = self.levelmeter.update(sample)
         self.pbvar_left.set(left-self.lowest_level)
         self.pbvar_right.set(right-self.lowest_level)
         if left > -3:
@@ -134,4 +127,4 @@ if __name__ == "__main__":
         raise SystemExit("give audio file to play as an argument.")
     # make sure we read the audio as 16 bits 44.1 khz wav pcm, so Python's wave module can process
     with AudiofileToWavStream(sys.argv[1], channels=2, samplerate=44100, sampleformat="16") as stream:
-        play_gui(stream)
+        play_console(stream)
