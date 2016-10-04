@@ -194,14 +194,36 @@ class SampleStream:
         return self
 
     def __next__(self):
-        while True:
-            frames = self.source.readframes(self.buffer_size)
-            if not frames:
-                break
-            return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
+        frames = self.source.readframes(self.buffer_size)
+        if not frames:
+            return None
+        return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
 
     def close(self):
         self.source.close()
+
+
+class VolumeadjustedStream:
+    """
+    Sets the volume on Sample objects passing through.
+    """
+    def __init__(self, source, volume=1.0):
+        assert 0 <= volume <= 5.0
+        self.source = source
+        self.volume = volume
+
+    def close(self):
+        self.source.close()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        sample = next(self.source)
+        if sample:
+            sample.amplify(self.volume)
+        return sample
+
 
 
 class StreamMixer:
@@ -226,7 +248,9 @@ class StreamMixer:
         ws = wave.open(stream, 'r')
         if endless:
             ws = EndlessWavReader(ws)
-        self.sample_streams.append(SampleStream(ws, self.buffer_size))
+        ss = SampleStream(ws, self.buffer_size)
+        # ss = VolumeadjustedStream(ss, 1.0)
+        self.sample_streams.append(ss)
 
     def remove_stream(self, stream):
         stream.close()
