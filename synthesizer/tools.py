@@ -14,7 +14,7 @@ from functools import namedtuple
 from .sample import Sample
 
 
-__all__ = ["AudiofileToWavStream", "EndlessStream", "EndlessWavReader", "StreamMixer"]
+__all__ = ["AudiofileToWavStream", "EndlessWavReader", "StreamMixer", "VolumeFilter", "SampleStream"]
 
 
 AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat"])
@@ -127,61 +127,10 @@ class AudiofileToWavStream(io.RawIOBase):
         self.stream.close()
 
 
-class EndlessStream(io.RawIOBase):
-    """
-    Turns source stream into an endles stream by adding zero bytes at the end util closed.
-    """
-    def __init__(self, source):
-        self.source = source
-
-    def read(self, size):
-        data = self.source.read(size)
-        if data:
-            return data
-        return b"\0" * size
-
-    def close(self):
-        self.source.close()
-
-
-class EndlessWavReader(wave.Wave_read):
-    """
-    Turns wav reader into endless wav reader by adding silence frames at the end until closed.
-    """
-    def __init__(self, wav_read):
-        self.source = wav_read
-        self._nchannels = wav_read._nchannels
-        self._nframes = wav_read._nframes
-        self._sampwidth = wav_read._sampwidth
-        self._framerate = wav_read._framerate
-        self._comptype = wav_read._comptype
-        self._compname = wav_read._compname
-        self.source_exhausted = False
-
-    def readframes(self, nframes):
-        if not self.source_exhausted:
-            frames = self.source.readframes(nframes)
-            if frames:
-                return frames
-            self.source_exhausted = True
-        return b"\0"*self._nchannels*self._sampwidth*nframes  # silence frames
-
-    def rewind(self):
-        raise IOError("cannot rewind an infinite wav")
-
-    def getnframes(self):
-        raise IOError("cannot get file size of infinite wav")
-
-    def setpos(self, pos):
-        raise IOError("cannot seek in infinite wav")
-
-    def close(self):
-        self.source.close()
-
-
 class SampleStream:
     """
     Turns a wav reader that produces frames, into a stream of Sample objects.
+    You can add filters to the stream that process the Sample objects coming trough.
     """
     def __init__(self, wav_reader, buffer_size):
         self.source = wav_reader
@@ -189,41 +138,57 @@ class SampleStream:
         self.samplerate = wav_reader.getframerate()
         self.nchannels = wav_reader.getnchannels()
         self.buffer_size = buffer_size
+        self.filters = []
+        self.frames_filters = []
+
+    def add_frames_filter(self, filter):
+        filter.set_params(self.buffer_size, self.samplerate, self.samplewidth, self.nchannels)
+        self.frames_filters.append(filter)
+
+    def add_filter(self, filter):
+        filter.set_params(self.buffer_size, self.samplerate, self.samplewidth, self.nchannels)
+        self.filters.append(filter)
 
     def __iter__(self):
         return self
 
     def __next__(self):
         frames = self.source.readframes(self.buffer_size)
+        for filter in self.frames_filters:
+            frames = filter(frames)
         if not frames:
             return None
-        return Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
+        sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
+        for filter in self.filters:
+            sample = filter(sample)
+        return sample
 
     def close(self):
         self.source.close()
 
 
-class VolumeadjustedStream:
+class EndlessFramesFilter:
     """
-    Sets the volume on Sample objects passing through.
+    Turns a frame stream into an endless frame stream by adding silence frames at the end until closed.
     """
-    def __init__(self, source, volume=1.0):
-        assert 0 <= volume <= 5.0
-        self.source = source
+    def set_params(self, buffer_size, samplerate, samplewidth, nchannels):
+        self.silence_frame = b"\0" * nchannels * samplewidth * buffer_size
+
+    def __call__(self, frames):
+        return frames if frames else self.silence_frame
+
+
+class VolumeFilter:
+    def __init__(self, volume=1.0):
         self.volume = volume
 
-    def close(self):
-        self.source.close()
+    def set_params(self, buffer_size, samplerate, samplewidth, nchannels):
+        pass
 
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        sample = next(self.source)
+    def __call__(self, sample):
         if sample:
             sample.amplify(self.volume)
         return sample
-
 
 
 class StreamMixer:
@@ -233,23 +198,23 @@ class StreamMixer:
     """
     buffer_size = 4096   # number of frames in a buffer
     def __init__(self, streams, endless=False, samplewidth=Sample.norm_samplewidth, samplerate=Sample.norm_samplerate, nchannels=Sample.norm_nchannels):
-        self.sample_streams = []
-        for stream in streams:
-            self.add_stream(stream, endless)
-        if len(self.sample_streams) < 1:
-            raise ValueError("must have at least one stream")
         # assume all wave streams are the same parameters
         self.samplewidth = samplewidth
         self.samplerate = samplerate
         self.nchannels = nchannels
         self.timestamp = 0.0
+        self.sample_streams = []
+        for stream in streams:
+            self.add_stream(stream, endless)
+        if len(self.sample_streams) < 1:
+            raise ValueError("must have at least one stream")
 
     def add_stream(self, stream, endless=False):
         ws = wave.open(stream, 'r')
-        if endless:
-            ws = EndlessWavReader(ws)
         ss = SampleStream(ws, self.buffer_size)
-        # ss = VolumeadjustedStream(ss, 1.0)
+        if endless:
+            ss.add_frames_filter(EndlessFramesFilter())
+        # ss.add_filter(VolumeFilter(0.1))
         self.sample_streams.append(ss)
 
     def remove_stream(self, stream):
@@ -288,5 +253,5 @@ class StreamMixer:
                     mixed_sample.mix(sample)
                 else:
                     self.remove_stream(sample_stream)
-            self.timestamp += mixed_sample.duration
             yield self.timestamp, mixed_sample
+            self.timestamp += mixed_sample.duration
