@@ -5,7 +5,6 @@ import hashlib
 import urllib.parse
 import urllib.request
 import sqlite3
-import threading
 import os
 import tinytag
 import appdirs
@@ -16,27 +15,28 @@ __all__ = ["MusicFileDatabase", "Track"]
 
 
 class MusicFileDatabase:
-    def __init__(self, dbfile=None, scan_changes=True):
+    def __init__(self, dbfile=None, scan_changes=True, silent=False):
         if not dbfile:
             dblocation = appdirs.user_data_dir("PythonJukebox", "Razorvine")
             os.makedirs(dblocation, mode=0o700, exist_ok=True)
             dbfile = os.path.join(dblocation, "tracks.sqlite")
         dbfile = os.path.abspath(dbfile)
-        self.dblock = threading.Lock()
         self.dbfile = dbfile
         self.dbconn = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         self.dbconn.row_factory = sqlite3.Row   # make sure we can get results by column name
         self.dbconn.execute("PRAGMA foreign_keys=ON")
         try:
             self.dbconn.execute("SELECT COUNT(*) FROM tracks").fetchone()
-            print("Connected to database.")
-            print("Database file:", dbfile)
+            if not silent:
+                print("Connected to database.")
+                print("Database file:", dbfile)
             if scan_changes:
                 self.scan_changes()
         except sqlite3.OperationalError:
             # the table does not yet exist, create the schema
-            print("Creating new database.")
-            print("Database file:", dbfile)
+            if not silent:
+                print("Creating new database.")
+                print("Database file:", dbfile)
             self.dbconn.execute("""CREATE TABLE tracks
                 (
                     id integer PRIMARY KEY,
@@ -83,12 +83,28 @@ class MusicFileDatabase:
         if not where:
             raise ValueError("must supply at least one filter parameter")
         sql += "AND ".join(where)
-        sql += " ORDER BY title, artist"
+        sql += " ORDER BY artist, title"
         result = []
         for track in self.dbconn.execute(sql, params).fetchall():
             result.append(Track(track["id"], track["title"], track["artist"], track["album"], track["year"],
                                 track["genre"], track["duration"], track["modified"], track["location"]))
         return result
+
+    def num_tracks(self):
+        return self.dbconn.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
+
+    def get_track(self, track_id=None, hashcode=None):
+        if track_id:
+            track = self.dbconn.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
+        elif hashcode:
+            track = self.dbconn.execute("SELECT * FROM tracks WHERE hash=?", (hashcode,)).fetchone()
+        else:
+            raise ValueError("missing search parameter")
+        if track:
+            return Track(track["id"], track["title"], track["artist"], track["album"], track["year"],
+                         track["genre"], track["duration"], track["modified"], track["location"])
+        else:
+            raise LookupError("track not found")
 
     def update_path(self, path):
         """
@@ -97,6 +113,8 @@ class MusicFileDatabase:
         it will read the iTunes library index file instead and skips scanning all files.
         It will only add files that are not present already in the database.
         """
+        if not path:
+            raise ValueError("must give a path")
         path = os.path.abspath(os.path.normpath(path))
         if os.path.isfile(os.path.join(path, "iTunes Music Library.xml")) or os.path.isfile(os.path.join(path, "iTunes Library.xml")):
             self._add_itunes_library(path)
@@ -164,24 +182,23 @@ class MusicFileDatabase:
         print("Added {:d} new tracks.".format(num_new_songs))
 
     def add_tracks(self, tracks):
-        with self.dblock:
-            before = self.dbconn.execute("SELECT count(*) FROM tracks").fetchone()[0]
-            cursor = self.dbconn.cursor()
-            for t in tracks:
-                try:
-                    cursor.execute("INSERT INTO tracks(title, artist, album, year, genre, duration, modified, location, hash) VALUES (?,?,?,?,?,?,?,?,?)",
-                                   (t.title, t.artist, t.album, t.year, t.genre, t.duration, t.modified, t.location, t.hash))
-                except sqlite3.IntegrityError as x:
-                    if str(x) == "UNIQUE constraint failed: tracks.hash":
-                        # track already exists with this hash, but update its modification time
-                        cursor.execute("UPDATE tracks SET modified=?, year=9999 WHERE hash=?", (t.modified, t.hash))
-                    else:
-                        raise
-            after = self.dbconn.execute("SELECT count(*) FROM tracks").fetchone()[0]
-            cursor.close()
-            self.dbconn.commit()
-            amount_new = after-before
-            return amount_new
+        before = self.dbconn.execute("SELECT count(*) FROM tracks").fetchone()[0]
+        cursor = self.dbconn.cursor()
+        for t in tracks:
+            try:
+                cursor.execute("INSERT INTO tracks(title, artist, album, year, genre, duration, modified, location, hash) VALUES (?,?,?,?,?,?,?,?,?)",
+                               (t.title, t.artist, t.album, t.year, t.genre, t.duration, t.modified, t.location, t.hash))
+            except sqlite3.IntegrityError as x:
+                if str(x) == "UNIQUE constraint failed: tracks.hash":
+                    # track already exists with this hash, but update its modification time
+                    cursor.execute("UPDATE tracks SET modified=?, year=9999 WHERE hash=?", (t.modified, t.hash))
+                else:
+                    raise
+        after = self.dbconn.execute("SELECT count(*) FROM tracks").fetchone()[0]
+        cursor.close()
+        self.dbconn.commit()
+        amount_new = after-before
+        return amount_new
 
     def get_tag(self, filename):
         try:
