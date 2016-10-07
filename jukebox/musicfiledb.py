@@ -1,5 +1,3 @@
-from __future__ import print_function, division
-
 import datetime
 import plistlib
 import unicodedata
@@ -7,26 +5,38 @@ import hashlib
 import urllib.parse
 import urllib.request
 import sqlite3
-from tqdm import tqdm
-import tinytag
-import os
 import threading
+import os
+import tinytag
+import appdirs
+from tqdm import tqdm
 
 
-class MusicFileServer:
-    def __init__(self, dbfile, scan_changes=True):
+__all__ = ["MusicFileDatabase", "Track"]
+
+
+class MusicFileDatabase:
+    def __init__(self, dbfile=None, scan_changes=True):
+        if not dbfile:
+            dblocation = appdirs.user_data_dir("PythonJukebox", "Razorvine")
+            os.makedirs(dblocation, mode=0o700, exist_ok=True)
+            dbfile = os.path.join(dblocation, "tracks.sqlite")
+        dbfile = os.path.abspath(dbfile)
         self.dblock = threading.Lock()
         self.dbfile = dbfile
-        self.dbconn = sqlite3.connect(dbfile)
+        self.dbconn = sqlite3.connect(dbfile, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+        self.dbconn.row_factory = sqlite3.Row   # make sure we can get results by column name
         self.dbconn.execute("PRAGMA foreign_keys=ON")
         try:
             self.dbconn.execute("SELECT COUNT(*) FROM tracks").fetchone()
             print("Connected to database.")
+            print("Database file:", dbfile)
             if scan_changes:
                 self.scan_changes()
         except sqlite3.OperationalError:
             # the table does not yet exist, create the schema
             print("Creating new database.")
+            print("Database file:", dbfile)
             self.dbconn.execute("""CREATE TABLE tracks
                 (
                     id integer PRIMARY KEY,
@@ -36,7 +46,7 @@ class MusicFileServer:
                     year int,
                     genre nvarchar(100),
                     duration real NOT NULL,
-                    modified datetime NOT NULL,
+                    modified timestamp NOT NULL,
                     location nvarchar(500) NOT NULL,
                     hash char(40) NOT NULL UNIQUE
                 );""")
@@ -74,8 +84,11 @@ class MusicFileServer:
             raise ValueError("must supply at least one filter parameter")
         sql += "AND ".join(where)
         sql += " ORDER BY title, artist"
-        print("SQL=", sql)   # XXX
-        return self.dbconn.execute(sql, params).fetchall()
+        result = []
+        for track in self.dbconn.execute(sql, params).fetchall():
+            result.append(Track(track["id"], track["title"], track["artist"], track["album"], track["year"],
+                                track["genre"], track["duration"], track["modified"], track["location"]))
+        return result
 
     def update_path(self, path):
         """
@@ -85,8 +98,7 @@ class MusicFileServer:
         It will only add files that are not present already in the database.
         """
         path = os.path.abspath(os.path.normpath(path))
-        if os.path.isfile(os.path.join(path, "iTunes Music Library.xml")) or \
-            os.path.isfile(os.path.join(path, "iTunes Library.xml")):
+        if os.path.isfile(os.path.join(path, "iTunes Music Library.xml")) or os.path.isfile(os.path.join(path, "iTunes Library.xml")):
             self._add_itunes_library(path)
         else:
             self._scan_path(path)
@@ -110,9 +122,9 @@ class MusicFileServer:
             music_folder = os.path.split(music_folder)[0] + os.path.sep
         tracks = (Track.from_itunes(t, music_folder, path)
                   for t in tracks.values()
-                  if t["Track Type"]=="File" and not t.get("Podcast")
-                      and not t.get("Genre").lower() in ("audio book", "audiobook")
-                      and not "document" in t.get("Kind", ""))
+                  if t["Track Type"] == "File" and not t.get("Podcast")
+                      and t.get("Genre").lower() not in ("audio book", "audiobook")
+                      and "document" not in t.get("Kind", ""))
         amount_new = self.add_tracks(tracks)
         print("Added {:d} new tracks.".format(amount_new))
 
@@ -130,7 +142,7 @@ class MusicFileServer:
         num_new_songs = 0
         for path in tqdm(all_paths):
             new_songs = []
-            try :
+            try:
                 for _, dirs, files in os.walk(path, topdown=True):
                     dirs.clear()
                     for file in files:
@@ -138,7 +150,7 @@ class MusicFileServer:
                             file = os.path.join(path, file)
                             if file in existing:
                                 modified = Track.getmtime(file)
-                                if str(modified)==existing[file]:
+                                if modified == existing[file]:
                                     # timestamp is the same, skip re-importing this file
                                     continue
                             tag = self.get_tag(file)
@@ -187,7 +199,7 @@ class MusicFileServer:
         for track_id, modified, location in tqdm(tracks):
             try:
                 file_modified = Track.getmtime(location)
-                if str(file_modified)!=modified:
+                if file_modified != modified:
                     changed.append((track_id, location))
             except FileNotFoundError:
                 removed.append(track_id)
