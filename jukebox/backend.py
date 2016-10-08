@@ -6,9 +6,6 @@ import Pyro4
 from .musicfiledb import MusicFileDatabase
 
 
-Pyro4.config.SERVERTYPE="multiplex"   # don't use threading here for now...
-
-
 class JukeboxBackendRemoting:
     def __init__(self):
         self.mdb = MusicFileDatabase(silent=True, scan_changes=False)
@@ -34,8 +31,8 @@ class JukeboxBackendRemoting:
     @Pyro4.expose
     def get_file(self, track_id=None, hashcode=None):
         track = self.mdb.get_track(track_id, hashcode)
-        with open(track.location, "rb") as src:
-            return src.readall()
+        with open(track.location, "rb") as f:
+            return f.read()
 
     def track2dict(self, track):
         result = vars(track)
