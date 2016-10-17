@@ -1,9 +1,18 @@
+"""
+Jukebox audio file serving backend application
+Provides a CLI and a Pyro remote API.
+
+Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+"""
 import sys
 import cmd
 import shlex
 import threading
 import Pyro4
 from .musicfiledb import MusicFileDatabase
+
+
+BACKEND_PORT = 39776
 
 
 class JukeboxBackendRemoting:
@@ -21,11 +30,18 @@ class JukeboxBackendRemoting:
         return self.track2dict(track)
 
     @Pyro4.expose
-    def count(self):
+    @property
+    def num_tracks(self):
         return self.mdb.num_tracks()
 
     @Pyro4.expose
+    @property
+    def total_playtime(self):
+        return self.mdb.total_playtime()
+
+    @Pyro4.expose
     def query(self, title=None, artist=None, album=None, year=None, genre=None):
+        # XXX limit results
         return [self.track2dict(t) for t in self.mdb.query(title, artist, album, year, genre)]
 
     @Pyro4.expose
@@ -33,6 +49,16 @@ class JukeboxBackendRemoting:
         track = self.mdb.get_track(track_id, hashcode)
         with open(track.location, "rb") as f:
             return f.read()
+
+    @Pyro4.expose
+    def get_file_chunks(self, track_id=None, hashcode=None):
+        track = self.mdb.get_track(track_id, hashcode)
+        with open(track.location, "rb") as f:
+            while True:
+                chunk = f.read(128 * 1024)
+                if not chunk:
+                    break
+                yield chunk
 
     def track2dict(self, track):
         result = vars(track)
@@ -63,6 +89,7 @@ class JukeboxBackendCli(cmd.Cmd):
     def do_stats(self, args):
         """Prints some stats such as the number of tracks in the database."""
         print("Number of tracks in database: ", self.mdb.num_tracks())
+        print("Total play time: ", self.mdb.total_playtime())
         print("Pyro connection uri: ", self.pyro_uri)
 
     def do_query(self, args):
@@ -72,7 +99,7 @@ class JukeboxBackendCli(cmd.Cmd):
             return
         filters = shlex.split(args)
         try:
-            filters = {f:v for f,v in (f.split('=') for f in filters)}
+            filters = {f: v for f, v in (f.split('=') for f in filters)}
         except ValueError:
             print("Query arguments syntax error. Try help for this command.")
             return
@@ -131,7 +158,7 @@ class JukeboxBackendCli(cmd.Cmd):
 class Backend:
     def __init__(self, scan=True):
         self.mdb = MusicFileDatabase(scan_changes=scan)
-        self.pyro_daemon = Pyro4.Daemon(port=39776)
+        self.pyro_daemon = Pyro4.Daemon(host="", port=BACKEND_PORT)
         self.pyro_uri = self.pyro_daemon.register(JukeboxBackendRemoting, "jukebox.backend")
         self.cli = JukeboxBackendCli(self.mdb, self.pyro_uri)
 

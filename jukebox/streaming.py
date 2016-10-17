@@ -11,7 +11,7 @@ import wave
 import os
 import io
 from functools import namedtuple
-from .sample import Sample
+from synthesizer.sample import Sample
 
 
 __all__ = ["AudiofileToWavStream", "EndlessWavReader", "StreamMixer", "VolumeFilter", "SampleStream"]

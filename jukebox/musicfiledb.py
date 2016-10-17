@@ -1,3 +1,12 @@
+"""
+Simple database for searching a collectoin of audio files.
+Can scan for changes to the files at startup (and will update accordingly)
+Won't detect new files unless you tell it to rescan a path.
+Is smart enough to recognise an iTunes music library and parses the iTunes
+database plist file instead of scanning the whole directory structure.
+
+Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+"""
 import datetime
 import plistlib
 import unicodedata
@@ -62,24 +71,25 @@ class MusicFileDatabase:
         self.dbconn.close()
 
     def query(self, title=None, artist=None, album=None, year=None, genre=None):
+        # XXX limit results
         sql = "SELECT id, title, artist, album, year, genre, duration, modified, location FROM tracks WHERE "
         where = []
         params = []
         if title:
             where.append("title LIKE ?")
-            params.append("%"+title+"%")
+            params.append("%" + title + "%")
         if artist:
             where.append("artist LIKE ?")
-            params.append("%"+artist+"%")
+            params.append("%" + artist + "%")
         if album:
             where.append("album LIKE ?")
-            params.append("%"+album+"%")
+            params.append("%" + album + "%")
         if year:
             where.append("year=?")
             params.append(year)
         if genre:
             where.append("genre LIKE ?")
-            params.append("%"+genre+"%")
+            params.append("%" + genre + "%")
         if not where:
             raise ValueError("must supply at least one filter parameter")
         sql += "AND ".join(where)
@@ -92,6 +102,10 @@ class MusicFileDatabase:
 
     def num_tracks(self):
         return self.dbconn.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
+
+    def total_playtime(self):
+        secs = int(self.dbconn.execute("SELECT SUM(duration) FROM tracks").fetchone()[0])
+        return datetime.timedelta(seconds=secs)
 
     def get_track(self, track_id=None, hashcode=None):
         if track_id:
@@ -140,15 +154,15 @@ class MusicFileDatabase:
             music_folder = os.path.split(music_folder)[0] + os.path.sep
         tracks = (Track.from_itunes(t, music_folder, path)
                   for t in tracks.values()
-                  if t["Track Type"] == "File" and not t.get("Podcast")
-                      and t.get("Genre").lower() not in ("audio book", "audiobook")
-                      and "document" not in t.get("Kind", ""))
+                  if t["Track Type"] == "File" and not t.get("Podcast") and
+                  t.get("Genre").lower() not in ("audio book", "audiobook") and
+                  "document" not in t.get("Kind", ""))
         amount_new = self.add_tracks(tracks)
         print("Added {:d} new tracks.".format(amount_new))
 
     def _scan_path(self, path):
         print("Scanning for new music files.")
-        existing = self.dbconn.execute("SELECT id, modified, location FROM tracks WHERE location LIKE ?", (path+"%",)).fetchall()
+        existing = self.dbconn.execute("SELECT id, modified, location FROM tracks WHERE location LIKE ?", (path + "%",)).fetchall()
         existing = {location: modified for track_id, modified, location in existing}
         print("{:d} tracks already known in the scanned location.".format(len(existing)))
         all_paths = []
@@ -197,7 +211,7 @@ class MusicFileDatabase:
         after = self.dbconn.execute("SELECT count(*) FROM tracks").fetchone()[0]
         cursor.close()
         self.dbconn.commit()
-        amount_new = after-before
+        amount_new = after - before
         return amount_new
 
     def get_tag(self, filename):

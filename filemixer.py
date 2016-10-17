@@ -1,6 +1,6 @@
 import sys
 import time
-from synthesizer.tools import AudiofileToWavStream, StreamMixer
+from jukebox.streaming import AudiofileToWavStream, StreamMixer
 from synthesizer.sample import Output, Sample, LevelMeter
 
 
