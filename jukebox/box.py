@@ -21,11 +21,64 @@ class TrackFrame(tk.LabelFrame):
         tk.Label(self, text="sdfasfd").pack()
 
 
-class RequestsFrame(tk.LabelFrame):
+class PlaylistFrame(tk.LabelFrame):
     def __init__(self, master):
-        super().__init__(master, text="Request list")
-        tk.Listbox(self).pack()
-        tk.Label(self, text="sdfsdfasfd").pack()
+        super().__init__(master, text="Playlist")
+        bf = tk.Frame(self)
+        tk.Button(bf, text="Start Play", command=self.do_start_play).pack()
+        tk.Button(bf, text="Move to Top", command=self.do_to_top).pack()
+        tk.Button(bf, text="Move Up", command=self.do_move_up).pack()
+        tk.Button(bf, text="Move Down", command=self.do_move_down).pack()
+        tk.Button(bf, text="Remove", command=self.do_remove).pack()
+        bf.pack(side=tk.LEFT, padx=4)
+        sf = tk.Frame(self)
+        cols = [("title", 320), ("artist", 200), ("album", 200)]
+        self.listTree = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
+        vsb = ttk.Scrollbar(orient="vertical", command=self.listTree.yview)
+        self.listTree.configure(yscrollcommand=vsb.set)
+        self.listTree.grid(column=1, row=0, sticky=tkinter.NSEW, in_=sf)
+        vsb.grid(column=0, row=0, sticky=tkinter.NS, in_=sf)
+        for col, colwidth in cols:
+            self.listTree.heading(col, text=col.title())
+            self.listTree.column(col, width=colwidth)
+        sf.grid_columnconfigure(0, weight=1)
+        sf.grid_rowconfigure(0, weight=1)
+        sf.pack(side=tk.LEFT, padx=4)
+
+    def do_start_play(self):
+        print("START PLAY")  # XXX
+
+    def do_to_top(self):
+        sel = self.listTree.selection()
+        if sel:
+            s = sel[0]
+            self.listTree.move(s, self.listTree.parent(s), 0)
+
+    def do_remove(self):
+        sel = self.listTree.selection()
+        if sel:
+            self.listTree.delete(*sel)
+
+    def do_move_up(self):
+        sel = self.listTree.selection()
+        if sel:
+            for s in sel:
+                idx = self.listTree.index(s)
+                self.listTree.move(s, self.listTree.parent(s), idx-1)
+
+    def do_move_down(self):
+        sel = self.listTree.selection()
+        if sel:
+            for s in sel:
+                idx = self.listTree.index(s)
+                self.listTree.move(s, self.listTree.parent(s), idx+1)
+
+    def enqueue(self, track):
+        self.listTree.insert("", tkinter.END, values=[
+            track["title"] or '-',
+            track["artist"] or '-',
+            track["album"] or '-',
+            track["hash"]])
 
 
 class SearchFrame(tk.LabelFrame):
@@ -49,14 +102,27 @@ class SearchFrame(tk.LabelFrame):
         sf = tk.Frame(self)
         cols = [("title", 320), ("artist", 200), ("album", 200), ("year", 50), ("genre", 120)]
         self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
+        vsb = ttk.Scrollbar(orient="vertical", command=self.resultTreeView.yview)
+        self.resultTreeView.configure(yscrollcommand=vsb.set)
+        self.resultTreeView.grid(column=1, row=0, sticky=tkinter.NSEW, in_=sf)
+        vsb.grid(column=0, row=0, sticky=tkinter.NS, in_=sf)
         for col, colwidth in cols:
             self.resultTreeView.heading(col, text=col.title(), command=lambda c=col: self.sortby(self.resultTreeView, c, 0))
             self.resultTreeView.column(col, width=colwidth)
-        self.resultTreeView.pack()
-        sf.pack(side=tk.RIGHT)
+        self.resultTreeView.bind("<Double-1>", self.on_doubleclick)
+        sf.grid_columnconfigure(0, weight=1)
+        sf.grid_rowconfigure(0, weight=1)
+        sf.pack(side=tk.LEFT, padx=4)
+
+    def on_doubleclick(self, event):
+        sel = self.resultTreeView.selection()
+        if not sel:
+            return
+        track_hash = sel[0]
+        track = self.app.backend.track(hashcode=track_hash)
+        self.app.enqueue(track)
 
     def sortby(self, tree, col, descending):
-        """sort tree contents when a column header is clicked on"""
         # grab values to sort and sort in place
         data = [(tree.set(child, col), child) for child in tree.get_children('')]
         data.sort(reverse=descending)
@@ -77,7 +143,7 @@ class SearchFrame(tk.LabelFrame):
             return
         result = sorted(result, key=lambda track: (track["title"], track["artist"] or "", track["album"] or "", track["year"] or 0, track["genre"] or ""))[:50]
         for track in result:
-            self.resultTreeView.insert("", tkinter.END, values=[
+            self.resultTreeView.insert("", tkinter.END, iid=track["hash"], values=[
                 track["title"] or '-',
                 track["artist"] or '-',
                 track["album"] or '-',
@@ -111,9 +177,9 @@ class JingleFrame(tk.LabelFrame):
             return  # no left mouse button event
         shift = event.state & 0x0001
         if shift:
-            print("SHIFTCLICK", event.widget.jingle_nr)
+            print("SHIFTCLICK", event.widget.jingle_nr)   # XXX
         else:
-            print("CLICK", event.widget.jingle_nr)
+            print("CLICK", event.widget.jingle_nr)   # XXX
 
 
 class JukeboxGui(tk.Frame):
@@ -123,10 +189,10 @@ class JukeboxGui(tk.Frame):
         f1 = tk.Frame()
         self.firstTrackFrame = TrackFrame(f1, "Track 1")
         self.secondTrackFrame = TrackFrame(f1, "Track 2")
-        self.requestsFrame = RequestsFrame(f1)
+        self.playlistFrame = PlaylistFrame(f1)
         self.firstTrackFrame.pack(side=tk.LEFT)
         self.secondTrackFrame.pack(side=tk.LEFT)
-        self.requestsFrame.pack(side=tk.LEFT)
+        self.playlistFrame.pack(side=tk.LEFT)
         f1.pack(side=tk.TOP)
         f2 = tk.Frame()
         self.searchFrame = SearchFrame(self, f2)
@@ -160,6 +226,9 @@ class JukeboxGui(tk.Frame):
             self.show_status(status, 2)
         except Exception as x:
             self.show_status("ERROR! Connection to backend failed: "+str(x))
+
+    def enqueue(self, track):
+        self.playlistFrame.enqueue(track)
 
 
 if __name__ == "__main__":
