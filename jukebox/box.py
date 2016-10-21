@@ -4,7 +4,6 @@ Jukebox Gui
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
-import operator
 import datetime
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -35,7 +34,6 @@ class SearchFrame(tk.LabelFrame):
         self.app = app
         self.search_text = tkinter.StringVar()
         self.filter_choice = tk.StringVar(value="title")
-        self.ordering_choice = tk.StringVar(value="new-to-old")
         bf = tk.Frame(self)
         tk.Label(bf, text="search string:").pack()
         e = tk.Entry(bf, textvariable=self.search_text)
@@ -46,22 +44,28 @@ class SearchFrame(tk.LabelFrame):
         om.nametowidget(om.menuname)["font"] = om["font"]
         om["width"] = 10
         om.pack()
-        tk.Label(bf, text="ordering:").pack()
-        om = tk.OptionMenu(bf, self.ordering_choice, "new-to-old", "old-to-new")
-        om.nametowidget(om.menuname)["font"] = om["font"]
-        om["width"] = 10
-        om.pack()
+        tk.Button(bf, text="Search", command=self.do_search).pack()
         bf.pack(side=tk.LEFT)
         sf = tk.Frame(self)
         cols = [("title", 320), ("artist", 200), ("album", 200), ("year", 50), ("genre", 120)]
         self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
         for col, colwidth in cols:
-            self.resultTreeView.heading(col, text=col.title())   # sort command toevoegen
+            self.resultTreeView.heading(col, text=col.title(), command=lambda c=col: self.sortby(self.resultTreeView, c, 0))
             self.resultTreeView.column(col, width=colwidth)
         self.resultTreeView.pack()
         sf.pack(side=tk.RIGHT)
 
-    def do_search(self, event):
+    def sortby(self, tree, col, descending):
+        """sort tree contents when a column header is clicked on"""
+        # grab values to sort and sort in place
+        data = [(tree.set(child, col), child) for child in tree.get_children('')]
+        data.sort(reverse=descending)
+        for ix, item in enumerate(data):
+            tree.move(item[1], '', ix)
+        # switch the heading so it will sort in the opposite direction next time
+        tree.heading(col, command=lambda col=col: self.sortby(tree, col, int(not descending)))
+
+    def do_search(self, event=None):
         self.app.show_status("Searching...")
         for i in self.resultTreeView.get_children():
             self.resultTreeView.delete(i)
@@ -71,8 +75,7 @@ class SearchFrame(tk.LabelFrame):
         except Exception as x:
             self.app.show_status("ERROR: "+str(x))
             return
-        reverse = self.ordering_choice.get()=="new-to-old"
-        result = sorted(result, key=lambda track: (track["year"] or 0, track["album"] or "", track["artist"] or "", track["title"]), reverse=reverse)[:50]
+        result = sorted(result, key=lambda track: (track["title"], track["artist"] or "", track["album"] or "", track["year"] or 0, track["genre"] or ""))[:50]
         for track in result:
             self.resultTreeView.insert("", tkinter.END, values=[
                 track["title"] or '-',
