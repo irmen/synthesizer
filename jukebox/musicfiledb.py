@@ -70,8 +70,7 @@ class MusicFileDatabase:
         self.dbconn.commit()
         self.dbconn.close()
 
-    def query(self, title=None, artist=None, album=None, year=None, genre=None):
-        # XXX limit results
+    def query(self, title=None, artist=None, album=None, year=None, genre=None, result_limit=200):
         sql = "SELECT id, title, artist, album, year, genre, duration, modified, location FROM tracks WHERE "
         where = []
         params = []
@@ -93,7 +92,7 @@ class MusicFileDatabase:
         if not where:
             raise ValueError("must supply at least one filter parameter")
         sql += "AND ".join(where)
-        sql += " ORDER BY artist, title"
+        sql += " ORDER BY artist, title  LIMIT "+str(result_limit)
         result = []
         for track in self.dbconn.execute(sql, params).fetchall():
             result.append(Track(track["id"], track["title"], track["artist"], track["album"], track["year"],

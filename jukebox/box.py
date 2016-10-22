@@ -15,17 +15,45 @@ import Pyro4
 import Pyro4.errors
 
 
+class Player:
+    def __init__(self, app):
+        self.app = app
+        self.app.after(50, self.tick)
+
+    def tick(self):
+        t1 = self.app.firstTrackFrame
+        t2 = self.app.secondTrackFrame
+        if t1.needs_new_track() or t2.needs_new_track():
+            track = self.app.upcoming_track_hash()
+            if track:
+                if t1.needs_new_track():
+                    t1.next_track(track)
+                else:
+                    t2.next_track(track)
+        self.app.after(50, self.tick)
+
+
 class TrackFrame(tk.LabelFrame):
     def __init__(self, master, title):
         super().__init__(master, text=title)
         tk.Label(self, text="sdfasfd").pack()
+        self.current_track = None
+
+    def needs_new_track(self):
+        return self.current_track is None
+
+    def next_track(self, hashcode):
+        self.current_track = hashcode
+        print(self, hashcode)  # XXX
 
 
 class PlaylistFrame(tk.LabelFrame):
-    def __init__(self, master):
+    def __init__(self, app, master):
         super().__init__(master, text="Playlist")
+        self.app = app
         bf = tk.Frame(self)
-        tk.Button(bf, text="Start Play", command=self.do_start_play).pack()
+        self.play_button = tk.Button(bf, text="Start Play", command=self.do_start_play)
+        self.play_button.pack()
         tk.Button(bf, text="Move to Top", command=self.do_to_top).pack()
         tk.Button(bf, text="Move Up", command=self.do_move_up).pack()
         tk.Button(bf, text="Move Down", command=self.do_move_down).pack()
@@ -36,8 +64,8 @@ class PlaylistFrame(tk.LabelFrame):
         self.listTree = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
         vsb = ttk.Scrollbar(orient="vertical", command=self.listTree.yview)
         self.listTree.configure(yscrollcommand=vsb.set)
-        self.listTree.grid(column=1, row=0, sticky=tkinter.NSEW, in_=sf)
-        vsb.grid(column=0, row=0, sticky=tkinter.NS, in_=sf)
+        self.listTree.grid(column=1, row=0, sticky=tk.NSEW, in_=sf)
+        vsb.grid(column=0, row=0, sticky=tk.NS, in_=sf)
         for col, colwidth in cols:
             self.listTree.heading(col, text=col.title())
             self.listTree.column(col, width=colwidth)
@@ -45,8 +73,23 @@ class PlaylistFrame(tk.LabelFrame):
         sf.grid_rowconfigure(0, weight=1)
         sf.pack(side=tk.LEFT, padx=4)
 
+    def pop(self):
+        items = self.listTree.get_children()
+        if items:
+            top_item = items[0]
+            hashcode = self.listTree.item(top_item, "values")[3]
+            self.listTree.delete(top_item)
+            return hashcode
+        return None
+
+    def peek(self):
+        items = self.listTree.get_children()
+        if items:
+            return self.listTree.item(items[0], "values")[3]
+        return None
+
     def do_start_play(self):
-        print("START PLAY")  # XXX
+        self.app.start_play()
 
     def do_to_top(self):
         sel = self.listTree.selection()
@@ -74,7 +117,7 @@ class PlaylistFrame(tk.LabelFrame):
                 self.listTree.move(s, self.listTree.parent(s), idx+1)
 
     def enqueue(self, track):
-        self.listTree.insert("", tkinter.END, values=[
+        self.listTree.insert("", tk.END, values=[
             track["title"] or '-',
             track["artist"] or '-',
             track["album"] or '-',
@@ -85,7 +128,7 @@ class SearchFrame(tk.LabelFrame):
     def __init__(self, app, master):
         super().__init__(master, text="Search song")
         self.app = app
-        self.search_text = tkinter.StringVar()
+        self.search_text = tk.StringVar()
         self.filter_choice = tk.StringVar(value="title")
         bf = tk.Frame(self)
         tk.Label(bf, text="search string:").pack()
@@ -104,8 +147,8 @@ class SearchFrame(tk.LabelFrame):
         self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
         vsb = ttk.Scrollbar(orient="vertical", command=self.resultTreeView.yview)
         self.resultTreeView.configure(yscrollcommand=vsb.set)
-        self.resultTreeView.grid(column=1, row=0, sticky=tkinter.NSEW, in_=sf)
-        vsb.grid(column=0, row=0, sticky=tkinter.NS, in_=sf)
+        self.resultTreeView.grid(column=1, row=0, sticky=tk.NSEW, in_=sf)
+        vsb.grid(column=0, row=0, sticky=tk.NS, in_=sf)
         for col, colwidth in cols:
             self.resultTreeView.heading(col, text=col.title(), command=lambda c=col: self.sortby(self.resultTreeView, c, 0))
             self.resultTreeView.column(col, width=colwidth)
@@ -141,9 +184,9 @@ class SearchFrame(tk.LabelFrame):
         except Exception as x:
             self.app.show_status("ERROR: "+str(x))
             return
-        result = sorted(result, key=lambda track: (track["title"], track["artist"] or "", track["album"] or "", track["year"] or 0, track["genre"] or ""))[:50]
+        result = sorted(result, key=lambda track: (track["title"], track["artist"] or "", track["album"] or "", track["year"] or 0, track["genre"] or ""))
         for track in result:
-            self.resultTreeView.insert("", tkinter.END, iid=track["hash"], values=[
+            self.resultTreeView.insert("", tk.END, iid=track["hash"], values=[
                 track["title"] or '-',
                 track["artist"] or '-',
                 track["album"] or '-',
@@ -185,11 +228,12 @@ class JingleFrame(tk.LabelFrame):
 class JukeboxGui(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
+        self.player = None
         self.master.title("Jukebox")
         f1 = tk.Frame()
         self.firstTrackFrame = TrackFrame(f1, "Track 1")
         self.secondTrackFrame = TrackFrame(f1, "Track 2")
-        self.playlistFrame = PlaylistFrame(f1)
+        self.playlistFrame = PlaylistFrame(self, f1)
         self.firstTrackFrame.pack(side=tk.LEFT)
         self.secondTrackFrame.pack(side=tk.LEFT)
         self.playlistFrame.pack(side=tk.LEFT)
@@ -230,12 +274,22 @@ class JukeboxGui(tk.Frame):
     def enqueue(self, track):
         self.playlistFrame.enqueue(track)
 
+    def upcoming_track_hash(self, peek=False):
+        if peek:
+            return self.playlistFrame.peek()
+        return self.playlistFrame.pop()
+
+    def start_play(self):
+        self.playlistFrame.play_button["state"] = tk.DISABLED
+        if not self.player:
+            self.player = Player(self)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
-    default_font = tkinter.font.nametofont("TkDefaultFont")
+    default_font = tk.font.nametofont("TkDefaultFont")
     default_font.configure(size=12, family="Lucida Sans Unicode")
-    default_font = tkinter.font.nametofont("TkTextFont")
+    default_font = tk.font.nametofont("TkTextFont")
     default_font.configure(size=11, family="Lucida Sans Unicode")
     app = JukeboxGui(master=root)
     app.mainloop()

@@ -41,8 +41,8 @@ class JukeboxBackendRemoting:
 
     @Pyro4.expose
     def query(self, title=None, artist=None, album=None, year=None, genre=None):
-        # XXX limit results
-        return [self.track2dict(t) for t in self.mdb.query(title, artist, album, year, genre)]
+        max_results = 200
+        return [self.track2dict(t) for t in self.mdb.query(title, artist, album, year, genre, result_limit=max_results)]
 
     @Pyro4.expose
     def get_file(self, track_id=None, hashcode=None):
