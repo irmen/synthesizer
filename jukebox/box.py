@@ -8,6 +8,7 @@ import datetime
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.font
+import tkinter.messagebox
 from .backend import BACKEND_PORT
 from .streaming import AudiofileToWavStream, StreamMixer
 from synthesizer.sample import Sample, Output, LevelMeter
@@ -19,6 +20,12 @@ class Player:
     def __init__(self, app):
         self.app = app
         self.app.after(50, self.tick)
+        self.app.firstTrackFrame.play()
+
+    def switch_player(self):
+        first_is_playing = self.app.firstTrackFrame.playing
+        self.app.firstTrackFrame.play(not first_is_playing)
+        self.app.secondTrackFrame.play(first_is_playing)
 
     def tick(self):
         t1 = self.app.firstTrackFrame
@@ -34,26 +41,53 @@ class Player:
 
 
 class TrackFrame(tk.LabelFrame):
-    def __init__(self, master, title):
-        super().__init__(master, text=title)
-        tk.Label(self, text="sdfasfd").pack()
+    def __init__(self, app, master, title):
+        self.title = title
+        self.playing = False
+        super().__init__(master, text=title, border=4, padx=4, pady=4)
+        self.app = app
         self.current_track = None
+        tk.Label(self, text="title").pack()
+        self.titleLabel = tk.Label(self, relief=tk.RIDGE, width=22, anchor=tk.W)
+        self.titleLabel.pack()
+        tk.Label(self, text="artist").pack()
+        self.artistLabel = tk.Label(self, relief=tk.RIDGE, width=22, anchor=tk.W)
+        self.artistLabel.pack()
+        tk.Label(self, text="album").pack()
+        self.albumlabel = tk.Label(self, relief=tk.RIDGE, width=22, anchor=tk.W)
+        self.albumlabel.pack()
+        tk.Label(self, text="time left (sec.)").pack()
+        self.timeleftLabel = tk.Label(self, relief=tk.RIDGE, width=14)
+        self.timeleftLabel.pack()
+        tk.Button(self, text="Skip", command=self.skip).pack()
+
+    def play(self, playing=True):
+        self["text"] = self.title + (" [PLAYING]" if playing else "")
+        self.playing = playing
+
+    def skip(self):
+        if self.playing:
+            self.app.switch_player()
+        self.current_track = None
+        self.timeleftLabel["text"] = "0 (next track...)"
 
     def needs_new_track(self):
         return self.current_track is None
 
     def next_track(self, hashcode):
         self.current_track = hashcode
-        print(self, hashcode)  # XXX
+        track = self.app.backend.track(hashcode=self.current_track)
+        self.titleLabel["text"] = track["title"] or "-"
+        self.artistLabel["text"] = track["artist"] or "-"
+        self.albumlabel["text"] = track["album"] or "-"
+        self.timeleftLabel["text"] = track["duration"] or "??"
 
 
 class PlaylistFrame(tk.LabelFrame):
     def __init__(self, app, master):
-        super().__init__(master, text="Playlist")
+        super().__init__(master, text="Playlist", border=4, padx=4, pady=4)
         self.app = app
         bf = tk.Frame(self)
-        self.play_button = tk.Button(bf, text="Start Play", command=self.do_start_play)
-        self.play_button.pack()
         tk.Button(bf, text="Move to Top", command=self.do_to_top).pack()
         tk.Button(bf, text="Move Up", command=self.do_move_up).pack()
         tk.Button(bf, text="Move Down", command=self.do_move_down).pack()
@@ -87,9 +121,6 @@ class PlaylistFrame(tk.LabelFrame):
         if items:
             return self.listTree.item(items[0], "values")[3]
         return None
-
-    def do_start_play(self):
-        self.app.start_play()
 
     def do_to_top(self):
         sel = self.listTree.selection()
@@ -126,14 +157,16 @@ class PlaylistFrame(tk.LabelFrame):
 
 class SearchFrame(tk.LabelFrame):
     def __init__(self, app, master):
-        super().__init__(master, text="Search song")
+        super().__init__(master, text="Search song", border=4, padx=4, pady=4)
         self.app = app
         self.search_text = tk.StringVar()
         self.filter_choice = tk.StringVar(value="title")
         bf = tk.Frame(self)
-        tk.Label(bf, text="search string:").pack()
+        tk.Label(bf, text="Search for:").pack()
         e = tk.Entry(bf, textvariable=self.search_text)
         e.bind("<Return>", self.do_search)
+        e.bind("<KeyRelease>", self.on_key_up)
+        self.search_job = None
         e.pack()
         tk.Label(bf, text="search for:").pack()
         om = tk.OptionMenu(bf, self.filter_choice, "title", "artist", "album", "year", "genre")
@@ -157,6 +190,11 @@ class SearchFrame(tk.LabelFrame):
         sf.grid_rowconfigure(0, weight=1)
         sf.pack(side=tk.LEFT, padx=4)
 
+    def on_key_up(self, event):
+        if self.search_job:
+            self.after_cancel(self.search_job)
+        self.search_job = self.after(600, self.do_search)
+
     def on_doubleclick(self, event):
         sel = self.resultTreeView.selection()
         if not sel:
@@ -175,10 +213,13 @@ class SearchFrame(tk.LabelFrame):
         tree.heading(col, command=lambda col=col: self.sortby(tree, col, int(not descending)))
 
     def do_search(self, event=None):
+        search_text = self.search_text.get().strip()
+        if not search_text:
+            return
         self.app.show_status("Searching...")
         for i in self.resultTreeView.get_children():
             self.resultTreeView.delete(i)
-        queryinfo = {self.filter_choice.get(): self.search_text.get()}
+        queryinfo = {self.filter_choice.get(): search_text}
         try:
             result = self.app.backend.query(**queryinfo)
         except Exception as x:
@@ -197,7 +238,7 @@ class SearchFrame(tk.LabelFrame):
 
 class JingleFrame(tk.LabelFrame):
     def __init__(self, master):
-        super().__init__(master, text="Jingles/Samples - shift+click to change")
+        super().__init__(master, text="Jingles/Samples - shift+click to change", border=4, padx=4, pady=4)
         self["pady"] = "4"
         self["padx"] = "4"
         f = tk.Frame(self)
@@ -228,15 +269,14 @@ class JingleFrame(tk.LabelFrame):
 class JukeboxGui(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
-        self.player = None
         self.master.title("Jukebox")
         f1 = tk.Frame()
-        self.firstTrackFrame = TrackFrame(f1, "Track 1")
-        self.secondTrackFrame = TrackFrame(f1, "Track 2")
+        self.firstTrackFrame = TrackFrame(self, f1, "Track 1")
+        self.secondTrackFrame = TrackFrame(self, f1, "Track 2")
         self.playlistFrame = PlaylistFrame(self, f1)
         self.firstTrackFrame.pack(side=tk.LEFT)
         self.secondTrackFrame.pack(side=tk.LEFT)
-        self.playlistFrame.pack(side=tk.LEFT)
+        self.playlistFrame.pack(side=tk.LEFT, fill=tk.Y)
         f1.pack(side=tk.TOP)
         f2 = tk.Frame()
         self.searchFrame = SearchFrame(self, f2)
@@ -251,6 +291,7 @@ class JukeboxGui(tk.Frame):
         self.pack()
         self.backend = None
         self.show_status("Connecting to backend file service...")
+        self.player = Player(self)
         self.after(100, self.connect_backend)
 
     def show_status(self, statustext, duration=None):
@@ -270,6 +311,7 @@ class JukeboxGui(tk.Frame):
             self.show_status(status, 2)
         except Exception as x:
             self.show_status("ERROR! Connection to backend failed: "+str(x))
+            tkinter.messagebox.showerror("Backend not connected", "Cannot connect to backend. Has it been started?\n\nYou can start it now and try searching again.")
 
     def enqueue(self, track):
         self.playlistFrame.enqueue(track)
@@ -279,10 +321,8 @@ class JukeboxGui(tk.Frame):
             return self.playlistFrame.peek()
         return self.playlistFrame.pop()
 
-    def start_play(self):
-        self.playlistFrame.play_button["state"] = tk.DISABLED
-        if not self.player:
-            self.player = Player(self)
+    def switch_player(self):
+        self.player.switch_player()
 
 
 if __name__ == "__main__":
