@@ -9,6 +9,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.font
 import tkinter.messagebox
+import tkinter.filedialog
 from .backend import BACKEND_PORT
 from .streaming import AudiofileToWavStream, StreamMixer
 from synthesizer.sample import Sample, Output, LevelMeter
@@ -16,17 +17,20 @@ import Pyro4
 import Pyro4.errors
 
 
-StreamMixer.buffer_size = 4096
+StreamMixer.buffer_size = 4096      # larger is less skips and less cpu usage but more latency and slower meters
 
 
 class Player:
+    async_queue_size = 3    # larger is less chance of getting skips, but latency increases
+    update_rate = 40        # larger is less cpu usage but more chance of getting skips
+
     def __init__(self, app):
         self.app = app
-        self.app.after(50, self.tick)
+        self.app.after(self.update_rate, self.tick)
         self.app.firstTrackFrame.play()
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
-        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels)
+        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_queue_size)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=-40.0)
 
@@ -41,17 +45,23 @@ class Player:
         first_is_playing = self.app.firstTrackFrame.playing
         self.app.firstTrackFrame.play(not first_is_playing)
         self.app.secondTrackFrame.play(first_is_playing)
+        self.mixer.timestamp = 0.0
 
     def tick(self):
-        self.app.firstTrackFrame.tick(self.mixer)
-        self.app.secondTrackFrame.tick(self.mixer)
-        timestamp, sample = next(self.mixed_samples)
-        if sample and sample.duration > 0:
-            self.output.play_sample(sample)   # XXX todo separate output playing thread to not freeze gui
-            left, _, right, _ = self.levelmeter.update(sample)
-            self.app.update_levels(left, right)
+        if self.output.queue_size() <= self.async_queue_size/2:
+            timestamp, sample = next(self.mixed_samples)
+            self.app.firstTrackFrame.tick(self.mixer, timestamp)
+            self.app.secondTrackFrame.tick(self.mixer, timestamp)
+            if sample and sample.duration > 0:
+                self.output.play_sample(sample, async=True)
+                left, _, right, _ = self.levelmeter.update(sample)
+                self.app.update_levels(left, right)
         if not self.stopping:
-            self.app.after(50, self.tick)
+            self.app.after(self.update_rate, self.tick)
+
+    def play_sample(self, sample):
+        if sample and sample.duration > 0:
+            self.mixer.add_sample(sample)
 
 
 class TrackFrame(tk.LabelFrame):
@@ -73,7 +83,7 @@ class TrackFrame(tk.LabelFrame):
         tk.Label(self, text="album").pack()
         self.albumlabel = tk.Label(self, relief=tk.RIDGE, width=22, anchor=tk.W)
         self.albumlabel.pack()
-        tk.Label(self, text="time left (sec.)").pack()
+        tk.Label(self, text="time left").pack()
         self.timeleftLabel = tk.Label(self, relief=tk.RIDGE, width=14)
         self.timeleftLabel.pack()
         tk.Button(self, text="Skip", command=self.skip).pack(pady=4)
@@ -91,16 +101,23 @@ class TrackFrame(tk.LabelFrame):
         self.albumlabel["text"] = ""
         self.timeleftLabel["text"] = "(next track...)"
 
-    def tick(self, mixer):
+    def tick(self, mixer, player_timestamp):
         # if we don't have a track, try go get the next one from the playlist
         if self.current_track is None:
             track = self.app.upcoming_track_hash()
             if track:
                 self.next_track(track)
-        # when it is time, load the track and add its stream to the mixer
+                self["bg"] = self.master.cget("bg")
+            else:
+                self["bg"] = "yellow"
         if self.playing and self.current_track:
+            # update duration timer
+            remaining = self.current_track_duration - player_timestamp
+            self.timeleftLabel["text"] = datetime.timedelta(seconds=int(remaining))
+            # when it is time, load the track and add its stream to the mixer
             if not self.stream:
                 self.stream = AudiofileToWavStream(self.current_track_filename)
+                self["bg"] = "light green" if self.playing else self.master.cget("bg")
                 mixer.add_stream(self.stream)
                 if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
                     # get the duration from the stream itself
@@ -121,9 +138,9 @@ class TrackFrame(tk.LabelFrame):
         self.titleLabel["text"] = track["title"] or "-"
         self.artistLabel["text"] = track["artist"] or "-"
         self.albumlabel["text"] = track["album"] or "-"
-        self.timeleftLabel["text"] = track["duration"] or "??"
+        self.timeleftLabel["text"] = datetime.timedelta(seconds=int(track["duration"]))
         self.current_track_filename = track["location"]
-        self.current_track_duration = track["duration"]
+        self.current_track_duration =  track["duration"]
 
 
 class LevelmeterFrame(tk.LabelFrame):
@@ -165,7 +182,6 @@ class LevelmeterFrame(tk.LabelFrame):
             self.pb_right.configure(style="yellow.Vertical.TProgressbar")
         else:
             self.pb_right.configure(style="green.Vertical.TProgressbar")
-
 
 
 class PlaylistFrame(tk.LabelFrame):
@@ -322,10 +338,10 @@ class SearchFrame(tk.LabelFrame):
 
 
 class JingleFrame(tk.LabelFrame):
-    def __init__(self, master):
+    def __init__(self, app, master):
         super().__init__(master, text="Jingles/Samples - shift+click to change", border=4, padx=4, pady=4)
-        self["pady"] = "4"
-        self["padx"] = "4"
+        self.app = app
+        self.jingles = {num: None for num in range(20)}
         f = tk.Frame(self)
         for i in range(1, 11):
             b = tk.Button(f, text="Jingle {:d}".format(i), width=10, fg="grey")
@@ -346,9 +362,16 @@ class JingleFrame(tk.LabelFrame):
             return  # no left mouse button event
         shift = event.state & 0x0001
         if shift:
-            print("SHIFTCLICK", event.widget.jingle_nr)   # XXX
+            filename = tkinter.filedialog.askopenfilename()
+            if filename:
+                with AudiofileToWavStream(filename) as wav:
+                    sample = Sample(wav)
+                    self.jingles[event.widget.jingle_nr] = sample
+                event.widget["fg"] = self.cget("fg")
         else:
-            print("CLICK", event.widget.jingle_nr)   # XXX
+            sample = self.jingles[event.widget.jingle_nr]
+            if sample:
+                self.app.play_sample(sample)
 
 
 class JukeboxGui(tk.Frame):
@@ -370,7 +393,7 @@ class JukeboxGui(tk.Frame):
         self.searchFrame.pack()
         f2.pack(side=tk.TOP)
         f3 = tk.Frame()
-        self.jingleFrame = JingleFrame(f3)
+        self.jingleFrame = JingleFrame(self, f3)
         self.jingleFrame.pack()
         f3.pack(side=tk.TOP)
         self.statusbar = tk.Label(self, text="<status>", relief=tk.RIDGE)
@@ -417,6 +440,9 @@ class JukeboxGui(tk.Frame):
 
     def update_levels(self, left, right):
         self.after_idle(lambda: self.levelmeterFrame.update_meters(left, right))
+
+    def play_sample(self, sample):
+        self.player.play_sample(sample)
 
 
 if __name__ == "__main__":

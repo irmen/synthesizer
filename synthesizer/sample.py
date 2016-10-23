@@ -793,6 +793,9 @@ class Output:
                 except queue.Empty:
                     pass
 
+        def queue_size(self):
+            return self.queue.qsize()
+
         def close(self):
             if self.stream:
                 self.stream.close()
@@ -887,6 +890,10 @@ class Output:
     def wipe_queue(self):
         """Remove all pending samples to be played from the queue"""
         self.outputter.wipe_queue()
+
+    def queue_size(self):
+        """Return approximation of the number of items in the async play queue"""
+        return self.outputter.queue_size()
 
 
 # noinspection PyAttributeOutsideInit
