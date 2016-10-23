@@ -233,10 +233,21 @@ class Sample:
                 raise IOError("only supports sample sizes of 2, 3 or 4 bytes")
             if not 1 <= w.getnchannels() <= 2:
                 raise IOError("only supports mono or stereo channels")
-            self.__frames = w.readframes(w.getnframes())
             self.__nchannels = w.getnchannels()
             self.__samplerate = w.getframerate()
             self.__samplewidth = w.getsampwidth()
+            nframes = w.getnframes()
+            if nframes*self.__nchannels*self.__samplewidth > sys.maxsize//16:
+                # Requested number of frames is way to large. Probably dealing with a stream.
+                # Try to read it in chunks of 1 Mb each and hope the stream is not infinite.
+                self.__frames = bytearray()
+                while True:
+                    chunk = w.readframes(1024*1024)
+                    self.__frames.extend(chunk)
+                    if not chunk:
+                        break
+            else:
+                self.__frames = w.readframes(nframes)
             return self
 
     def write_wav(self, file_or_stream):

@@ -129,7 +129,8 @@ class AudiofileToWavStream(io.RawIOBase):
         return self.stream.read(bytes)
 
     def close(self):
-        self.stream.close()
+        if self.stream:
+            self.stream.close()
 
 
 class SampleStream:
@@ -176,7 +177,7 @@ class EndlessFramesFilter:
     """
     Turns a frame stream into an endless frame stream by adding silence frames at the end until closed.
     """
-    def set_params(self, buffer_size, samplewidth, nchannels):
+    def set_params(self, buffer_size, samplerate, samplewidth, nchannels):
         self.silence_frame = b"\0" * nchannels * samplewidth * buffer_size
 
     def __call__(self, frames):
