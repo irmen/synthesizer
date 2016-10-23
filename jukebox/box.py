@@ -6,6 +6,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import sys
 import signal
+import time
 import os
 import subprocess
 import datetime
@@ -50,16 +51,19 @@ class Player:
         self.output.close()
 
     def switch_player(self):
+        """
+        The actual switching of the main track player. Note that it can be playing
+        already because of the fade-in mixing.
+        """
         first_is_playing = self.app.firstTrackFrame.playing
         self.app.firstTrackFrame.play(not first_is_playing)
         self.app.secondTrackFrame.play(first_is_playing)
-        self.mixer.timestamp = 0.0
 
     def tick(self):
         if self.output.queue_size() <= self.async_queue_size/2:
-            timestamp, sample = next(self.mixed_samples)
-            self.app.firstTrackFrame.tick(self.mixer, timestamp)
-            self.app.secondTrackFrame.tick(self.mixer, timestamp)
+            self.app.firstTrackFrame.tick(self.mixer)
+            self.app.secondTrackFrame.tick(self.mixer)
+            _, sample = next(self.mixed_samples)
             if sample and sample.duration > 0:
                 self.output.play_sample(sample, async=True)
                 left, _, right, _ = self.levelmeter.update(sample)
@@ -74,11 +78,17 @@ class Player:
         if sample and sample.duration > 0:
             self.mixer.add_sample(sample)
 
+    def start_play_other(self):
+        print("START PLAYING THE OTHER TRACK")  # XXX fadein
+        # @todo fadein
+        pass
+
 
 class TrackFrame(ttk.LabelFrame):
     state_idle = 1
     state_warning = 2
     state_playing = 3
+    crossfade_time = 10
     def __init__(self, app, master, title):
         self.title = title
         self.playing = False
@@ -88,8 +98,11 @@ class TrackFrame(ttk.LabelFrame):
         self.current_track_filename = None
         self.current_track_duration = None
         self.stream = None
+        self.stream_started = 0
         self.volumeVar = tk.DoubleVar(value=100)
         self.volumefilter = VolumeFilter()
+        self.fadeout = None
+        self.fadein = None
         ttk.Label(self, text="title / artist / album").pack()
         self.titleLabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.titleLabel.pack()
@@ -105,19 +118,19 @@ class TrackFrame(ttk.LabelFrame):
         f = ttk.Frame(self)
         ttk.Label(f, text="V: ").pack(side=tk.LEFT)
         scale = ttk.Scale(f, from_=0, to=150, length=120, variable=self.volumeVar, command=self.on_volumechange)
-        scale.bind("<Double-1>", self.on_volumereset)
+        scale.bind("<Double-1>", lambda event: self.volumereset(100))
         scale.pack(side=tk.LEFT)
         self.volumeLabel = ttk.Label(f, text="???%")
         self.volumeLabel.pack(side=tk.RIGHT)
         f.pack(fill=tk.X)
         ttk.Button(self, text="Skip", command=self.skip).pack(pady=4)
-        self.on_volumereset(None)
+        self.volumereset()
         self.stateLabel = tk.Label(self, text="STATE", relief=tk.SUNKEN, border=1)
         self.stateLabel.pack()
 
     def play(self, playing=True):
         self.playing = playing
-        self.on_volumereset(None)
+        self.volumereset()
 
     def skip(self):
         if self.playing:
@@ -128,7 +141,7 @@ class TrackFrame(ttk.LabelFrame):
         self.albumlabel["text"] = ""
         self.timeleftLabel["text"] = "(next track...)"
 
-    def tick(self, mixer, player_timestamp):
+    def tick(self, mixer):
         # if we don't have a track, try go get the next one from the playlist
         if self.current_track is None:
             track = self.app.upcoming_track_hash()
@@ -138,20 +151,35 @@ class TrackFrame(ttk.LabelFrame):
             else:
                 self.set_state(self.state_warning)
         if self.playing and self.current_track:
-            # update duration timer
-            remaining = self.current_track_duration - player_timestamp
-            self.timeleftLabel["text"] = datetime.timedelta(seconds=int(remaining))
-            dots = '.' * (int(player_timestamp*5) % 10)
-            self.stateLabel["text"] = dots+"PLAYING"+dots
-            if self.stream and self.stream.closed:
-                # Stream is closed, probably exhausted. Skip to other track.
-                # @todo fade out/fade in
-                self.skip()
-                return
+            if self.stream:
+                # update duration timer
+                stream_time = time.time() - self.stream_started
+                remaining = self.current_track_duration - stream_time
+                self.timeleftLabel["text"] = datetime.timedelta(seconds=int(remaining))
+                dotsl = '«' * (int(stream_time*4) % 6)
+                dotsr = '»' * len(dotsl)
+                if self.fadein:
+                    status = " FADE IN "
+                elif self.fadeout:
+                    status = " FADE OUT "
+                else:
+                    status = " PLAYING "
+                self.stateLabel["text"] = dotsl+status+dotsr
+                if self.fadeout:
+                    self.volumeVar.set(self.fadeout*remaining/self.crossfade_time)
+                    self.on_volumechange(self.volumeVar.get())
+                elif remaining <= self.crossfade_time:
+                    self.fadeout = self.volumeVar.get()
+                    self.app.start_playing_other()
+                if self.stream.closed:
+                    # Stream is closed, probably exhausted. Skip to other track.
+                    self.skip()
+                    return
             # when it is time, load the track and add its stream to the mixer
             if not self.stream:
                 self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
-                self.set_state(self.state_playing if self.playing else self.state_idle)
+                self.stream_started = time.time()
+                self.set_state(self.state_playing)
                 mixer.add_stream(self.stream, [self.volumefilter])
                 if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
                     # get the duration from the stream itself
@@ -159,6 +187,8 @@ class TrackFrame(ttk.LabelFrame):
 
     def close_stream(self):
         self.current_track = None
+        self.fadein = None
+        self.fadeout = None
         if self.stream:
             self.stream.close()
             self.stream = None
@@ -175,15 +205,17 @@ class TrackFrame(ttk.LabelFrame):
         self.timeleftLabel["text"] = datetime.timedelta(seconds=int(track["duration"]))
         self.current_track_filename = track["location"]
         self.current_track_duration = track["duration"]
-        self.on_volumereset(None)
+        self.volumereset()
 
     def on_volumechange(self, value):
         self.volumefilter.volume = self.volumeVar.get() / 100.0
         self.volumeLabel["text"] = "{:.0f}%".format(self.volumeVar.get())
 
-    def on_volumereset(self, event):
-        self.volumeVar.set(100)
-        self.on_volumechange(100)
+    def volumereset(self, volume=100):
+        self.volumeVar.set(volume)
+        self.fadeout = None
+        self.fadein = None
+        self.on_volumechange(volume)
 
     def set_state(self, state):
         if state==self.state_idle:
@@ -245,7 +277,7 @@ class PlaylistFrame(ttk.LabelFrame):
         ttk.Button(bf, text="Remove", width=11, command=self.do_remove).pack()
         bf.pack(side=tk.LEFT, padx=4)
         sf = ttk.Frame(self)
-        cols = [("title", 300), ("artist", 180), ("album", 180)]
+        cols = [("title", 300), ("artist", 180), ("album", 180), ("length", 60)]
         self.listTree = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
         vsb = ttk.Scrollbar(orient="vertical", command=self.listTree.yview)
         self.listTree.configure(yscrollcommand=vsb.set)
@@ -262,7 +294,7 @@ class PlaylistFrame(ttk.LabelFrame):
         items = self.listTree.get_children()
         if items:
             top_item = items[0]
-            hashcode = self.listTree.item(top_item, "values")[3]
+            hashcode = self.listTree.item(top_item, "values")[4]
             self.listTree.delete(top_item)
             return hashcode
         return None
@@ -270,7 +302,7 @@ class PlaylistFrame(ttk.LabelFrame):
     def peek(self):
         items = self.listTree.get_children()
         if items:
-            return self.listTree.item(items[0], "values")[3]
+            return self.listTree.item(items[0], "values")[4]
         return None
 
     def do_to_top(self):
@@ -303,6 +335,7 @@ class PlaylistFrame(ttk.LabelFrame):
             track["title"] or '-',
             track["artist"] or '-',
             track["album"] or '-',
+            datetime.timedelta(seconds=int(track["duration"])),
             track["hash"]])
 
 
@@ -327,7 +360,7 @@ class SearchFrame(ttk.LabelFrame):
         ttk.Button(bf, text="Search", command=self.do_search).pack()
         bf.pack(side=tk.LEFT)
         sf = ttk.Frame(self)
-        cols = [("title", 320), ("artist", 200), ("album", 200), ("year", 50), ("genre", 120)]
+        cols = [("title", 320), ("artist", 200), ("album", 200), ("year", 50), ("genre", 120), ("length", 60)]
         self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
         vsb = ttk.Scrollbar(orient="vertical", command=self.resultTreeView.yview)
         self.resultTreeView.configure(yscrollcommand=vsb.set)
@@ -383,7 +416,8 @@ class SearchFrame(ttk.LabelFrame):
                 track["artist"] or '-',
                 track["album"] or '-',
                 track["year"] or '-',
-                track["genre"] or '-'])
+                track["genre"] or '-',
+                datetime.timedelta(seconds=int(track["duration"])) ])
         self.app.show_status("{:d} results found".format(len(result)), 3)
 
 
@@ -515,6 +549,9 @@ class JukeboxGui(tk.Tk):
 
     def play_sample(self, sample):
         self.player.play_sample(sample)
+
+    def start_playing_other(self):
+        self.player.start_play_other()
 
 
 if __name__ == "__main__":
