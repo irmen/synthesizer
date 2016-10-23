@@ -20,7 +20,7 @@ from synthesizer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilte
 from synthesizer.sample import Sample, Output, LevelMeter
 import Pyro4
 import Pyro4.errors
-
+import Pyro4.futures
 
 StreamMixer.buffer_size = 4096      # larger is less skips and less cpu usage but more latency and slower meters
 hqresample = AudiofileToWavStream.supports_hq_resample()
@@ -79,6 +79,7 @@ class Player:
             self.mixer.add_sample(sample)
 
     def start_play_other(self):
+        # @todo fix the track switching and fadein/fadeout, it's a bit of a mess
         if self.app.firstTrackFrame.playing:
             other_track = self.app.secondTrackFrame
         else:
@@ -101,6 +102,7 @@ class TrackFrame(ttk.LabelFrame):
         self.current_track_duration = None
         self.stream = None
         self.stream_started = 0
+        self.stream_opened = False
         self.volumeVar = tk.DoubleVar(value=100)
         self.volumefilter = VolumeFilter()
         self.fadeout = None
@@ -153,7 +155,7 @@ class TrackFrame(ttk.LabelFrame):
             else:
                 self.set_state(self.state_warning)
         if self.playing and self.current_track:
-            if self.stream:
+            if self.stream_opened:
                 # update duration timer
                 stream_time = time.time() - self.stream_started
                 remaining = self.current_track_duration - stream_time
@@ -185,27 +187,33 @@ class TrackFrame(ttk.LabelFrame):
                     return
             # when it is time, load the track and add its stream to the mixer
             if not self.stream:
-                # @todo start loading stream in a separate thread because this blocks the ui and audio playback
-                self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
-                self.stream_started = time.time()
-                self.set_state(self.state_playing)
-                mixer.add_stream(self.stream, [self.volumefilter])
-                if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
-                    # get the duration from the stream itself
-                    self.current_track_duration = self.stream.format_probe.duration
+                self.stream = object()   # placeholder
+                Pyro4.futures.Future(self.start_stream)(mixer)
+
+    def start_stream(self, mixer):
+        self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
+        self.stream_started = time.time()
+        self.after_idle(lambda s=self: s.set_state(s.state_playing))
+        mixer.add_stream(self.stream, [self.volumefilter])
+        if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
+            # get the duration from the stream itself
+            self.current_track_duration = self.stream.format_probe.duration
+        self.stream_opened = True
 
     def close_stream(self):
         self.current_track = None
         self.fadein = None
         self.fadeout = None
-        if self.stream:
+        if self.stream_opened:
             self.stream.close()
             self.stream = None
+            self.stream_opened = False
 
     def next_track(self, hashcode):
-        if self.stream:
+        if self.stream_opened:
             self.stream.close()
             self.stream = None
+            self.stream_opened = False
         self.current_track = hashcode
         track = self.app.backend.track(hashcode=self.current_track)
         self.titleLabel["text"] = track["title"] or "-"
