@@ -83,16 +83,16 @@ class TrackFrame(ttk.LabelFrame):
         self.current_track_duration = None
         self.stream = None
         ttk.Label(self, text="title").pack()
-        self.titleLabel = ttk.Label(self, relief=tk.SOLID, width=22, anchor=tk.W)
+        self.titleLabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.titleLabel.pack()
         ttk.Label(self, text="artist").pack()
-        self.artistLabel = ttk.Label(self, relief=tk.SOLID, width=22, anchor=tk.W)
+        self.artistLabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.artistLabel.pack()
         ttk.Label(self, text="album").pack()
-        self.albumlabel = ttk.Label(self, relief=tk.SOLID, width=22, anchor=tk.W)
+        self.albumlabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.albumlabel.pack()
         ttk.Label(self, text="time left").pack()
-        self.timeleftLabel = ttk.Label(self, relief=tk.SOLID, anchor=tk.CENTER, width=14)
+        self.timeleftLabel = ttk.Label(self, relief=tk.GROOVE, anchor=tk.CENTER, width=14)
         self.timeleftLabel.pack()
         ttk.Button(self, text="Skip", command=self.skip).pack(pady=4)
 
@@ -201,10 +201,10 @@ class PlaylistFrame(ttk.LabelFrame):
         super().__init__(master, text="Playlist", padding=4)
         self.app = app
         bf = ttk.Frame(self)
-        ttk.Button(bf, text="Move to Top", command=self.do_to_top).pack()
-        ttk.Button(bf, text="Move Up", command=self.do_move_up).pack()
-        ttk.Button(bf, text="Move Down", command=self.do_move_down).pack()
-        ttk.Button(bf, text="Remove", command=self.do_remove).pack()
+        ttk.Button(bf, text="Move to Top", width=10, command=self.do_to_top).pack()
+        ttk.Button(bf, text="Move Up", width=10, command=self.do_move_up).pack()
+        ttk.Button(bf, text="Move Down", width=10, command=self.do_move_down).pack()
+        ttk.Button(bf, text="Remove", width=10, command=self.do_remove).pack()
         bf.pack(side=tk.LEFT, padx=4)
         sf = ttk.Frame(self)
         cols = [("title", 300), ("artist", 180), ("album", 180)]
@@ -351,19 +351,19 @@ class SearchFrame(ttk.LabelFrame):
 
 class JingleFrame(ttk.LabelFrame):
     def __init__(self, app, master):
-        super().__init__(master, text="Jingles/Samples - shift+click to change", padding=4)
+        super().__init__(master, text="Jingles/Samples - shift+click to assign sample", padding=4)
         self.app = app
         self.jingles = {num: None for num in range(16)}
         f = ttk.Frame(self)
         for i in range(1, 9):
-            b = ttk.Button(f, text="Jingle {:d}".format(i), width=16, state=tk.DISABLED)
+            b = ttk.Button(f, text="# {:d}".format(i), width=14, state=tk.DISABLED)
             b.bind("<ButtonRelease>", self.do_button_release)
             b.jingle_nr = i
             b.pack(side=tk.LEFT)
         f.pack()
         f = ttk.Frame(self)
-        for i in range(1, 9):
-            b = ttk.Button(f, text="Jingle {:d}".format(i), width=16, state=tk.DISABLED)
+        for i in range(9, 17):
+            b = ttk.Button(f, text="# {:d}".format(i), width=14, state=tk.DISABLED)
             b.bind("<ButtonRelease>", self.do_button_release)
             b.jingle_nr = i
             b. pack(side=tk.LEFT)
@@ -387,11 +387,16 @@ class JingleFrame(ttk.LabelFrame):
                 self.app.play_sample(sample)
 
 
-class JukeboxGui(ttk.Frame):
-    def __init__(self, master=None):
-        super().__init__(master)
-        self.master.title("Jukebox")
-        f1 = ttk.Frame()
+class JukeboxGui(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        default_font = tk.font.nametofont("TkDefaultFont")
+        default_font["size"] = default_font["size"]+2
+        default_font = tk.font.nametofont("TkTextFont")
+        default_font["size"] = default_font["size"]+2
+        self.title("Jukebox")
+        f = ttk.Frame()
+        f1 = ttk.Frame(f)
         self.firstTrackFrame = TrackFrame(self, f1, "Track 1")
         self.secondTrackFrame = TrackFrame(self, f1, "Track 2")
         self.levelmeterFrame = LevelmeterFrame(f1)
@@ -401,21 +406,21 @@ class JukeboxGui(ttk.Frame):
         self.levelmeterFrame.pack(side=tk.LEFT, fill=tk.Y)
         self.playlistFrame.pack(side=tk.LEFT, fill=tk.Y)
         f1.pack(side=tk.TOP)
-        f2 = ttk.Frame()
+        f2 = ttk.Frame(f)
         self.searchFrame = SearchFrame(self, f2)
         self.searchFrame.pack()
         f2.pack(side=tk.TOP)
-        f3 = ttk.Frame()
+        f3 = ttk.Frame(f)
         self.jingleFrame = JingleFrame(self, f3)
         self.jingleFrame.pack()
         f3.pack(side=tk.TOP)
-        self.statusbar = ttk.Label(master, text="<status>", relief=tk.SOLID, anchor=tk.CENTER)
+        self.statusbar = ttk.Label(f, text="<status>", relief=tk.GROOVE, anchor=tk.CENTER)
         self.statusbar.pack(fill=tk.X, expand=True)
+        f.pack()
         self.player = Player(self)
         self.backend = None
         self.show_status("Connecting to backend file service...")
-        self.pack()
-        self.after(100, self.connect_backend)
+        self.after(500, self.connect_backend)
 
     def destroy(self):
         self.player.stop()
@@ -459,12 +464,5 @@ class JukeboxGui(ttk.Frame):
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    default_font = tk.font.nametofont("TkDefaultFont")
-    default_font["size"] = default_font["size"]+2
-    # default_font.configure(size=11, family="Lucida Sans Unicode")
-    default_font = tk.font.nametofont("TkTextFont")
-    default_font["size"] = default_font["size"]+2
-    # default_font.configure(size=10, family="Lucida Sans Unicode")
-    app = JukeboxGui(master=root)
+    app = JukeboxGui()
     app.mainloop()
