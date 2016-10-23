@@ -237,7 +237,7 @@ class Sample:
             self.__samplerate = w.getframerate()
             self.__samplewidth = w.getsampwidth()
             nframes = w.getnframes()
-            if nframes*self.__nchannels*self.__samplewidth > sys.maxsize//16:
+            if nframes*self.__nchannels*self.__samplewidth > 2**26:
                 # Requested number of frames is way to large. Probably dealing with a stream.
                 # Try to read it in chunks of 1 Mb each and hope the stream is not infinite.
                 self.__frames = bytearray()
