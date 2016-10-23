@@ -914,10 +914,10 @@ class LevelMeter:
         self.reset()
 
     def reset(self):
-        """Resets the meter to its initial state with zero level."""
+        """Resets the meter to its initial state with lowest levels."""
         self.peak_left = self.peak_right = self._lowest
         self._peak_left_hold = self._peak_right_hold = 0.0
-        self.level_left = self.level_right = 0.0
+        self.level_left = self.level_right = self._lowest
         self._time = 0.0
 
     def update(self, sample):

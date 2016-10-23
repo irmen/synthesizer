@@ -21,9 +21,9 @@ StreamMixer.buffer_size = 4096      # larger is less skips and less cpu usage bu
 
 
 class Player:
-    async_queue_size = 3    # larger is less chance of getting skips, but latency increases
-    update_rate = 40        # larger is less cpu usage but more chance of getting skips
-
+    async_queue_size = 3     # larger is less chance of getting skips, but latency increases
+    update_rate = 40         # larger is less cpu usage but more chance of getting skips
+    levelmeter_lowest = -40  # dB
     def __init__(self, app):
         self.app = app
         self.app.after(self.update_rate, self.tick)
@@ -32,7 +32,7 @@ class Player:
         self.mixer = StreamMixer([], endless=True)
         self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_queue_size)
         self.mixed_samples = iter(self.mixer)
-        self.levelmeter = LevelMeter(rms_mode=False, lowest=-40.0)
+        self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
 
     def stop(self):
         self.stopping = True
@@ -56,6 +56,9 @@ class Player:
                 self.output.play_sample(sample, async=True)
                 left, _, right, _ = self.levelmeter.update(sample)
                 self.app.update_levels(left, right)
+            else:
+                self.levelmeter.reset()
+                self.app.update_levels(self.levelmeter.level_left, self.levelmeter.level_right)
         if not self.stopping:
             self.app.after(self.update_rate, self.tick)
 
@@ -144,9 +147,9 @@ class TrackFrame(tk.LabelFrame):
 
 
 class LevelmeterFrame(tk.LabelFrame):
-    def __init__(self, master, lowest_level):
+    def __init__(self, master):
         super().__init__(master, text="Levels", border=4, padx=4, pady=4)
-        self.lowest_level = lowest_level
+        self.lowest_level = Player.levelmeter_lowest
         self.pbvar_left = tk.IntVar()
         self.pbvar_right = tk.IntVar()
         pbstyle = ttk.Style()
@@ -381,7 +384,7 @@ class JukeboxGui(tk.Frame):
         f1 = tk.Frame()
         self.firstTrackFrame = TrackFrame(self, f1, "Track 1")
         self.secondTrackFrame = TrackFrame(self, f1, "Track 2")
-        self.levelmeterFrame = LevelmeterFrame(f1, -50)
+        self.levelmeterFrame = LevelmeterFrame(f1)
         self.playlistFrame = PlaylistFrame(self, f1)
         self.firstTrackFrame.pack(side=tk.LEFT, fill=tk.Y)
         self.secondTrackFrame.pack(side=tk.LEFT, fill=tk.Y)
