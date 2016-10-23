@@ -226,12 +226,13 @@ class StreamMixer:
         for stream in streams:
             self.add_stream(stream, endless)
 
-    def add_stream(self, stream, endless=False):
+    def add_stream(self, stream, filters=None, endless=False):
         ws = wave.open(stream, 'r')
         ss = SampleStream(ws, self.buffer_size)
         if endless:
             ss.add_frames_filter(EndlessFramesFilter())
-        # ss.add_filter(VolumeFilter(0.1))
+        for f in (filters or []):
+            ss.add_filter(f)
         self.sample_streams.append(ss)
         self.wrapped_streams[ss] = stream
 

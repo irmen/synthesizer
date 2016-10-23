@@ -12,7 +12,7 @@ import tkinter.font
 import tkinter.messagebox
 import tkinter.filedialog
 from .backend import BACKEND_PORT
-from synthesizer.streaming import AudiofileToWavStream, StreamMixer
+from synthesizer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
 from synthesizer.sample import Sample, Output, LevelMeter
 import Pyro4
 import Pyro4.errors
@@ -82,23 +82,34 @@ class TrackFrame(ttk.LabelFrame):
         self.current_track_filename = None
         self.current_track_duration = None
         self.stream = None
-        ttk.Label(self, text="title").pack()
+        self.volumeVar = tk.DoubleVar(value=100)
+        self.volumefilter = VolumeFilter()
+        ttk.Label(self, text="title / artist / album").pack()
         self.titleLabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.titleLabel.pack()
-        ttk.Label(self, text="artist").pack()
         self.artistLabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.artistLabel.pack()
-        ttk.Label(self, text="album").pack()
         self.albumlabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.albumlabel.pack()
-        ttk.Label(self, text="time left").pack()
-        self.timeleftLabel = ttk.Label(self, relief=tk.GROOVE, anchor=tk.CENTER, width=14)
-        self.timeleftLabel.pack()
+        f = ttk.Frame(self)
+        ttk.Label(f, text="time left: ").pack(side=tk.LEFT)
+        self.timeleftLabel = ttk.Label(f, relief=tk.GROOVE, anchor=tk.CENTER)
+        self.timeleftLabel.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+        f.pack(fill=tk.X)
+        f = ttk.Frame(self)
+        ttk.Label(f, text="V: ").pack(side=tk.LEFT)
+        scale = ttk.Scale(f, from_=0, to=150, length=120, variable=self.volumeVar, command=self.on_volumechange)
+        scale.bind("<Double-1>", self.on_volumereset)
+        scale.pack(side=tk.LEFT)
+        self.volumeLabel = ttk.Label(f, text="???%")
+        self.volumeLabel.pack(side=tk.RIGHT)
+        f.pack(fill=tk.X)
         ttk.Button(self, text="Skip", command=self.skip).pack(pady=4)
 
     def play(self, playing=True):
         self["text"] = self.title + (" [PLAYING]" if playing else "")
         self.playing = playing
+        self.on_volumereset(None)
 
     def skip(self):
         if self.playing:
@@ -131,7 +142,7 @@ class TrackFrame(ttk.LabelFrame):
             if not self.stream:
                 self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
                 # @todo set playing state indicator to OKAY/PLAYING (if self.playing) else NEUTRAL
-                mixer.add_stream(self.stream)
+                mixer.add_stream(self.stream, [self.volumefilter])
                 if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
                     # get the duration from the stream itself
                     self.current_track_duration = self.stream.format_probe.duration
@@ -154,6 +165,15 @@ class TrackFrame(ttk.LabelFrame):
         self.timeleftLabel["text"] = datetime.timedelta(seconds=int(track["duration"]))
         self.current_track_filename = track["location"]
         self.current_track_duration = track["duration"]
+        self.on_volumereset(None)
+
+    def on_volumechange(self, value):
+        self.volumefilter.volume = self.volumeVar.get() / 100.0
+        self.volumeLabel["text"] = "{:.0f}%".format(self.volumeVar.get())
+
+    def on_volumereset(self, event):
+        self.volumeVar.set(100)
+        self.on_volumechange(100)
 
 
 class LevelmeterFrame(ttk.LabelFrame):
@@ -171,12 +191,12 @@ class LevelmeterFrame(ttk.LabelFrame):
         ttk.Label(self, text="dB").pack(side=tkinter.TOP)
         frame = ttk.LabelFrame(self, text="L.")
         frame.pack(side=tk.LEFT)
-        self.pb_left = ttk.Progressbar(frame, orient=tk.VERTICAL, length=190, maximum=-self.lowest_level, variable=self.pbvar_left, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_left = ttk.Progressbar(frame, orient=tk.VERTICAL, length=200, maximum=-self.lowest_level, variable=self.pbvar_left, mode='determinate', style='yellow.Vertical.TProgressbar')
         self.pb_left.pack()
 
         frame = ttk.LabelFrame(self, text="R.")
         frame.pack(side=tk.LEFT)
-        self.pb_right = ttk.Progressbar(frame, orient=tk.VERTICAL, length=190, maximum=-self.lowest_level, variable=self.pbvar_right, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_right = ttk.Progressbar(frame, orient=tk.VERTICAL, length=200, maximum=-self.lowest_level, variable=self.pbvar_right, mode='determinate', style='yellow.Vertical.TProgressbar')
         self.pb_right.pack()
 
     def update_meters(self, left, right):
@@ -201,10 +221,10 @@ class PlaylistFrame(ttk.LabelFrame):
         super().__init__(master, text="Playlist", padding=4)
         self.app = app
         bf = ttk.Frame(self)
-        ttk.Button(bf, text="Move to Top", width=10, command=self.do_to_top).pack()
-        ttk.Button(bf, text="Move Up", width=10, command=self.do_move_up).pack()
-        ttk.Button(bf, text="Move Down", width=10, command=self.do_move_down).pack()
-        ttk.Button(bf, text="Remove", width=10, command=self.do_remove).pack()
+        ttk.Button(bf, text="Move to Top", width=11, command=self.do_to_top).pack()
+        ttk.Button(bf, text="Move Up", width=11, command=self.do_move_up).pack()
+        ttk.Button(bf, text="Move Down", width=11, command=self.do_move_down).pack()
+        ttk.Button(bf, text="Remove", width=11, command=self.do_remove).pack()
         bf.pack(side=tk.LEFT, padx=4)
         sf = ttk.Frame(self)
         cols = [("title", 300), ("artist", 180), ("album", 180)]
@@ -391,9 +411,9 @@ class JukeboxGui(tk.Tk):
     def __init__(self):
         super().__init__()
         default_font = tk.font.nametofont("TkDefaultFont")
-        default_font["size"] = default_font["size"]+2
+        default_font["size"] = abs(default_font["size"])+2
         default_font = tk.font.nametofont("TkTextFont")
-        default_font["size"] = default_font["size"]+2
+        default_font["size"] = abs(default_font["size"])+2
         self.title("Jukebox")
         f = ttk.Frame()
         f1 = ttk.Frame(f)
@@ -425,6 +445,11 @@ class JukeboxGui(tk.Tk):
     def destroy(self):
         self.player.stop()
         super().destroy()
+        try:
+            import tty
+            os.system("stty sane")
+        except ImportError:
+            pass
 
     def show_status(self, statustext, duration=None):
         def reset_status(text):
