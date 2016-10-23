@@ -497,7 +497,7 @@ class JukeboxGui(tk.Tk):
             if answer:
                 p = subprocess.Popen([sys.executable, "-m", "jukebox.backend", "-noscan"])
                 self.backend_process = p.pid
-                self.connect_backend()
+                self.after(2000, self.connect_backend)
 
     def enqueue(self, track):
         self.playlistFrame.enqueue(track)
