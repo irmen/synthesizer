@@ -16,11 +16,26 @@ import Pyro4
 import Pyro4.errors
 
 
+StreamMixer.buffer_size = 4096
+
+
 class Player:
     def __init__(self, app):
         self.app = app
         self.app.after(50, self.tick)
         self.app.firstTrackFrame.play()
+        self.stopping = False
+        self.mixer = StreamMixer([], endless=True)
+        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels)
+        self.mixed_samples = iter(self.mixer)
+        self.levelmeter = LevelMeter(rms_mode=False, lowest=-40.0)
+
+    def stop(self):
+        self.stopping = True
+        self.app.firstTrackFrame.close_stream()
+        self.app.secondTrackFrame.close_stream()
+        self.mixer.close()
+        self.output.close()
 
     def switch_player(self):
         first_is_playing = self.app.firstTrackFrame.playing
@@ -37,7 +52,16 @@ class Player:
                     t1.next_track(track)
                 else:
                     t2.next_track(track)
-        self.app.after(50, self.tick)
+        playing = self.app.firstTrackFrame if self.app.firstTrackFrame.playing else self.app.secondTrackFrame
+        if playing.playing:
+            playing.tick(self.mixer)
+        timestamp, sample = next(self.mixed_samples)
+        if sample and sample.duration > 0:
+            self.levelmeter.update(sample)
+            self.output.play_sample(sample)   # XXX todo separate output playing thread to not freeze gui
+            self.levelmeter.print()
+        if not self.stopping:
+            self.app.after(50, self.tick)
 
 
 class TrackFrame(tk.LabelFrame):
@@ -47,6 +71,8 @@ class TrackFrame(tk.LabelFrame):
         super().__init__(master, text=title, border=4, padx=4, pady=4)
         self.app = app
         self.current_track = None
+        self.current_track_filename = None
+        self.stream = None
         tk.Label(self, text="title").pack()
         self.titleLabel = tk.Label(self, relief=tk.RIDGE, width=22, anchor=tk.W)
         self.titleLabel.pack()
@@ -68,19 +94,37 @@ class TrackFrame(tk.LabelFrame):
     def skip(self):
         if self.playing:
             self.app.switch_player()
-        self.current_track = None
+            self.close_stream()
         self.timeleftLabel["text"] = "0 (next track...)"
+
+    def tick(self, mixer):
+        # when it is time, load the track and add its stream to the mixer
+        if self.playing and self.current_track:
+            if not self.stream:
+                self.stream = AudiofileToWavStream(self.current_track_filename)
+                mixer.add_stream(self.stream)
+
+    def close_stream(self):
+        self.current_track = None
+        self.playing = False
+        if self.stream:
+            self.stream.close()
+            self.stream = None
 
     def needs_new_track(self):
         return self.current_track is None
 
     def next_track(self, hashcode):
+        if self.stream:
+            self.stream.close()
+            self.stream = None
         self.current_track = hashcode
         track = self.app.backend.track(hashcode=self.current_track)
         self.titleLabel["text"] = track["title"] or "-"
         self.artistLabel["text"] = track["artist"] or "-"
         self.albumlabel["text"] = track["album"] or "-"
         self.timeleftLabel["text"] = track["duration"] or "??"
+        self.current_track_filename = track["location"]
 
 
 class PlaylistFrame(tk.LabelFrame):
@@ -288,11 +332,15 @@ class JukeboxGui(tk.Frame):
         f3.pack(side=tk.TOP)
         self.statusbar = tk.Label(self, text="<status>", relief=tk.RIDGE)
         self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.pack()
+        self.player = Player(self)
         self.backend = None
         self.show_status("Connecting to backend file service...")
-        self.player = Player(self)
+        self.pack()
         self.after(100, self.connect_backend)
+
+    def destroy(self):
+        self.player.stop()
+        super().destroy()
 
     def show_status(self, statustext, duration=None):
         def reset_status(text):
