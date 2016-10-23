@@ -43,18 +43,8 @@ class Player:
         self.app.secondTrackFrame.play(first_is_playing)
 
     def tick(self):
-        t1 = self.app.firstTrackFrame
-        t2 = self.app.secondTrackFrame
-        if t1.needs_new_track() or t2.needs_new_track():
-            track = self.app.upcoming_track_hash()
-            if track:
-                if t1.needs_new_track():
-                    t1.next_track(track)
-                else:
-                    t2.next_track(track)
-        playing = self.app.firstTrackFrame if self.app.firstTrackFrame.playing else self.app.secondTrackFrame
-        if playing.playing:
-            playing.tick(self.mixer)
+        self.app.firstTrackFrame.tick(self.mixer)
+        self.app.secondTrackFrame.tick(self.mixer)
         timestamp, sample = next(self.mixed_samples)
         if sample and sample.duration > 0:
             self.output.play_sample(sample)   # XXX todo separate output playing thread to not freeze gui
@@ -95,32 +85,32 @@ class TrackFrame(tk.LabelFrame):
     def skip(self):
         if self.playing:
             self.app.switch_player()
-            self.close_stream()
+        self.close_stream()
         self.titleLabel["text"] = ""
         self.artistLabel["text"] = ""
         self.albumlabel["text"] = ""
         self.timeleftLabel["text"] = "(next track...)"
 
     def tick(self, mixer):
+        # if we don't have a track, try go get the next one from the playlist
+        if self.current_track is None:
+            track = self.app.upcoming_track_hash()
+            if track:
+                self.next_track(track)
         # when it is time, load the track and add its stream to the mixer
         if self.playing and self.current_track:
             if not self.stream:
                 self.stream = AudiofileToWavStream(self.current_track_filename)
                 mixer.add_stream(self.stream)
-                print("STREAM ADDED", self.stream)   # XXX
                 if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
                     # get the duration from the stream itself
                     self.current_track_duration = self.stream.format_probe.duration
 
     def close_stream(self):
         self.current_track = None
-        self.playing = False
         if self.stream:
             self.stream.close()
             self.stream = None
-
-    def needs_new_track(self):
-        return self.current_track is None
 
     def next_track(self, hashcode):
         if self.stream:
