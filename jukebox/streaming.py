@@ -132,6 +132,13 @@ class AudiofileToWavStream(io.RawIOBase):
         if self.stream:
             self.stream.close()
 
+    @property
+    def closed(self):
+        if self.stream:
+            return self.stream.closed
+        else:
+            return True
+
 
 class SampleStream:
     """
@@ -211,6 +218,7 @@ class StreamMixer:
         self.nchannels = nchannels
         self.timestamp = 0.0
         self.sample_streams = []
+        self.wrapped_streams = {}   # samplestream->wrappedstream (to close stuff properly)
         for stream in streams:
             self.add_stream(stream, endless)
 
@@ -221,10 +229,14 @@ class StreamMixer:
             ss.add_frames_filter(EndlessFramesFilter())
         # ss.add_filter(VolumeFilter(0.1))
         self.sample_streams.append(ss)
+        self.wrapped_streams[ss] = stream
 
     def remove_stream(self, stream):
         stream.close()
         self.sample_streams.remove(stream)
+        if stream in self.wrapped_streams:
+            wrapped_stream = self.wrapped_streams.pop(stream)
+            wrapped_stream.close()
 
     def add_sample(self, sample):
         assert sample.samplewidth == self.samplewidth
