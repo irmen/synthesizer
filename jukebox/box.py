@@ -117,6 +117,11 @@ class TrackFrame(tk.LabelFrame):
             # update duration timer
             remaining = self.current_track_duration - player_timestamp
             self.timeleftLabel["text"] = datetime.timedelta(seconds=int(remaining))
+            if self.stream and self.stream.closed:
+                # Stream is closed, probably exhausted. Skip to other track.
+                # @todo fade out/fade in
+                self.skip()
+                return
             # when it is time, load the track and add its stream to the mixer
             if not self.stream:
                 self.stream = AudiofileToWavStream(self.current_track_filename)
