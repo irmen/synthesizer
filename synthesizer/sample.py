@@ -785,6 +785,7 @@ class Output:
             self.queue.put(sample)
 
         _wipe_lock = threading.Lock()
+
         def wipe_queue(self):
             with self._wipe_lock:
                 try:

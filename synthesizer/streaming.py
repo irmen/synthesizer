@@ -59,8 +59,7 @@ class AudiofileToWavStream(io.RawIOBase):
                 samplerate = int(samplerate)
                 assert 2000 <= samplerate <= 200000
                 if hqresample:
-                    buildconf = subprocess.check_output([self.ffmpeg_executable, "-v", "error", "-buildconf"]).decode()
-                    if "--enable-libsoxr" not in buildconf:
+                    if not self.supports_hq_resample():
                         raise RuntimeError("ffmpeg isn't compiled with libsoxr, so hq resampling is not supported")
                     self.resample_options = ["-af", "aresample=resampler=soxr", "-ar", str(samplerate)]
                 else:
@@ -83,11 +82,16 @@ class AudiofileToWavStream(io.RawIOBase):
         self.start_stream()
 
     @classmethod
+    def supports_hq_resample(cls):
+        buildconf = subprocess.check_output([cls.ffmpeg_executable, "-v", "error", "-buildconf"]).decode()
+        return "--enable-libsoxr" in buildconf
+
+    @classmethod
     def probe_format(cls, filename):
         command = [cls.ffprobe_executable, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-i", filename]
         probe = subprocess.check_output(command)
         probe = json.loads(probe.decode())
-        stream = [stream for stream in probe["streams"] if stream["codec_type"]=="audio"][0]
+        stream = [stream for stream in probe["streams"] if stream["codec_type"] == "audio"][0]
         if not stream:
             raise IOError("file contains no audio stream, not supported")
         samplerate = int(stream["sample_rate"])

@@ -11,19 +11,23 @@ import tkinter.font
 import tkinter.messagebox
 import tkinter.filedialog
 from .backend import BACKEND_PORT
-from .streaming import AudiofileToWavStream, StreamMixer
+from synthesizer.streaming import AudiofileToWavStream, StreamMixer
 from synthesizer.sample import Sample, Output, LevelMeter
 import Pyro4
 import Pyro4.errors
 
 
 StreamMixer.buffer_size = 4096      # larger is less skips and less cpu usage but more latency and slower meters
+hqresample = AudiofileToWavStream.supports_hq_resample()
+if not hqresample:
+    print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
 
 
 class Player:
     async_queue_size = 3     # larger is less chance of getting skips, but latency increases
     update_rate = 40         # larger is less cpu usage but more chance of getting skips
     levelmeter_lowest = -40  # dB
+
     def __init__(self, app):
         self.app = app
         self.app.after(self.update_rate, self.tick)
@@ -124,7 +128,7 @@ class TrackFrame(tk.LabelFrame):
                 return
             # when it is time, load the track and add its stream to the mixer
             if not self.stream:
-                self.stream = AudiofileToWavStream(self.current_track_filename)
+                self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
                 self["bg"] = "light green" if self.playing else self.master.cget("bg")
                 mixer.add_stream(self.stream)
                 if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
@@ -148,7 +152,7 @@ class TrackFrame(tk.LabelFrame):
         self.albumlabel["text"] = track["album"] or "-"
         self.timeleftLabel["text"] = datetime.timedelta(seconds=int(track["duration"]))
         self.current_track_filename = track["location"]
-        self.current_track_duration =  track["duration"]
+        self.current_track_duration = track["duration"]
 
 
 class LevelmeterFrame(tk.LabelFrame):
@@ -372,7 +376,7 @@ class JingleFrame(tk.LabelFrame):
         if shift:
             filename = tkinter.filedialog.askopenfilename()
             if filename:
-                with AudiofileToWavStream(filename) as wav:
+                with AudiofileToWavStream(filename, hqresample=hqresample) as wav:
                     sample = Sample(wav)
                     self.jingles[event.widget.jingle_nr] = sample
                 event.widget["fg"] = self.cget("fg")
@@ -382,7 +386,7 @@ class JingleFrame(tk.LabelFrame):
                 self.app.play_sample(sample)
 
 
-class JukeboxGui(tk.Frame):
+class JukeboxGui(ttk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.master.title("Jukebox")

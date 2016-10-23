@@ -17,7 +17,7 @@ import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthesizer.sample import Sample, Output, LevelMeter
-from jukebox.streaming import AudiofileToWavStream
+from synthesizer.streaming import AudiofileToWavStream
 
 
 def play_console(filename_or_stream):
@@ -125,6 +125,10 @@ def play_gui(file_or_stream):
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit("give audio file to play as an argument.")
-    with AudiofileToWavStream(sys.argv[1]) as stream:
+    hqresample = AudiofileToWavStream.supports_hq_resample()
+    with AudiofileToWavStream(sys.argv[1], hqresample=hqresample) as stream:
+        print(stream.format_probe)
+        if stream.conversion_required and not hqresample:
+            print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
         play_gui(stream)
     print("Done.")
