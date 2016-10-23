@@ -17,7 +17,7 @@ import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthesizer.sample import Sample, Output, LevelMeter
-from synthesizer.tools import AudiofileToWavStream
+from jukebox.streaming import AudiofileToWavStream
 
 
 def play_console(filename_or_stream):

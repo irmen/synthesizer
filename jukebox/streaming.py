@@ -14,7 +14,7 @@ from functools import namedtuple
 from synthesizer.sample import Sample
 
 
-__all__ = ["AudiofileToWavStream", "EndlessWavReader", "StreamMixer", "VolumeFilter", "SampleStream"]
+__all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFramesFilter", "SampleStream"]
 
 
 AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat"])
@@ -48,8 +48,8 @@ class AudiofileToWavStream(io.RawIOBase):
             try:
                 # probe the existing file format, to see if we can avoid needless conversion
                 probe = self.probe_format()
-                self.conversion_required = probe.rate!=samplerate or probe.channels!=channels \
-                                           or probe.sampformat!=sampleformat or probe.fileformat!="wav"
+                self.conversion_required = probe.rate != samplerate or probe.channels != channels \
+                                           or probe.sampformat != sampleformat or probe.fileformat != "wav"
             except (subprocess.CalledProcessError, IOError, OSError):
                 pass
         if self.conversion_required:
@@ -171,7 +171,7 @@ class EndlessFramesFilter:
     """
     Turns a frame stream into an endless frame stream by adding silence frames at the end until closed.
     """
-    def set_params(self, buffer_size, samplerate, samplewidth, nchannels):
+    def set_params(self, buffer_size, samplewidth, nchannels):
         self.silence_frame = b"\0" * nchannels * samplewidth * buffer_size
 
     def __call__(self, frames):
@@ -197,6 +197,7 @@ class StreamMixer:
     Takes ownership of the source streams that are being mixed, and will close them for you as needed.
     """
     buffer_size = 4096   # number of frames in a buffer
+
     def __init__(self, streams, endless=False, samplewidth=Sample.norm_samplewidth, samplerate=Sample.norm_samplerate, nchannels=Sample.norm_nchannels):
         # assume all wave streams are the same parameters
         self.samplewidth = samplewidth
@@ -206,8 +207,6 @@ class StreamMixer:
         self.sample_streams = []
         for stream in streams:
             self.add_stream(stream, endless)
-        if len(self.sample_streams) < 1:
-            raise ValueError("must have at least one stream")
 
     def add_stream(self, stream, endless=False):
         ws = wave.open(stream, 'r')
@@ -248,7 +247,11 @@ class StreamMixer:
         while True:
             mixed_sample = Sample.from_raw_frames(b"", self.samplewidth, self.samplerate, self.nchannels)
             for sample_stream in self.sample_streams:
-                sample = next(sample_stream)
+                try:
+                    sample = next(sample_stream)
+                except (os.error, ValueError):
+                    # Problem reading from stream. Assume stream closed.
+                    sample = None
                 if sample:
                     mixed_sample.mix(sample)
                 else:
