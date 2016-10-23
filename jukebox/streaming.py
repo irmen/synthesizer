@@ -17,7 +17,7 @@ from synthesizer.sample import Sample
 __all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFramesFilter", "SampleStream"]
 
 
-AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat"])
+AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat", "duration"])
 
 
 class AudiofileToWavStream(io.RawIOBase):
@@ -44,12 +44,14 @@ class AudiofileToWavStream(io.RawIOBase):
         self.downmix_options = []
         self.sampleformat_options = []
         self.conversion_required = True
+        self.format_probe = None
         if self.ffprobe_executable:
             try:
                 # probe the existing file format, to see if we can avoid needless conversion
-                probe = self.probe_format()
+                probe = self.probe_format(self.filename)
                 self.conversion_required = probe.rate != samplerate or probe.channels != channels \
                                            or probe.sampformat != sampleformat or probe.fileformat != "wav"
+                self.format_probe = probe
             except (subprocess.CalledProcessError, IOError, OSError):
                 pass
         if self.conversion_required:
@@ -80,13 +82,14 @@ class AudiofileToWavStream(io.RawIOBase):
                 self.sampleformat_options = ["-acodec", codec]
         self.start_stream()
 
-    def probe_format(self):
-        command = [self.ffprobe_executable, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-i", self.filename]
+    @classmethod
+    def probe_format(cls, filename):
+        command = [cls.ffprobe_executable, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-i", filename]
         probe = subprocess.check_output(command)
         probe = json.loads(probe.decode())
-        if len(probe["streams"]) > 1:
-            raise IOError("audio file contains more than one stream, not supported")
-        stream = probe["streams"][0]
+        stream = [stream for stream in probe["streams"] if stream["codec_type"]=="audio"][0]
+        if not stream:
+            raise IOError("file contains no audio stream, not supported")
         samplerate = int(stream["sample_rate"])
         nchannels = int(stream["channels"])
         sampleformat = {
@@ -96,7 +99,9 @@ class AudiofileToWavStream(io.RawIOBase):
             "fltp": "float",
             }.get(stream["sample_fmt"], "<unknown>")
         fileformat = probe["format"]["format_name"]
-        return AudioFormatProbe(samplerate, nchannels, sampleformat, fileformat)
+        duration = probe["format"].get("duration") or stream.get("duration")
+        duration = float(duration) if duration else None
+        return AudioFormatProbe(samplerate, nchannels, sampleformat, fileformat, duration)
 
     def start_stream(self):
         if not self.conversion_required:
