@@ -73,6 +73,9 @@ class Player:
 
 
 class TrackFrame(ttk.LabelFrame):
+    state_idle = 1
+    state_warning = 2
+    state_playing = 3
     def __init__(self, app, master, title):
         self.title = title
         self.playing = False
@@ -105,9 +108,11 @@ class TrackFrame(ttk.LabelFrame):
         self.volumeLabel.pack(side=tk.RIGHT)
         f.pack(fill=tk.X)
         ttk.Button(self, text="Skip", command=self.skip).pack(pady=4)
+        self.on_volumereset(None)
+        self.stateLabel = tk.Label(self, text="STATE", relief=tk.SUNKEN, border=1)
+        self.stateLabel.pack()
 
     def play(self, playing=True):
-        self["text"] = self.title + (" [PLAYING]" if playing else "")
         self.playing = playing
         self.on_volumereset(None)
 
@@ -126,13 +131,15 @@ class TrackFrame(ttk.LabelFrame):
             track = self.app.upcoming_track_hash()
             if track:
                 self.next_track(track)
-                # @todo set playing state indicator to NEUTRAL
+                self.set_state(self.state_idle)
             else:
-                pass  # @todo set playing state indicator to WARNING (needs track)
+                self.set_state(self.state_warning)
         if self.playing and self.current_track:
             # update duration timer
             remaining = self.current_track_duration - player_timestamp
             self.timeleftLabel["text"] = datetime.timedelta(seconds=int(remaining))
+            dots = '.' * (int(player_timestamp*5) % 10)
+            self.stateLabel["text"] = dots+"PLAYING"+dots
             if self.stream and self.stream.closed:
                 # Stream is closed, probably exhausted. Skip to other track.
                 # @todo fade out/fade in
@@ -141,7 +148,7 @@ class TrackFrame(ttk.LabelFrame):
             # when it is time, load the track and add its stream to the mixer
             if not self.stream:
                 self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
-                # @todo set playing state indicator to OKAY/PLAYING (if self.playing) else NEUTRAL
+                self.set_state(self.state_playing if self.playing else self.state_idle)
                 mixer.add_stream(self.stream, [self.volumefilter])
                 if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
                     # get the duration from the stream itself
@@ -174,6 +181,14 @@ class TrackFrame(ttk.LabelFrame):
     def on_volumereset(self, event):
         self.volumeVar.set(100)
         self.on_volumechange(100)
+
+    def set_state(self, state):
+        if state==self.state_idle:
+            self.stateLabel.configure(text=" Waiting ", bg="white", fg="black")
+        elif state==self.state_playing:
+            self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
+        elif state==self.state_warning:
+            self.stateLabel.configure(text=" Needs Track ", bg="red", fg="white")
 
 
 class LevelmeterFrame(ttk.LabelFrame):
