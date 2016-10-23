@@ -57,9 +57,9 @@ class Player:
             playing.tick(self.mixer)
         timestamp, sample = next(self.mixed_samples)
         if sample and sample.duration > 0:
-            self.levelmeter.update(sample)
             self.output.play_sample(sample)   # XXX todo separate output playing thread to not freeze gui
-            self.levelmeter.print()
+            left, _, right, _ = self.levelmeter.update(sample)
+            self.app.update_levels(left, right)
         if not self.stopping:
             self.app.after(50, self.tick)
 
@@ -72,6 +72,7 @@ class TrackFrame(tk.LabelFrame):
         self.app = app
         self.current_track = None
         self.current_track_filename = None
+        self.current_track_duration = None
         self.stream = None
         tk.Label(self, text="title").pack()
         self.titleLabel = tk.Label(self, relief=tk.RIDGE, width=22, anchor=tk.W)
@@ -85,7 +86,7 @@ class TrackFrame(tk.LabelFrame):
         tk.Label(self, text="time left (sec.)").pack()
         self.timeleftLabel = tk.Label(self, relief=tk.RIDGE, width=14)
         self.timeleftLabel.pack()
-        tk.Button(self, text="Skip", command=self.skip).pack()
+        tk.Button(self, text="Skip", command=self.skip).pack(pady=4)
 
     def play(self, playing=True):
         self["text"] = self.title + (" [PLAYING]" if playing else "")
@@ -95,7 +96,10 @@ class TrackFrame(tk.LabelFrame):
         if self.playing:
             self.app.switch_player()
             self.close_stream()
-        self.timeleftLabel["text"] = "0 (next track...)"
+        self.titleLabel["text"] = ""
+        self.artistLabel["text"] = ""
+        self.albumlabel["text"] = ""
+        self.timeleftLabel["text"] = "(next track...)"
 
     def tick(self, mixer):
         # when it is time, load the track and add its stream to the mixer
@@ -103,6 +107,10 @@ class TrackFrame(tk.LabelFrame):
             if not self.stream:
                 self.stream = AudiofileToWavStream(self.current_track_filename)
                 mixer.add_stream(self.stream)
+                print("STREAM ADDED", self.stream)   # XXX
+                if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
+                    # get the duration from the stream itself
+                    self.current_track_duration = self.stream.format_probe.duration
 
     def close_stream(self):
         self.current_track = None
@@ -125,6 +133,49 @@ class TrackFrame(tk.LabelFrame):
         self.albumlabel["text"] = track["album"] or "-"
         self.timeleftLabel["text"] = track["duration"] or "??"
         self.current_track_filename = track["location"]
+        self.current_track_duration = track["duration"]
+
+
+class LevelmeterFrame(tk.LabelFrame):
+    def __init__(self, master, lowest_level):
+        super().__init__(master, text="Levels", border=4, padx=4, pady=4)
+        self.lowest_level = lowest_level
+        self.pbvar_left = tk.IntVar()
+        self.pbvar_right = tk.IntVar()
+        pbstyle = ttk.Style()
+        pbstyle.theme_use("classic")
+        pbstyle.configure("green.Vertical.TProgressbar", troughcolor="gray", background="light green")
+        pbstyle.configure("yellow.Vertical.TProgressbar", troughcolor="gray", background="yellow")
+        pbstyle.configure("red.Vertical.TProgressbar", troughcolor="gray", background="orange")
+
+        frame = tk.LabelFrame(self, text="Left")
+        frame.pack(side=tk.LEFT)
+        tk.Label(frame, text="dB").pack()
+        self.pb_left = ttk.Progressbar(frame, orient=tk.VERTICAL, length=190, maximum=-self.lowest_level, variable=self.pbvar_left, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_left.pack()
+
+        frame = tk.LabelFrame(self, text="Right")
+        frame.pack(side=tk.LEFT)
+        tk.Label(frame, text="dB").pack()
+        self.pb_right = ttk.Progressbar(frame, orient=tk.VERTICAL, length=190, maximum=-self.lowest_level, variable=self.pbvar_right, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_right.pack()
+
+    def update_meters(self, left, right):
+        self.pbvar_left.set(left-self.lowest_level)
+        self.pbvar_right.set(right-self.lowest_level)
+        if left > -3:
+            self.pb_left.configure(style="red.Vertical.TProgressbar")
+        elif left > -6:
+            self.pb_left.configure(style="yellow.Vertical.TProgressbar")
+        else:
+            self.pb_left.configure(style="green.Vertical.TProgressbar")
+        if right > -3:
+            self.pb_right.configure(style="red.Vertical.TProgressbar")
+        elif right > -6:
+            self.pb_right.configure(style="yellow.Vertical.TProgressbar")
+        else:
+            self.pb_right.configure(style="green.Vertical.TProgressbar")
+
 
 
 class PlaylistFrame(tk.LabelFrame):
@@ -317,9 +368,11 @@ class JukeboxGui(tk.Frame):
         f1 = tk.Frame()
         self.firstTrackFrame = TrackFrame(self, f1, "Track 1")
         self.secondTrackFrame = TrackFrame(self, f1, "Track 2")
+        self.levelmeterFrame = LevelmeterFrame(f1, -50)
         self.playlistFrame = PlaylistFrame(self, f1)
-        self.firstTrackFrame.pack(side=tk.LEFT)
-        self.secondTrackFrame.pack(side=tk.LEFT)
+        self.firstTrackFrame.pack(side=tk.LEFT, fill=tk.Y)
+        self.secondTrackFrame.pack(side=tk.LEFT, fill=tk.Y)
+        self.levelmeterFrame.pack(side=tk.LEFT, fill=tk.Y)
         self.playlistFrame.pack(side=tk.LEFT, fill=tk.Y)
         f1.pack(side=tk.TOP)
         f2 = tk.Frame()
@@ -372,12 +425,15 @@ class JukeboxGui(tk.Frame):
     def switch_player(self):
         self.player.switch_player()
 
+    def update_levels(self, left, right):
+        self.after_idle(lambda: self.levelmeterFrame.update_meters(left, right))
+
 
 if __name__ == "__main__":
     root = tk.Tk()
     default_font = tk.font.nametofont("TkDefaultFont")
-    default_font.configure(size=12, family="Lucida Sans Unicode")
-    default_font = tk.font.nametofont("TkTextFont")
     default_font.configure(size=11, family="Lucida Sans Unicode")
+    default_font = tk.font.nametofont("TkTextFont")
+    default_font.configure(size=10, family="Lucida Sans Unicode")
     app = JukeboxGui(master=root)
     app.mainloop()
