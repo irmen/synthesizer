@@ -110,6 +110,9 @@ class JukeboxBackendCli(cmd.Cmd):
             fields = list(inspect.signature(self.mdb.query).parameters)
             print("Invalid filter field. Valid fields are:", fields)
             return
+        except Exception as x:
+            print("ERROR:", x)
+            return
         print("Found {:d} results. Showing max 6:".format(len(results)))
         for track in results[:6]:
             self.print_track(track, full=False)
@@ -169,6 +172,11 @@ class Backend:
             self.cli.cmdloop("Jukebox backend. Enter commands or 'help' for help.")
         except KeyboardInterrupt:
             print("\n<BREAK>")
+        except Exception:
+            print("\nAn error has occurred:")
+            import traceback
+            traceback.print_exc()
+        print("Jukebox backend is stopping.")
         self.mdb.close()
         self.pyro_daemon.shutdown()
         pyro_thread.join()

@@ -103,7 +103,8 @@ class MusicFileDatabase:
         return self.dbconn.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
 
     def total_playtime(self):
-        secs = int(self.dbconn.execute("SELECT SUM(duration) FROM tracks").fetchone()[0])
+        result = self.dbconn.execute("SELECT SUM(duration) FROM tracks").fetchone()[0]
+        secs = int(result) if result else 0
         return datetime.timedelta(seconds=secs)
 
     def get_track(self, track_id=None, hashcode=None):
