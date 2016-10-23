@@ -165,7 +165,10 @@ class Backend:
     def run(self):
         pyro_thread = threading.Thread(target=self.pyro_daemon.requestLoop)
         pyro_thread.start()
-        self.cli.cmdloop("Jukebox backend. Enter commands or 'help' for help.")
+        try:
+            self.cli.cmdloop("Jukebox backend. Enter commands or 'help' for help.")
+        except KeyboardInterrupt:
+            print("\n<BREAK>")
         self.mdb.close()
         self.pyro_daemon.shutdown()
         pyro_thread.join()

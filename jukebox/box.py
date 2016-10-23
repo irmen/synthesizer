@@ -4,7 +4,10 @@ Jukebox Gui
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
+import sys
+import signal
 import os
+import subprocess
 import datetime
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -454,12 +457,19 @@ class JukeboxGui(tk.Tk):
         f.pack()
         self.player = Player(self)
         self.backend = None
+        self.backend_process = None
         self.show_status("Connecting to backend file service...")
         self.after(500, self.connect_backend)
 
     def destroy(self):
         self.player.stop()
         super().destroy()
+        if self.backend_process:
+            print("\n")
+            if hasattr(signal, "SIGINT"):
+                os.kill(self.backend_process, signal.SIGINT)
+            else:
+                os.kill(self.backend_process, signal.SIGTERM)
         try:
             import tty
             os.system("stty sane")
@@ -480,10 +490,14 @@ class JukeboxGui(tk.Tk):
             playtime = datetime.timedelta(seconds=self.backend.total_playtime)
             status = "Connected to backend @ {0:s} | number of tracks: {1:d} | total playtime: {2}"\
                      .format(self.backend._pyroUri.location, self.backend.num_tracks, playtime)
-            self.show_status(status, 2)
+            self.show_status(status, 5)
         except Exception as x:
             self.show_status("ERROR! Connection to backend failed: "+str(x))
-            tkinter.messagebox.showerror("Backend not connected", "Cannot connect to backend. Has it been started?\n\nYou can start it now and try searching again.")
+            answer = tkinter.messagebox.askokcancel("Connect backend", "Cannot connect to backend. Maybe it is not started.\n\nDo you want me to start the backend server?")
+            if answer:
+                p = subprocess.Popen([sys.executable, "-m", "jukebox.backend", "-noscan"])
+                self.backend_process = p.pid
+                self.connect_backend()
 
     def enqueue(self, track):
         self.playlistFrame.enqueue(track)
