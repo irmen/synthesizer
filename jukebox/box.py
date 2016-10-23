@@ -79,16 +79,18 @@ class Player:
             self.mixer.add_sample(sample)
 
     def start_play_other(self):
-        print("START PLAYING THE OTHER TRACK")  # XXX fadein
-        # @todo fadein
-        pass
+        if self.app.firstTrackFrame.playing:
+            other_track = self.app.secondTrackFrame
+        else:
+            other_track = self.app.firstTrackFrame
+        other_track.start_fadein()
 
 
 class TrackFrame(ttk.LabelFrame):
     state_idle = 1
     state_warning = 2
     state_playing = 3
-    crossfade_time = 10
+    crossfade_time = 6
     def __init__(self, app, master, title):
         self.title = title
         self.playing = False
@@ -168,15 +170,22 @@ class TrackFrame(ttk.LabelFrame):
                 if self.fadeout:
                     self.volumeVar.set(self.fadeout*remaining/self.crossfade_time)
                     self.on_volumechange(self.volumeVar.get())
-                elif remaining <= self.crossfade_time:
+                elif remaining <= self.crossfade_time < self.current_track_duration:
                     self.fadeout = self.volumeVar.get()
                     self.app.start_playing_other()
+                if self.fadein:
+                    if stream_time >= self.crossfade_time:
+                        self.fadein = None
+                    else:
+                        self.volumeVar.set(100*stream_time/self.crossfade_time)
+                        self.on_volumechange(self.volumeVar.get())
                 if self.stream.closed:
                     # Stream is closed, probably exhausted. Skip to other track.
                     self.skip()
                     return
             # when it is time, load the track and add its stream to the mixer
             if not self.stream:
+                # @todo start loading stream in a separate thread because this blocks the ui and audio playback
                 self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
                 self.stream_started = time.time()
                 self.set_state(self.state_playing)
@@ -216,6 +225,13 @@ class TrackFrame(ttk.LabelFrame):
         self.fadeout = None
         self.fadein = None
         self.on_volumechange(volume)
+
+    def start_fadein(self):
+        if self.current_track_duration <= self.crossfade_time:
+            return
+        self.volumereset(0)
+        self.fadein = self.crossfade_time
+        self.playing = True
 
     def set_state(self, state):
         if state==self.state_idle:
