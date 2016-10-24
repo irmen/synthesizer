@@ -16,17 +16,11 @@ def main(args):
         mixed_samples = iter(mixer)
         with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels) as output:
             levelmeter = LevelMeter(rms_mode=False, lowest=-50)
-            temp_stream = AudiofileToWavStream("samples/909_crash.wav", hqresample=hqresample)
             for timestamp, sample in mixed_samples:
                 levelmeter.update(sample)
                 output.play_sample(sample)
                 time.sleep(sample.duration*0.4)
                 levelmeter.print(bar_width=60)
-                if 5.0 <= timestamp <= 5.1:
-                    mixer.add_stream(temp_stream)
-                if 10.0 <= timestamp <= 10.1:
-                    sample = Sample("samples/909_crash.wav").normalize()
-                    mixer.add_sample(sample)
     print("done.")
 
 
@@ -36,7 +30,7 @@ if __name__ == "__main__":
     finally:
         try:
             import tty
-            os.system("stty sane")   # sometimes needed because spawning ffmpeg sometimes breaks the terminal...
+            os.system("stty sane")   # needed because spawning ffmpeg sometimes breaks the terminal...
         except ImportError:
             pass
     
