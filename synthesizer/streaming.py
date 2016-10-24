@@ -116,7 +116,7 @@ class AudiofileToWavStream(io.RawIOBase):
                 return
             self.stream = open(self.filename, "rb")
         else:
-            command = [self.ffmpeg_executable, "-v", "error", "-hide_banner", "-loglevel", "error", "-i", self.filename, "-f", "wav"]
+            command = [self.ffmpeg_executable, "-v", "error", "-hide_banner", "-loglevel", "error", "-i", self.filename]
             command.extend(self.resample_options)
             command.extend(self.downmix_options)
             command.extend(self.sampleformat_options)
@@ -124,8 +124,8 @@ class AudiofileToWavStream(io.RawIOBase):
                 command.extend(["-y", self.outputfilename])
                 subprocess.check_call(command)
                 return
-            command.append("-")
-            converter = subprocess.Popen(command, stdout=subprocess.PIPE)
+            command.extend(["-f", "wav", "-"])
+            converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
             self.stream = converter.stdout
         return self.stream
 
