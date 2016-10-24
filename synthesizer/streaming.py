@@ -224,7 +224,7 @@ class StreamMixer:
         self.sample_streams = []
         self.wrapped_streams = {}   # samplestream->wrappedstream (to close stuff properly)
         for stream in streams:
-            self.add_stream(stream, endless)
+            self.add_stream(stream, None, endless)
 
     def add_stream(self, stream, filters=None, endless=False):
         ws = wave.open(stream, 'r')
