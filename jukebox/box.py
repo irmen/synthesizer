@@ -530,7 +530,7 @@ class JukeboxGui(tk.Tk):
                 os.kill(self.backend_process, signal.SIGTERM)
         try:
             import tty
-            os.system("stty sane")
+            os.system("stty sane")   # sometimes needed because spawning ffmpeg sometimes breaks the terminal...
         except ImportError:
             pass
 

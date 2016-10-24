@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from synthesizer.streaming import AudiofileToWavStream, StreamMixer
@@ -30,4 +31,12 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    finally:
+        try:
+            import tty
+            os.system("stty sane")   # sometimes needed because spawning ffmpeg sometimes breaks the terminal...
+        except ImportError:
+            pass
+    

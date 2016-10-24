@@ -11,6 +11,7 @@ example code that plays the file and shows the level meter on the console.
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
+import os
 import sys
 import wave
 import time
@@ -130,5 +131,12 @@ if __name__ == "__main__":
         print(stream.format_probe)
         if stream.conversion_required and not hqresample:
             print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
-        play_gui(stream)
+        try:
+            play_gui(stream)
+        finally:
+            try:
+                import tty
+                os.system("stty sane")   # sometimes needed because spawning ffmpeg sometimes breaks the terminal...
+            except ImportError:
+                pass
     print("Done.")
