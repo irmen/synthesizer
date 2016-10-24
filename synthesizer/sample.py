@@ -772,14 +772,9 @@ class Output:
                 if not sample:
                     break
                 sample.write_frames(self.stream)
-            # time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
 
-        def play_immediately(self, sample, continuous=False):
+        def play_immediately(self, sample):
             sample.write_frames(self.stream)
-            if not continuous:
-                filler = b"\0"*sample.samplewidth*sample.nchannels*self.stream.get_write_available()
-                self.stream.write(filler)
-                # time.sleep(self.stream.get_output_latency()+self.stream.get_input_latency()+0.001)
 
         def add_to_queue(self, sample):
             self.queue.put(sample)
@@ -859,7 +854,7 @@ class Output:
                 if async:
                     self.outputter.add_to_queue(s)
                 else:
-                    self.outputter.play_immediately(s, True)
+                    self.outputter.play_immediately(s)
         else:
             # winsound doesn't cut it when playing many small sample files...
             raise RuntimeError("Sorry but pyaudio is not installed. You need it to play streaming audio output.")
