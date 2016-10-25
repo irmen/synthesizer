@@ -265,10 +265,11 @@ class SearchFrame(ttk.LabelFrame):
         ttk.Radiobutton(bf, text="year", value="year", variable=self.filter_choice, width=10).pack()
         ttk.Radiobutton(bf, text="genre", value="genre", variable=self.filter_choice, width=10).pack()
         ttk.Button(bf, text="Search", command=self.do_search).pack()
+        ttk.Button(bf, text="Add all selected", command=self.do_add_selected).pack()
         bf.pack(side=tk.LEFT)
         sf = ttk.Frame(self)
         cols = [("title", 320), ("artist", 200), ("album", 200), ("year", 50), ("genre", 120), ("length", 60)]
-        self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
+        self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=11, show="headings")
         vsb = ttk.Scrollbar(orient="vertical", command=self.resultTreeView.yview)
         self.resultTreeView.configure(yscrollcommand=vsb.set)
         self.resultTreeView.grid(column=1, row=0, sticky=tk.NSEW, in_=sf)
@@ -293,6 +294,14 @@ class SearchFrame(ttk.LabelFrame):
         track_hash = sel[0]
         track = self.app.backend.track(hashcode=track_hash)
         self.app.enqueue(track)
+
+    def do_add_selected(self):
+        sel = self.resultTreeView.selection()
+        if not sel:
+            return
+        for track_hash in sel:
+            track = self.app.backend.track(hashcode=track_hash)
+            self.app.enqueue(track)
 
     def sortby(self, tree, col, descending):
         # grab values to sort and sort in place
