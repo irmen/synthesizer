@@ -6,10 +6,10 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import sys
 import signal
-import time
 import os
 import subprocess
 import datetime
+import configparser
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.font
@@ -18,6 +18,7 @@ import tkinter.filedialog
 from .backend import BACKEND_PORT
 from synthesizer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
 from synthesizer.sample import Sample, Output, LevelMeter
+import appdirs
 import Pyro4
 import Pyro4.errors
 import Pyro4.futures
@@ -36,7 +37,6 @@ class Player:
     def __init__(self, app):
         self.app = app
         self.app.after(self.update_rate, self.tick)
-        self.app.firstTrackFrame.play()
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
         self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_queue_size)
@@ -45,24 +45,11 @@ class Player:
 
     def stop(self):
         self.stopping = True
-        self.app.firstTrackFrame.close_stream()
-        self.app.secondTrackFrame.close_stream()
         self.mixer.close()
         self.output.close()
 
-    def switch_player(self):
-        """
-        The actual switching of the main track player. Note that it can be playing
-        already because of the fade-in mixing.
-        """
-        first_is_playing = self.app.firstTrackFrame.playing
-        self.app.firstTrackFrame.play(not first_is_playing)
-        self.app.secondTrackFrame.play(first_is_playing)
-
     def tick(self):
         if self.output.queue_size() <= self.async_queue_size/2:
-            self.app.firstTrackFrame.tick(self.mixer)
-            self.app.secondTrackFrame.tick(self.mixer)
             _, sample = next(self.mixed_samples)
             if sample and sample.duration > 0:
                 self.output.play_sample(sample, async=True)
@@ -78,35 +65,18 @@ class Player:
         if sample and sample.duration > 0:
             self.mixer.add_sample(sample)
 
-    def start_play_other(self):
-        # @todo fix the track switching and fadein/fadeout, it's a bit of a mess
-        if self.app.firstTrackFrame.playing:
-            other_track = self.app.secondTrackFrame
-        else:
-            other_track = self.app.firstTrackFrame
-        other_track.start_fadein()
-
 
 class TrackFrame(ttk.LabelFrame):
     state_idle = 1
-    state_warning = 2
-    state_playing = 3
-    crossfade_time = 6
+    state_playing = 2
+    state_needtrack = 3
+
     def __init__(self, app, master, title):
         self.title = title
-        self.playing = False
         super().__init__(master, text=title, padding=4)
         self.app = app
-        self.current_track = None
-        self.current_track_filename = None
-        self.current_track_duration = None
-        self.stream = None
-        self.stream_started = 0
-        self.stream_opened = False
         self.volumeVar = tk.DoubleVar(value=100)
         self.volumefilter = VolumeFilter()
-        self.fadeout = None
-        self.fadein = None
         ttk.Label(self, text="title / artist / album").pack()
         self.titleLabel = ttk.Label(self, relief=tk.GROOVE, width=22, anchor=tk.W)
         self.titleLabel.pack()
@@ -122,131 +92,44 @@ class TrackFrame(ttk.LabelFrame):
         f = ttk.Frame(self)
         ttk.Label(f, text="V: ").pack(side=tk.LEFT)
         scale = ttk.Scale(f, from_=0, to=150, length=120, variable=self.volumeVar, command=self.on_volumechange)
-        scale.bind("<Double-1>", lambda event: self.volumereset(100))
+        scale.bind("<Double-1>", lambda event: self.set_volume(100))
         scale.pack(side=tk.LEFT)
         self.volumeLabel = ttk.Label(f, text="???%")
         self.volumeLabel.pack(side=tk.RIGHT)
         f.pack(fill=tk.X)
         ttk.Button(self, text="Skip", command=self.skip).pack(pady=4)
-        self.volumereset()
+        self.set_volume(100)
         self.stateLabel = tk.Label(self, text="STATE", relief=tk.SUNKEN, border=1)
         self.stateLabel.pack()
-
-    def play(self, playing=True):
-        self.playing = playing
-        self.volumereset()
+        self.display_state(self.state_idle)
 
     def skip(self):
-        if self.playing:
-            self.app.switch_player()
-        self.close_stream()
-        self.titleLabel["text"] = ""
-        self.artistLabel["text"] = ""
-        self.albumlabel["text"] = ""
-        self.timeleftLabel["text"] = "(next track...)"
+        self.display_track(None, None, None, "(next track...)")
+        # @todo actually stop playing and switch to other track player
 
-    def tick(self, mixer):
-        # if we don't have a track, try go get the next one from the playlist
-        if self.current_track is None:
-            track = self.app.upcoming_track_hash()
-            if track:
-                self.next_track(track)
-                self.set_state(self.state_idle)
-            else:
-                self.set_state(self.state_warning)
-        if self.playing and self.current_track:
-            if self.stream_opened:
-                # update duration timer
-                stream_time = time.time() - self.stream_started
-                remaining = self.current_track_duration - stream_time
-                self.timeleftLabel["text"] = datetime.timedelta(seconds=int(remaining))
-                dotsl = '«' * (int(stream_time*4) % 6)
-                dotsr = '»' * len(dotsl)
-                if self.fadein:
-                    status = " FADE IN "
-                elif self.fadeout:
-                    status = " FADE OUT "
-                else:
-                    status = " PLAYING "
-                self.stateLabel["text"] = dotsl+status+dotsr
-                if self.fadeout:
-                    self.volumeVar.set(self.fadeout*remaining/self.crossfade_time)
-                    self.on_volumechange(self.volumeVar.get())
-                elif remaining <= self.crossfade_time < self.current_track_duration:
-                    self.fadeout = self.volumeVar.get()
-                    self.app.start_playing_other()
-                if self.fadein:
-                    if stream_time >= self.crossfade_time:
-                        self.fadein = None
-                    else:
-                        self.volumeVar.set(100*stream_time/self.crossfade_time)
-                        self.on_volumechange(self.volumeVar.get())
-                if self.stream.closed:
-                    # Stream is closed, probably exhausted. Skip to other track.
-                    self.skip()
-                    return
-            # when it is time, load the track and add its stream to the mixer
-            if not self.stream:
-                self.stream = object()   # placeholder
-                Pyro4.futures.Future(self.start_stream)(mixer)
-
-    def start_stream(self, mixer):
-        self.stream = AudiofileToWavStream(self.current_track_filename, hqresample=hqresample)
-        self.stream_started = time.time()
-        self.after_idle(lambda s=self: s.set_state(s.state_playing))
-        mixer.add_stream(self.stream, [self.volumefilter])
-        if self.stream.format_probe and self.stream.format_probe.duration and not self.current_track_duration:
-            # get the duration from the stream itself
-            self.current_track_duration = self.stream.format_probe.duration
-        self.stream_opened = True
-
-    def close_stream(self):
-        self.current_track = None
-        self.fadein = None
-        self.fadeout = None
-        if self.stream_opened:
-            self.stream.close()
-            self.stream = None
-            self.stream_opened = False
-
-    def next_track(self, hashcode):
-        if self.stream_opened:
-            self.stream.close()
-            self.stream = None
-            self.stream_opened = False
-        self.current_track = hashcode
-        track = self.app.backend.track(hashcode=self.current_track)
-        self.titleLabel["text"] = track["title"] or "-"
-        self.artistLabel["text"] = track["artist"] or "-"
-        self.albumlabel["text"] = track["album"] or "-"
-        self.timeleftLabel["text"] = datetime.timedelta(seconds=int(track["duration"]))
-        self.current_track_filename = track["location"]
-        self.current_track_duration = track["duration"]
-        self.volumereset()
+    def display_track(self, title, artist, album, duration):
+        self.titleLabel["text"] = title or "-"
+        self.artistLabel["text"] = artist or "-"
+        self.albumlabel["text"] = album or "-"
+        if type(duration) in (float, int):
+            duration = datetime.timedelta(seconds=int(duration))
+        self.timeleftLabel["text"] = duration
 
     def on_volumechange(self, value):
-        self.volumefilter.volume = self.volumeVar.get() / 100.0
-        self.volumeLabel["text"] = "{:.0f}%".format(self.volumeVar.get())
+        value = float(value)
+        self.volumefilter.volume = value / 100.0
+        self.volumeLabel["text"] = "{:.0f}%".format(value)
 
-    def volumereset(self, volume=100):
+    def set_volume(self, volume):
         self.volumeVar.set(volume)
-        self.fadeout = None
-        self.fadein = None
         self.on_volumechange(volume)
 
-    def start_fadein(self):
-        if self.current_track_duration <= self.crossfade_time:
-            return
-        self.volumereset(0)
-        self.fadein = self.crossfade_time
-        self.playing = True
-
-    def set_state(self, state):
-        if state==self.state_idle:
+    def display_state(self, state):
+        if state == self.state_idle:
             self.stateLabel.configure(text=" Waiting ", bg="white", fg="black")
-        elif state==self.state_playing:
+        elif state == self.state_playing:
             self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
-        elif state==self.state_warning:
+        elif state == self.state_needtrack:
             self.stateLabel.configure(text=" Needs Track ", bg="red", fg="white")
 
 
@@ -441,29 +324,33 @@ class SearchFrame(ttk.LabelFrame):
                 track["album"] or '-',
                 track["year"] or '-',
                 track["genre"] or '-',
-                datetime.timedelta(seconds=int(track["duration"])) ])
+                datetime.timedelta(seconds=int(track["duration"]))])
         self.app.show_status("{:d} results found".format(len(result)), 3)
 
 
-class JingleFrame(ttk.LabelFrame):
+class EffectsFrame(ttk.LabelFrame):
     def __init__(self, app, master):
-        super().__init__(master, text="Jingles/Samples - shift+click to assign sample", padding=4)
+        super().__init__(master, text="Effects/Samples - shift+click to assign sample", padding=4)
         self.app = app
-        self.jingles = {num: None for num in range(16)}
+        self.effects = {num: None for num in range(16)}
         f = ttk.Frame(self)
+        self.buttons = []
         for i in range(1, 9):
             b = ttk.Button(f, text="# {:d}".format(i), width=14, state=tk.DISABLED)
             b.bind("<ButtonRelease>", self.do_button_release)
-            b.jingle_nr = i
+            b.effect_nr = i
             b.pack(side=tk.LEFT)
+            self.buttons.append(b)
         f.pack()
         f = ttk.Frame(self)
         for i in range(9, 17):
             b = ttk.Button(f, text="# {:d}".format(i), width=14, state=tk.DISABLED)
             b.bind("<ButtonRelease>", self.do_button_release)
-            b.jingle_nr = i
+            b.effect_nr = i
             b. pack(side=tk.LEFT)
+            self.buttons.append(b)
         f.pack()
+        self.after(2000, lambda: Pyro4.Future(self.load_settings)(True))
 
     def do_button_release(self, event):
         if event.state & 0x0100 == 0:
@@ -472,20 +359,53 @@ class JingleFrame(ttk.LabelFrame):
         if shift:
             filename = tkinter.filedialog.askopenfilename()
             if filename:
-                with AudiofileToWavStream(filename, hqresample=hqresample) as wav:
-                    sample = Sample(wav)
-                    self.jingles[event.widget.jingle_nr] = sample
-                event.widget["state"] = tk.NORMAL
-                event.widget["text"] = os.path.splitext(os.path.basename(filename))[0]
+                self.set_effect(event.widget.effect_nr, filename)
+                self.update_settings(event.widget.effect_nr, filename)
         else:
-            sample = self.jingles[event.widget.jingle_nr]
+            sample = self.effects[event.widget.effect_nr]
             if sample:
                 self.app.play_sample(sample)
+
+    def load_settings(self, load_samples=False):
+        cfg = configparser.ConfigParser()
+        cfg.read(os.path.join(self.app.config_location, "soundeffects.ini"))
+        if load_samples and cfg.has_section("Effects"):
+            self.app.show_status("Loading effect samples...")
+            for button in self.buttons:
+                filename = cfg["Effects"].get("e"+str(button.effect_nr))
+                if filename:
+                    self.set_effect(button.effect_nr, filename)
+            self.app.show_status("Ready.")
+        return cfg
+
+    def set_effect(self, effect_nr, filename):
+        try:
+            with AudiofileToWavStream(filename, hqresample=hqresample) as wav:
+                sample = Sample(wav)
+                self.effects[effect_nr] = sample
+        except IOError as x:
+            print("Can't load effect sample:", x)
+        else:
+            for button in self.buttons:
+                if button.effect_nr == effect_nr:
+                    button["state"] = tk.NORMAL
+                    button["text"] = os.path.splitext(os.path.basename(filename))[0]
+                    break
+
+    def update_settings(self, effect_nr, filename):
+        cfg = self.load_settings()
+        if not cfg.has_section("Effects"):
+            cfg.add_section("Effects")
+        cfg["Effects"]["e"+str(effect_nr)] = filename or ""
+        with open(os.path.join(self.app.config_location, "soundeffects.ini"), "w") as fp:
+            cfg.write(fp)
 
 
 class JukeboxGui(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.config_location = appdirs.user_data_dir("PythonJukebox", "Razorvine")
+        os.makedirs(self.config_location, mode=0o700, exist_ok=True)
         default_font = tk.font.nametofont("TkDefaultFont")
         default_font["size"] = abs(default_font["size"])+2
         default_font = tk.font.nametofont("TkTextFont")
@@ -507,8 +427,8 @@ class JukeboxGui(tk.Tk):
         self.searchFrame.pack()
         f2.pack(side=tk.TOP)
         f3 = ttk.Frame(f)
-        self.jingleFrame = JingleFrame(self, f3)
-        self.jingleFrame.pack()
+        self.effectsFrame = EffectsFrame(self, f3)
+        self.effectsFrame.pack()
         f3.pack(side=tk.TOP)
         self.statusbar = ttk.Label(f, text="<status>", relief=tk.GROOVE, anchor=tk.CENTER)
         self.statusbar.pack(fill=tk.X, expand=True)
@@ -565,17 +485,11 @@ class JukeboxGui(tk.Tk):
             return self.playlistFrame.peek()
         return self.playlistFrame.pop()
 
-    def switch_player(self):
-        self.player.switch_player()
-
     def update_levels(self, left, right):
-        self.after_idle(lambda: self.levelmeterFrame.update_meters(left, right))
+        self.levelmeterFrame.update_meters(left, right)
 
     def play_sample(self, sample):
         self.player.play_sample(sample)
-
-    def start_playing_other(self):
-        self.player.start_play_other()
 
 
 if __name__ == "__main__":
