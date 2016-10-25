@@ -105,7 +105,7 @@ class MusicFileDatabase:
     def total_playtime(self):
         result = self.dbconn.execute("SELECT SUM(duration) FROM tracks").fetchone()[0]
         secs = int(result) if result else 0
-        return datetime.timedelta(seconds=secs)
+        return datetime.timedelta(seconds=int(secs))
 
     def get_track(self, track_id=None, hashcode=None):
         if track_id:
@@ -256,7 +256,7 @@ class Track:
         self.album = album
         self.year = year
         self.genre = genre
-        self.duration = duration
+        self.duration = int(duration)
         self.modified = modified
         self.location = location
 
@@ -303,7 +303,6 @@ class Track:
     @classmethod
     def from_tag(cls, tag, location):
         modified = Track.getmtime(location)
-        duration = round(tag.duration, 3)
         year = tag.year or None
         if year:
             if len(str(year)) > 4:
@@ -312,4 +311,4 @@ class Track:
         title = tag.title
         if not title:
             title = os.path.splitext(os.path.basename(location))[0]
-        return cls(None, title, tag.artist, tag.album, year, tag.genre, duration, modified, location)
+        return cls(None, title, tag.artist, tag.album, year, tag.genre, tag.duration, modified, location)
