@@ -47,18 +47,28 @@ class Player:
             tf.player = self
 
     def skip(self, trackframe):
-        # @todo actually stop playing and switch to other track player
+        # @todo switch to other track player
+        if trackframe.state != TrackFrame.state_needtrack and trackframe.stream:
+            trackframe.stream.close()
+            trackframe.stream = None
         trackframe.display_track(None, None, None, "(next track...)")
         trackframe.state = TrackFrame.state_needtrack
 
     def stop(self):
         self.stopping = True
+        for tf in self.trackframes:
+            if tf.stream:
+                tf.stream.close()
+                tf.stream = None
+            tf.state = TrackFrame.state_needtrack
         self.mixer.close()
         self.output.close()
 
     def tick(self):
         self._play_mixer_sample()
         self._load_song()
+        self._play_song()
+        # @todo switch track at track end
         if not self.stopping:
             self.app.after(self.update_rate, self.tick)
 
@@ -74,26 +84,39 @@ class Player:
                 self.app.update_levels(self.levelmeter.level_left, self.levelmeter.level_right)
 
     def _load_song(self):
+        if self.stopping:
+            return   # make sure we don't load new songs when the player is shutting down
         for tf in self.trackframes:
             if tf.state == TrackFrame.state_needtrack:
                 track = self.app.pop_playlist_track()
                 if track:
-                    tf.display_track(track["title"], track["artist"], track["album"], track["duration"])
+                    tf.track = track
                     tf.state = TrackFrame.state_idle
 
+    def _play_song(self):
+        # @todo alternate between the track players (new status 'switching' ??)
+        for tf in self.trackframes:
+            if tf.state == TrackFrame.state_playing:
+                # @todo update track time
+                break  # there's one playing already, don't do something else
+            if tf.state == TrackFrame.state_idle:
+                tf.stream = AudiofileToWavStream(tf.track["location"], hqresample=hqresample)
+                self.mixer.add_stream(tf.stream, [tf.volumefilter])
+                tf.state = TrackFrame.state_playing
+                break  # make sure only this one starts playing a track
+
     def play_sample(self, sample):
+        def unmute(trf, vol):
+            if trf:
+                trf.set_volume(vol)
         if sample and sample.duration > 0:
-            muted_tf = None
-            old_volume = 0
             for tf in self.trackframes:
                 if tf.state == TrackFrame.state_playing:
-                    muted_tf = tf
                     old_volume = tf.mute_volume(50)
+                    self.mixer.add_sample(sample, lambda mtf=tf, vol=old_volume: unmute(mtf, vol))
                     break
-            def unmute(tf, old_volume):
-                if tf:
-                    tf.set_volume(old_volume)
-            self.mixer.add_sample(sample, lambda mtf=muted_tf, vol=old_volume: unmute(mtf, vol))
+            else:
+                self.mixer.add_sample(sample)
 
 
 class TrackFrame(ttk.LabelFrame):
@@ -131,6 +154,9 @@ class TrackFrame(ttk.LabelFrame):
         self.set_volume(100)
         self.stateLabel = tk.Label(self, text="STATE", relief=tk.SUNKEN, border=1)
         self.stateLabel.pack()
+        self._track = None
+        self._time = None
+        self._stream = None
         self._state = self.state_needtrack
         self.state = self.state_needtrack
 
@@ -147,6 +173,40 @@ class TrackFrame(ttk.LabelFrame):
             self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
         elif self.state == self.state_needtrack:
             self.stateLabel.configure(text=" Needs Track ", bg="red", fg="white")
+
+    @property
+    def track(self):
+        return self._track
+
+    @track.setter
+    def track(self, value):
+        self._track = value
+        self.display_track(value["title"], value["artist"], value["album"], value["duration"])
+        self.time = value["duration"]
+
+    @property
+    def time(self):
+        return self._time
+
+    @time.setter
+    def time(self, value):
+        if type(value) in (float, int):
+            duration = datetime.timedelta(seconds=int(value))
+        if type(duration) is not datetime.timedelta:
+            raise TypeError("time should be a datetime.timedelta, or number of seconds. It was:", type(value))
+        self._time = value
+        self.timeleftLabel["text"] = duration
+
+    @property
+    def stream(self):
+        return self._stream
+
+    @stream.setter
+    def stream(self, value):
+        self._stream = value
+        if value and value.format_probe and value.format_probe.duration:
+            # get the duration from the stream itself (more precise)
+            self.time = value.format_probe.duration
 
     def display_track(self, title, artist, album, duration):
         self.titleLabel["text"] = title or "-"
