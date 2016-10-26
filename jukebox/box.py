@@ -34,27 +34,22 @@ class Player:
     update_rate = 40         # larger is less cpu usage but more chance of getting skips
     levelmeter_lowest = -40  # dB
 
-    def __init__(self, app, trackframe1, trackframe2):
+    def __init__(self, app, trackframes):
         self.app = app
-        self.trackframe1 = trackframe1
-        self.trackframe2 = trackframe2
+        self.trackframes = trackframes
         self.app.after(self.update_rate, self.tick)
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
         self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_queue_size)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
-        trackframe1.player = self
-        trackframe2.player = self
+        for tf in self.trackframes:
+            tf.player = self
 
     def skip(self, trackframe):
         # @todo actually stop playing and switch to other track player
         trackframe.display_track(None, None, None, "(next track...)")
         trackframe.state = TrackFrame.state_needtrack
-        if trackframe is self.trackframe1:
-            print("SKIP FROM 1")   # XXX
-        elif trackframe is self.trackframe2:
-            print("SKIP FROM 2")   # XXX
 
     def stop(self):
         self.stopping = True
@@ -79,20 +74,26 @@ class Player:
                 self.app.update_levels(self.levelmeter.level_left, self.levelmeter.level_right)
 
     def _load_song(self):
-        if self.trackframe1.state == TrackFrame.state_needtrack:
-            track = self.app.pop_playlist_track()
-            if track:
-                self.trackframe1.display_track(track["title"], track["artist"], track["album"], track["duration"])
-                self.trackframe1.state = TrackFrame.state_idle
-        if self.trackframe2.state == TrackFrame.state_needtrack:
-            track = self.app.pop_playlist_track()
-            if track:
-                self.trackframe2.display_track(track["title"], track["artist"], track["album"], track["duration"])
-                self.trackframe2.state = TrackFrame.state_idle
+        for tf in self.trackframes:
+            if tf.state == TrackFrame.state_needtrack:
+                track = self.app.pop_playlist_track()
+                if track:
+                    tf.display_track(track["title"], track["artist"], track["album"], track["duration"])
+                    tf.state = TrackFrame.state_idle
 
     def play_sample(self, sample):
         if sample and sample.duration > 0:
-            self.mixer.add_sample(sample)
+            muted_tf = None
+            old_volume = 0
+            for tf in self.trackframes:
+                if tf.state == TrackFrame.state_playing:
+                    muted_tf = tf
+                    old_volume = tf.mute_volume(50)
+                    break
+            def unmute(tf, old_volume):
+                if tf:
+                    tf.set_volume(old_volume)
+            self.mixer.add_sample(sample, lambda mtf=muted_tf, vol=old_volume: unmute(mtf, vol))
 
 
 class TrackFrame(ttk.LabelFrame):
@@ -163,6 +164,13 @@ class TrackFrame(ttk.LabelFrame):
     def set_volume(self, volume):
         self.volumeVar.set(volume)
         self.on_volumechange(volume)
+
+    def mute_volume(self, maxvolume):
+        old_volume = self.volumeVar.get()
+        volume = min(maxvolume, self.volumeVar.get())
+        self.volumeVar.set(volume)
+        self.on_volumechange(volume)
+        return old_volume
 
 
 class LevelmeterFrame(ttk.LabelFrame):
@@ -474,7 +482,7 @@ class JukeboxGui(tk.Tk):
         self.statusbar = ttk.Label(f, text="<status>", relief=tk.GROOVE, anchor=tk.CENTER)
         self.statusbar.pack(fill=tk.X, expand=True)
         f.pack()
-        self.player = Player(self, self.firstTrackFrame, self.secondTrackFrame)
+        self.player = Player(self, (self.firstTrackFrame, self.secondTrackFrame))
         self.backend = None
         self.backend_process = None
         self.show_status("Connecting to backend file service...")

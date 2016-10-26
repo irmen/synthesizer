@@ -222,11 +222,11 @@ class StreamMixer:
         self.nchannels = nchannels
         self.timestamp = 0.0
         self.sample_streams = []
-        self.wrapped_streams = {}   # samplestream->wrappedstream (to close stuff properly)
+        self.wrapped_streams = {}   # samplestream->(wrappedstream, end_callback) (to close stuff properly)
         for stream in streams:
             self.add_stream(stream, None, endless)
 
-    def add_stream(self, stream, filters=None, endless=False):
+    def add_stream(self, stream, filters=None, endless=False, end_callback=None):
         ws = wave.open(stream, 'r')
         ss = SampleStream(ws, self.buffer_size)
         if endless:
@@ -234,23 +234,25 @@ class StreamMixer:
         for f in (filters or []):
             ss.add_filter(f)
         self.sample_streams.append(ss)
-        self.wrapped_streams[ss] = stream
+        self.wrapped_streams[ss] = (stream, end_callback)
 
     def remove_stream(self, stream):
         stream.close()
         self.sample_streams.remove(stream)
         if stream in self.wrapped_streams:
-            wrapped_stream = self.wrapped_streams.pop(stream)
+            wrapped_stream, end_callback = self.wrapped_streams.pop(stream)
             wrapped_stream.close()
+            if end_callback is not None:
+                end_callback()
 
-    def add_sample(self, sample):
+    def add_sample(self, sample, end_callback=None):
         assert sample.samplewidth == self.samplewidth
         assert sample.samplerate == self.samplerate
         assert sample.nchannels == self.nchannels
         stream = io.BytesIO()
         sample.write_wav(stream)
         stream.seek(0, io.SEEK_SET)
-        self.add_stream(stream)
+        self.add_stream(stream, end_callback=end_callback)
 
     def __enter__(self):
         return self
