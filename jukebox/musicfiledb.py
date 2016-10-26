@@ -107,7 +107,7 @@ class MusicFileDatabase:
         secs = int(result) if result else 0
         return datetime.timedelta(seconds=int(secs))
 
-    def get_track(self, track_id=None, hashcode=None):
+    def get_track(self, hashcode=None, track_id=None):
         if track_id:
             track = self.dbconn.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
         elif hashcode:

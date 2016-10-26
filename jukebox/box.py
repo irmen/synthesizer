@@ -34,14 +34,27 @@ class Player:
     update_rate = 40         # larger is less cpu usage but more chance of getting skips
     levelmeter_lowest = -40  # dB
 
-    def __init__(self, app):
+    def __init__(self, app, trackframe1, trackframe2):
         self.app = app
+        self.trackframe1 = trackframe1
+        self.trackframe2 = trackframe2
         self.app.after(self.update_rate, self.tick)
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
         self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_queue_size)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
+        trackframe1.player = self
+        trackframe2.player = self
+
+    def skip(self, trackframe):
+        # @todo actually stop playing and switch to other track player
+        trackframe.display_track(None, None, None, "(next track...)")
+        trackframe.state = TrackFrame.state_needtrack
+        if trackframe is self.trackframe1:
+            print("SKIP FROM 1")   # XXX
+        elif trackframe is self.trackframe2:
+            print("SKIP FROM 2")   # XXX
 
     def stop(self):
         self.stopping = True
@@ -49,6 +62,12 @@ class Player:
         self.output.close()
 
     def tick(self):
+        self._play_mixer_sample()
+        self._load_song()
+        if not self.stopping:
+            self.app.after(self.update_rate, self.tick)
+
+    def _play_mixer_sample(self):
         if self.output.queue_size() <= self.async_queue_size/2:
             _, sample = next(self.mixed_samples)
             if sample and sample.duration > 0:
@@ -58,8 +77,18 @@ class Player:
             else:
                 self.levelmeter.reset()
                 self.app.update_levels(self.levelmeter.level_left, self.levelmeter.level_right)
-        if not self.stopping:
-            self.app.after(self.update_rate, self.tick)
+
+    def _load_song(self):
+        if self.trackframe1.state == TrackFrame.state_needtrack:
+            track = self.app.pop_playlist_track()
+            if track:
+                self.trackframe1.display_track(track["title"], track["artist"], track["album"], track["duration"])
+                self.trackframe1.state = TrackFrame.state_idle
+        if self.trackframe2.state == TrackFrame.state_needtrack:
+            track = self.app.pop_playlist_track()
+            if track:
+                self.trackframe2.display_track(track["title"], track["artist"], track["album"], track["duration"])
+                self.trackframe2.state = TrackFrame.state_idle
 
     def play_sample(self, sample):
         if sample and sample.duration > 0:
@@ -71,10 +100,10 @@ class TrackFrame(ttk.LabelFrame):
     state_playing = 2
     state_needtrack = 3
 
-    def __init__(self, app, master, title):
+    def __init__(self, master, title):
         self.title = title
         super().__init__(master, text=title, padding=4)
-        self.app = app
+        self.player = None   # will be connected later
         self.volumeVar = tk.DoubleVar(value=100)
         self.volumefilter = VolumeFilter()
         ttk.Label(self, text="title / artist / album").pack()
@@ -97,15 +126,26 @@ class TrackFrame(ttk.LabelFrame):
         self.volumeLabel = ttk.Label(f, text="???%")
         self.volumeLabel.pack(side=tk.RIGHT)
         f.pack(fill=tk.X)
-        ttk.Button(self, text="Skip", command=self.skip).pack(pady=4)
+        ttk.Button(self, text="Skip", command=lambda s=self: s.player.skip(s)).pack(pady=4)
         self.set_volume(100)
         self.stateLabel = tk.Label(self, text="STATE", relief=tk.SUNKEN, border=1)
         self.stateLabel.pack()
-        self.display_state(self.state_idle)
+        self._state = self.state_needtrack
+        self.state = self.state_needtrack
 
-    def skip(self):
-        self.display_track(None, None, None, "(next track...)")
-        # @todo actually stop playing and switch to other track player
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, value):
+        self._state = value
+        if self.state == self.state_idle:
+            self.stateLabel.configure(text=" Waiting ", bg="white", fg="black")
+        elif self.state == self.state_playing:
+            self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
+        elif self.state == self.state_needtrack:
+            self.stateLabel.configure(text=" Needs Track ", bg="red", fg="white")
 
     def display_track(self, title, artist, album, duration):
         self.titleLabel["text"] = title or "-"
@@ -123,14 +163,6 @@ class TrackFrame(ttk.LabelFrame):
     def set_volume(self, volume):
         self.volumeVar.set(volume)
         self.on_volumechange(volume)
-
-    def display_state(self, state):
-        if state == self.state_idle:
-            self.stateLabel.configure(text=" Waiting ", bg="white", fg="black")
-        elif state == self.state_playing:
-            self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
-        elif state == self.state_needtrack:
-            self.stateLabel.configure(text=" Needs Track ", bg="red", fg="white")
 
 
 class LevelmeterFrame(ttk.LabelFrame):
@@ -422,8 +454,8 @@ class JukeboxGui(tk.Tk):
         self.title("Jukebox")
         f = ttk.Frame()
         f1 = ttk.Frame(f)
-        self.firstTrackFrame = TrackFrame(self, f1, "Track 1")
-        self.secondTrackFrame = TrackFrame(self, f1, "Track 2")
+        self.firstTrackFrame = TrackFrame(f1, "Track 1")
+        self.secondTrackFrame = TrackFrame(f1, "Track 2")
         self.levelmeterFrame = LevelmeterFrame(f1)
         self.playlistFrame = PlaylistFrame(self, f1)
         self.firstTrackFrame.pack(side=tk.LEFT, fill=tk.Y)
@@ -442,7 +474,7 @@ class JukeboxGui(tk.Tk):
         self.statusbar = ttk.Label(f, text="<status>", relief=tk.GROOVE, anchor=tk.CENTER)
         self.statusbar.pack(fill=tk.X, expand=True)
         f.pack()
-        self.player = Player(self)
+        self.player = Player(self, self.firstTrackFrame, self.secondTrackFrame)
         self.backend = None
         self.backend_process = None
         self.show_status("Connecting to backend file service...")
@@ -489,10 +521,11 @@ class JukeboxGui(tk.Tk):
     def enqueue(self, track):
         self.playlistFrame.enqueue(track)
 
-    def upcoming_track_hash(self, peek=False):
-        if peek:
-            return self.playlistFrame.peek()
-        return self.playlistFrame.pop()
+    def pop_playlist_track(self, peek=False):
+        hashcode = self.playlistFrame.peek() if peek else self.playlistFrame.pop()
+        if hashcode:
+            return self.backend.track(hashcode)
+        return None
 
     def update_levels(self, left, right):
         self.levelmeterFrame.update_meters(left, right)

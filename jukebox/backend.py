@@ -25,8 +25,8 @@ class JukeboxBackendRemoting:
             self.mdb = None
 
     @Pyro4.expose
-    def track(self, track_id=None, hashcode=None):
-        track = self.mdb.get_track(track_id, hashcode)
+    def track(self, hashcode=None, track_id=None):
+        track = self.mdb.get_track(hashcode, track_id)
         return self.track2dict(track)
 
     @Pyro4.expose
@@ -46,13 +46,13 @@ class JukeboxBackendRemoting:
 
     @Pyro4.expose
     def get_file(self, track_id=None, hashcode=None):
-        track = self.mdb.get_track(track_id, hashcode)
+        track = self.mdb.get_track(hashcode, track_id)
         with open(track.location, "rb") as f:
             return f.read()
 
     @Pyro4.expose
     def get_file_chunks(self, track_id=None, hashcode=None):
-        track = self.mdb.get_track(track_id, hashcode)
+        track = self.mdb.get_track(hashcode, track_id)
         with open(track.location, "rb") as f:
             while True:
                 chunk = f.read(128 * 1024)
@@ -142,16 +142,16 @@ class JukeboxBackendCli(cmd.Cmd):
         """Rescan the files in the database to see if there were changes."""
         self.mdb.scan_changes()
 
-    def do_track(self, track_id):
+    def do_track(self, track_hash_or_id):
         """Get all information for a single track by id or hash."""
-        if not track_id:
+        if not track_hash_or_id:
             print("Give track id or hash.")
             return
         try:
-            track = self.mdb.get_track(track_id=track_id)
+            track = self.mdb.get_track(hashcode=track_hash_or_id)
         except LookupError:
             try:
-                track = self.mdb.get_track(hashcode=track_id)
+                track = self.mdb.get_track(track_id=track_hash_or_id)
             except LookupError:
                 print("Track not found.")
                 return
