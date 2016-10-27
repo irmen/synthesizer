@@ -4,6 +4,10 @@ Jukebox Gui
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
+# @todo improvement: play audio samples from a worker thread instead of from the gui event loop (messing with the gui may cause audio stutter now)
+# @todo pre-load a track when it is almost ready to start playing
+# @todo crossfade tracks when they switch
+
 import sys
 import signal
 import os
@@ -28,9 +32,9 @@ StreamMixer.buffer_size = 4096      # larger is less skips and less cpu usage bu
 try:
     hqresample = AudiofileToWavStream.supports_hq_resample()
     if hqresample:
-        print("Great, ffmpeg has high-quality resampling.")
+        print("Great, ffmpeg supports high quality resampling.")
     else:
-        print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
+        print("WARNING: ffmpeg isn't compiled with libsoxr, high quality resampling is not supported.")
 except IOError:
     raise SystemExit("Cannot find the ffmpeg and ffprobe executables. They have to be installed on the search path.")
 
