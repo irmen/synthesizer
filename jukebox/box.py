@@ -7,6 +7,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import sys
 import signal
 import os
+import math
 import subprocess
 import datetime
 import configparser
@@ -47,12 +48,11 @@ class Player:
             tf.player = self
 
     def skip(self, trackframe):
-        # @todo switch to other track player
         if trackframe.state != TrackFrame.state_needtrack and trackframe.stream:
             trackframe.stream.close()
             trackframe.stream = None
         trackframe.display_track(None, None, None, "(next track...)")
-        trackframe.state = TrackFrame.state_needtrack
+        trackframe.state = TrackFrame.state_switching
 
     def stop(self):
         self.stopping = True
@@ -68,7 +68,6 @@ class Player:
         self._play_mixer_sample()
         self._load_song()
         self._play_song()
-        # @todo switch track at track end
         if not self.stopping:
             self.app.after(self.update_rate, self.tick)
 
@@ -94,16 +93,24 @@ class Player:
                     tf.state = TrackFrame.state_idle
 
     def _play_song(self):
-        # @todo alternate between the track players (new status 'switching' ??)
         for tf in self.trackframes:
             if tf.state == TrackFrame.state_playing:
-                # @todo update track time
-                break  # there's one playing already, don't do something else
-            if tf.state == TrackFrame.state_idle:
-                tf.stream = AudiofileToWavStream(tf.track["location"], hqresample=hqresample)
-                self.mixer.add_stream(tf.stream, [tf.volumefilter])
-                tf.state = TrackFrame.state_playing
-                break  # make sure only this one starts playing a track
+                remaining = tf.track_duration - (datetime.datetime.now() - tf.playback_started)
+                remaining = remaining.total_seconds()
+                tf.time = datetime.timedelta(seconds=math.ceil(remaining))
+                # handling the ending of the stream is done via a callback function
+            elif tf.state == TrackFrame.state_idle:
+                # if there is no other track currently playing, it's our turn!
+                if not any(tf for tf in self.trackframes if tf.state == TrackFrame.state_playing):
+                    tf.stream = AudiofileToWavStream(tf.track["location"], hqresample=hqresample)
+                    self.mixer.add_stream(tf.stream, [tf.volumefilter], end_callback=lambda tf=tf: self._stream_ended(tf))
+                    tf.state = TrackFrame.state_playing
+            elif tf.state == TrackFrame.state_switching:
+                tf.state = TrackFrame.state_needtrack
+
+    def _stream_ended(self, tf):
+        # this is called as a callback by the StreamMixer
+        self.skip(tf)
 
     def play_sample(self, sample):
         def unmute(trf, vol):
@@ -123,6 +130,7 @@ class TrackFrame(ttk.LabelFrame):
     state_idle = 1
     state_playing = 2
     state_needtrack = 3
+    state_switching = 4
 
     def __init__(self, master, title):
         self.title = title
@@ -159,6 +167,8 @@ class TrackFrame(ttk.LabelFrame):
         self._stream = None
         self._state = self.state_needtrack
         self.state = self.state_needtrack
+        self.playback_started = None
+        self.track_duration = None
 
     @property
     def state(self):
@@ -171,7 +181,8 @@ class TrackFrame(ttk.LabelFrame):
             self.stateLabel.configure(text=" Waiting ", bg="white", fg="black")
         elif self.state == self.state_playing:
             self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
-        elif self.state == self.state_needtrack:
+            self.playback_started = datetime.datetime.now()
+        elif self.state in (self.state_needtrack, self.state_switching):
             self.stateLabel.configure(text=" Needs Track ", bg="red", fg="white")
 
     @property
@@ -182,7 +193,8 @@ class TrackFrame(ttk.LabelFrame):
     def track(self, value):
         self._track = value
         self.display_track(value["title"], value["artist"], value["album"], value["duration"])
-        self.time = value["duration"]
+        self.track_duration = datetime.timedelta(seconds=value["duration"])
+        self.time = self.track_duration
 
     @property
     def time(self):
@@ -191,11 +203,11 @@ class TrackFrame(ttk.LabelFrame):
     @time.setter
     def time(self, value):
         if type(value) in (float, int):
-            duration = datetime.timedelta(seconds=int(value))
-        if type(duration) is not datetime.timedelta:
+            value = datetime.timedelta(seconds=math.ceil(value))
+        if type(value) is not datetime.timedelta:
             raise TypeError("time should be a datetime.timedelta, or number of seconds. It was:", type(value))
         self._time = value
-        self.timeleftLabel["text"] = duration
+        self.timeleftLabel["text"] = value
 
     @property
     def stream(self):
@@ -213,7 +225,7 @@ class TrackFrame(ttk.LabelFrame):
         self.artistLabel["text"] = artist or "-"
         self.albumlabel["text"] = album or "-"
         if type(duration) in (float, int):
-            duration = datetime.timedelta(seconds=int(duration))
+            duration = datetime.timedelta(seconds=math.ceil(duration))
         self.timeleftLabel["text"] = duration
 
     def on_volumechange(self, value):
@@ -342,7 +354,7 @@ class PlaylistFrame(ttk.LabelFrame):
             track["title"] or '-',
             track["artist"] or '-',
             track["album"] or '-',
-            datetime.timedelta(seconds=int(track["duration"])),
+            datetime.timedelta(seconds=math.ceil(track["duration"])),
             track["hash"]])
 
 
@@ -433,7 +445,7 @@ class SearchFrame(ttk.LabelFrame):
                 track["album"] or '-',
                 track["year"] or '-',
                 track["genre"] or '-',
-                datetime.timedelta(seconds=int(track["duration"]))])
+                datetime.timedelta(seconds=math.ceil(track["duration"]))])
         self.app.show_status("{:d} results found".format(len(result)), 3)
 
 
