@@ -25,9 +25,14 @@ import Pyro4.errors
 import Pyro4.futures
 
 StreamMixer.buffer_size = 4096      # larger is less skips and less cpu usage but more latency and slower meters
-hqresample = AudiofileToWavStream.supports_hq_resample()
-if not hqresample:
-    print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
+try:
+    hqresample = AudiofileToWavStream.supports_hq_resample()
+    if hqresample:
+        print("Great, ffmpeg has high-quality resampling.")
+    else:
+        print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
+except IOError:
+    raise SystemExit("Cannot find the ffmpeg and ffprobe executables. They have to be installed on the search path.")
 
 
 class Player:
