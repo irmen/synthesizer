@@ -15,6 +15,7 @@ import urllib.parse
 import urllib.request
 import sqlite3
 import os
+import math
 import tinytag
 import appdirs
 from tqdm import tqdm
@@ -104,8 +105,8 @@ class MusicFileDatabase:
 
     def total_playtime(self):
         result = self.dbconn.execute("SELECT SUM(duration) FROM tracks").fetchone()[0]
-        secs = int(result) if result else 0
-        return datetime.timedelta(seconds=int(secs))
+        secs = math.ceil(result) if result else 0
+        return datetime.timedelta(seconds=secs)
 
     def get_track(self, hashcode=None, track_id=None):
         if track_id:
@@ -256,7 +257,7 @@ class Track:
         self.album = album
         self.year = year
         self.genre = genre
-        self.duration = int(duration)
+        self.duration = math.ceil(duration)
         self.modified = modified
         self.location = location
 
