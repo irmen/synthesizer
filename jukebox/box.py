@@ -5,8 +5,8 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
 # @todo improvement: play audio samples from a worker thread instead of from the gui event loop (messing with the gui may cause audio stutter now)
-# @todo pre-load a track when it is almost ready to start playing
-# @todo crossfade tracks when they switch
+# @todo crossfade-in new track when the current one starts fading out
+# @todo pre-load a track when it is almost ready to start playing (solved with crossfade anyway)
 
 import sys
 import signal
@@ -109,33 +109,39 @@ class Player:
                 remaining = tf.track_duration - (datetime.datetime.now() - tf.playback_started)
                 remaining = remaining.total_seconds()
                 tf.time = datetime.timedelta(seconds=math.ceil(remaining))
-                # handling the ending of the stream is done via a callback function
+                if tf.stream.closed and tf.time.total_seconds() <= 0:
+                    self.skip(tf)  # stream ended!
             elif tf.state == TrackFrame.state_idle:
                 # if there is no other track currently playing, it's our turn!
                 if not any(tf for tf in self.trackframes if tf.state == TrackFrame.state_playing):
                     tf.stream = AudiofileToWavStream(tf.track["location"], hqresample=hqresample)
-                    self.mixer.add_stream(tf.stream, [tf.volumefilter], end_callback=lambda tf=tf: self._stream_ended(tf))
+                    self.mixer.add_stream(tf.stream, [tf.volumefilter])
                     tf.state = TrackFrame.state_playing
                     tf.volume = 100
             elif tf.state == TrackFrame.state_switching:
                 tf.state = TrackFrame.state_needtrack
 
     def _crossfade(self):
-        # @todo fades
         for tf in self.trackframes:
             # nearing the end of the track? then start a fade out
-            if tf.state == TrackFrame.state_playing and tf.time.total_seconds() <= self.xfade_duration:
+            if tf.state == TrackFrame.state_playing \
+                    and tf.xfade_state == TrackFrame.state_xfade_nofade \
+                    and tf.time.total_seconds() <= self.xfade_duration:
                 tf.xfade_state = TrackFrame.state_xfade_fadingout
                 tf.xfade_started = datetime.datetime.now()
+                tf.xfade_start_volume = tf.volume
+            # @todo fade in
         for tf in self.trackframes:
             if tf.xfade_state == TrackFrame.state_xfade_fadingin:
+                # @todo fade in
                 pass
             elif tf.xfade_state == TrackFrame.state_xfade_fadingout:
-                pass
-
-    def _stream_ended(self, tf):
-        # this is called as a callback by the StreamMixer
-        self.skip(tf)
+                fade_progress = (datetime.datetime.now() - tf.xfade_started)
+                fade_progress = (self.xfade_duration - fade_progress.total_seconds()) / self.xfade_duration
+                volume = max(0, tf.xfade_start_volume * fade_progress)
+                tf.volume = volume
+                if volume==0:
+                    tf.xfade_state = TrackFrame.state_xfade_nofade   # fade reached the end
 
     def play_sample(self, sample):
         def unmute(trf, vol):
@@ -197,6 +203,7 @@ class TrackFrame(ttk.LabelFrame):
         self.state = self.state_needtrack
         self.xfade_state = self.state_xfade_nofade
         self.xfade_started = None
+        self.xfade_start_volume = None
         self.playback_started = None
         self.track_duration = None
 
