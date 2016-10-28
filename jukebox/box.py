@@ -43,6 +43,7 @@ class Player:
     async_queue_size = 3     # larger is less chance of getting skips, but latency increases
     update_rate = 40         # larger is less cpu usage but more chance of getting skips
     levelmeter_lowest = -40  # dB
+    xfade_duration = 5
 
     def __init__(self, app, trackframes):
         self.app = app
@@ -77,6 +78,7 @@ class Player:
         self._play_mixer_sample()
         self._load_song()
         self._play_song()
+        self._crossfade()
         if not self.stopping:
             self.app.after(self.update_rate, self.tick)
 
@@ -114,8 +116,22 @@ class Player:
                     tf.stream = AudiofileToWavStream(tf.track["location"], hqresample=hqresample)
                     self.mixer.add_stream(tf.stream, [tf.volumefilter], end_callback=lambda tf=tf: self._stream_ended(tf))
                     tf.state = TrackFrame.state_playing
+                    tf.volume = 100
             elif tf.state == TrackFrame.state_switching:
                 tf.state = TrackFrame.state_needtrack
+
+    def _crossfade(self):
+        # @todo fades
+        for tf in self.trackframes:
+            # nearing the end of the track? then start a fade out
+            if tf.state == TrackFrame.state_playing and tf.time.total_seconds() <= self.xfade_duration:
+                tf.xfade_state = TrackFrame.state_xfade_fadingout
+                tf.xfade_started = datetime.datetime.now()
+        for tf in self.trackframes:
+            if tf.xfade_state == TrackFrame.state_xfade_fadingin:
+                pass
+            elif tf.xfade_state == TrackFrame.state_xfade_fadingout:
+                pass
 
     def _stream_ended(self, tf):
         # this is called as a callback by the StreamMixer
@@ -124,11 +140,11 @@ class Player:
     def play_sample(self, sample):
         def unmute(trf, vol):
             if trf:
-                trf.set_volume(vol)
+                trf.volume=vol
         if sample and sample.duration > 0:
             for tf in self.trackframes:
                 if tf.state == TrackFrame.state_playing:
-                    old_volume = tf.mute_volume(50)
+                    old_volume = tf.mute_volume(40)
                     self.mixer.add_sample(sample, lambda mtf=tf, vol=old_volume: unmute(mtf, vol))
                     break
             else:
@@ -140,6 +156,9 @@ class TrackFrame(ttk.LabelFrame):
     state_playing = 2
     state_needtrack = 3
     state_switching = 4
+    state_xfade_nofade = 0
+    state_xfade_fadingout = 1
+    state_xfade_fadingin = 2
 
     def __init__(self, master, title):
         self.title = title
@@ -162,13 +181,13 @@ class TrackFrame(ttk.LabelFrame):
         f = ttk.Frame(self)
         ttk.Label(f, text="V: ").pack(side=tk.LEFT)
         scale = ttk.Scale(f, from_=0, to=150, length=120, variable=self.volumeVar, command=self.on_volumechange)
-        scale.bind("<Double-1>", lambda event: self.set_volume(100))
+        scale.bind("<Double-1>", self.on_dblclick_vol)
         scale.pack(side=tk.LEFT)
         self.volumeLabel = ttk.Label(f, text="???%")
         self.volumeLabel.pack(side=tk.RIGHT)
         f.pack(fill=tk.X)
         ttk.Button(self, text="Skip", command=lambda s=self: s.player.skip(s)).pack(pady=4)
-        self.set_volume(100)
+        self.volume = 100
         self.stateLabel = tk.Label(self, text="STATE", relief=tk.SUNKEN, border=1)
         self.stateLabel.pack()
         self._track = None
@@ -176,6 +195,8 @@ class TrackFrame(ttk.LabelFrame):
         self._stream = None
         self._state = self.state_needtrack
         self.state = self.state_needtrack
+        self.xfade_state = self.state_xfade_nofade
+        self.xfade_started = None
         self.playback_started = None
         self.track_duration = None
 
@@ -242,15 +263,21 @@ class TrackFrame(ttk.LabelFrame):
         self.volumefilter.volume = value / 100.0
         self.volumeLabel["text"] = "{:.0f}%".format(value)
 
-    def set_volume(self, volume):
-        self.volumeVar.set(volume)
-        self.on_volumechange(volume)
+    def on_dblclick_vol(self, event):
+        self.volume = 100
+
+    @property
+    def volume(self):
+        return int(self.volumeVar.get())
+
+    @volume.setter
+    def volume(self, value):
+        self.volumeVar.set(value)
+        self.on_volumechange(value)
 
     def mute_volume(self, maxvolume):
         old_volume = self.volumeVar.get()
-        volume = min(maxvolume, self.volumeVar.get())
-        self.volumeVar.set(volume)
-        self.on_volumechange(volume)
+        self.volume = min(maxvolume, self.volumeVar.get())
         return old_volume
 
 
