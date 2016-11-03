@@ -10,12 +10,14 @@ import json
 import wave
 import os
 import io
+import logging
 from functools import namedtuple
 from synthesizer.sample import Sample
 
 
 __all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFramesFilter", "SampleStream"]
 
+log = logging.getLogger("synthesizer.streaming")
 
 AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat", "duration"])
 
@@ -34,7 +36,8 @@ class AudiofileToWavStream(io.RawIOBase):
     ffprobe_executable = "ffprobe"
 
     def __init__(self, filename, outputfilename=None, samplerate=Sample.norm_samplerate,
-                 channels=Sample.norm_nchannels, sampleformat=str(8*Sample.norm_samplewidth), hqresample=True):
+                 channels=Sample.norm_nchannels, sampleformat=str(8*Sample.norm_samplewidth), hqresample=True,
+                 startfrom=0, duration=0):
         self.filename = filename
         if not os.path.isfile(filename):
             raise FileNotFoundError(filename)
@@ -45,12 +48,15 @@ class AudiofileToWavStream(io.RawIOBase):
         self.sampleformat_options = []
         self.conversion_required = True
         self.format_probe = None
+        self._startfrom = startfrom
+        self._duration = duration
         if self.ffprobe_executable:
             try:
                 # probe the existing file format, to see if we can avoid needless conversion
                 probe = self.probe_format(self.filename)
                 self.conversion_required = probe.rate != samplerate or probe.channels != channels \
-                                           or probe.sampformat != sampleformat or probe.fileformat != "wav"
+                                           or probe.sampformat != sampleformat or probe.fileformat != "wav" \
+                                           or self._startfrom > 0 or self._duration > 0
                 self.format_probe = probe
             except (subprocess.CalledProcessError, IOError, OSError):
                 pass
@@ -105,26 +111,37 @@ class AudiofileToWavStream(io.RawIOBase):
         fileformat = probe["format"]["format_name"]
         duration = probe["format"].get("duration") or stream.get("duration")
         duration = float(duration) if duration else None
-        return AudioFormatProbe(samplerate, nchannels, sampleformat, fileformat, duration)
+        result = AudioFormatProbe(samplerate, nchannels, sampleformat, fileformat, duration)
+        log.debug("format probe of %s: %s", filename, result)
+        return result
 
     def start_stream(self):
         if not self.conversion_required:
             if self.outputfilename:
+                log.debug("direct copy from %s to %s", self.filename, self.outputfilename)
                 with open(self.filename, "rb") as source:
                     with open(self.outputfilename, "wb") as dest:
                         shutil.copyfileobj(source, dest)
                 return
+            log.debug("direct stream input from %s", self.filename)
             self.stream = open(self.filename, "rb")
         else:
-            command = [self.ffmpeg_executable, "-v", "error", "-hide_banner", "-loglevel", "error", "-i", self.filename]
+            command = [self.ffmpeg_executable, "-v", "error", "-hide_banner", "-loglevel", "error"]
+            if self._startfrom > 0:
+                command.extend(["-ss", str(self._startfrom)])    # seek start time in seconds
+            command.extend(["-i", self.filename])
+            if self._duration > 0:
+                command.extend(["-to", str(self._duration)])    # clip duration in seconds
             command.extend(self.resample_options)
             command.extend(self.downmix_options)
             command.extend(self.sampleformat_options)
             if self.outputfilename:
                 command.extend(["-y", self.outputfilename])
+                log.debug("ffmpeg file conversion: %s", " ".join(command))
                 subprocess.check_call(command)
                 return
             command.extend(["-f", "wav", "-"])
+            log.debug("ffmpeg streaming: %s", " ".join(command))
             converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
             self.stream = converter.stdout
         return self.stream
@@ -133,6 +150,7 @@ class AudiofileToWavStream(io.RawIOBase):
         return self.stream.read(bytes)
 
     def close(self):
+        log.debug("closing stream %s", self.filename)
         if self.stream:
             self.stream.close()
 
