@@ -133,8 +133,8 @@ class Player:
                 if tf.xfade_state == TrackFrame.state_xfade_fadingin:
                     # if we're set to fading in, regardless of other tracks, we start playing as well
                     start_stream(tf, tf.track["location"], 0)
-                elif not any(tf for tf in self.trackframes if tf.state == TrackFrame.state_playing):
-                    # if there is no other track currently playing, it's our turn!
+                elif not any(tf for tf in self.trackframes if tf.state in (TrackFrame.state_playing, TrackFrame.state_loading)):
+                    # if there is no other track currently playing (or loading), it's our turn!
                     start_stream(tf, tf.track["location"], 100)
             elif tf.state == TrackFrame.state_switching:
                 tf.state = TrackFrame.state_needtrack
