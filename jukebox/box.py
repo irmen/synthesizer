@@ -4,9 +4,6 @@ Jukebox Gui
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
-# @todo crossfade-in new track when the current one starts fading out
-# @todo pre-load a track when it is almost ready to start playing (solved with crossfade anyway)
-
 import sys
 import signal
 import os
@@ -43,7 +40,8 @@ except IOError:
 class Player:
     update_rate = 50    # 50 ms = 20 updates/sec
     levelmeter_lowest = -40  # dB
-    xfade_duration = 5
+    xfade_duration = 7
+    async_buffers = 2
 
     def __init__(self, app, trackframes):
         self.app = app
@@ -51,7 +49,7 @@ class Player:
         self.app.after(self.update_rate, self.tick)
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
-        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels)
+        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_buffers)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
         for tf in self.trackframes:
@@ -95,11 +93,11 @@ class Player:
                 break
             _, sample = next(self.mixed_samples)
             if sample and sample.duration > 0:
-                self.output.play_sample(sample, async=False)   # no need for async, we're in our own thread already
+                self.output.play_sample(sample, async=True)
                 self.levelmeter.update(sample)  # will be updated from the gui thread
             else:
                 self.levelmeter.reset()
-                time.sleep(self.update_rate/1000*4)   # avoid hogging the cpu while no samples are played
+                time.sleep(self.update_rate/1000*2)   # avoid hogging the cpu while no samples are played
 
     def _levelmeter(self):
         self.app.update_levels(self.levelmeter.level_left, self.levelmeter.level_right)
@@ -115,6 +113,15 @@ class Player:
                     tf.state = TrackFrame.state_idle
 
     def _play_song(self):
+        def start_stream(tf, filename, volume):
+            def _start_from_thread():
+                # start loading the track from a thread to avoid gui stutters when loading takes a bit of time
+                tf.stream = AudiofileToWavStream(filename, hqresample=hqresample)
+                self.mixer.add_stream(tf.stream, [tf.volumefilter])
+                tf.state = TrackFrame.state_playing
+                tf.volume = volume
+            tf.state = TrackFrame.state_loading
+            Thread(target=_start_from_thread, name="stream_loader").start()
         for tf in self.trackframes:
             if tf.state == TrackFrame.state_playing:
                 remaining = tf.track_duration - (datetime.datetime.now() - tf.playback_started)
@@ -123,12 +130,12 @@ class Player:
                 if tf.stream.closed and tf.time.total_seconds() <= 0:
                     self.skip(tf)  # stream ended!
             elif tf.state == TrackFrame.state_idle:
-                # if there is no other track currently playing, it's our turn!
-                if not any(tf for tf in self.trackframes if tf.state == TrackFrame.state_playing):
-                    tf.stream = AudiofileToWavStream(tf.track["location"], hqresample=hqresample)
-                    self.mixer.add_stream(tf.stream, [tf.volumefilter])
-                    tf.state = TrackFrame.state_playing
-                    tf.volume = 100
+                if tf.xfade_state == TrackFrame.state_xfade_fadingin:
+                    # if we're set to fading in, regardless of other tracks, we start playing as well
+                    start_stream(tf, tf.track["location"], 0)
+                elif not any(tf for tf in self.trackframes if tf.state == TrackFrame.state_playing):
+                    # if there is no other track currently playing, it's our turn!
+                    start_stream(tf, tf.track["location"], 100)
             elif tf.state == TrackFrame.state_switching:
                 tf.state = TrackFrame.state_needtrack
 
@@ -141,17 +148,28 @@ class Player:
                 tf.xfade_state = TrackFrame.state_xfade_fadingout
                 tf.xfade_started = datetime.datetime.now()
                 tf.xfade_start_volume = tf.volume
-            # @todo fade in
+                # fade in the first other track that is currently idle
+                for other_tf in self.trackframes:
+                    if tf is not other_tf and other_tf.state == TrackFrame.state_idle:
+                        other_tf.xfade_state = TrackFrame.state_xfade_fadingin
+                        other_tf.xfade_started = datetime.datetime.now()
+                        other_tf.xfade_start_volume = 0
+                        other_tf.volume = 0
+                        break
         for tf in self.trackframes:
             if tf.xfade_state == TrackFrame.state_xfade_fadingin:
-                # @todo fade in
-                pass
+                # fading in, slide volume up from 0 to 100%
+                volume = 100 * (datetime.datetime.now() - tf.xfade_started).total_seconds() / self.xfade_duration
+                tf.volume = min(volume, 100)
+                if volume >= 100:
+                    tf.xfade_state = TrackFrame.state_xfade_nofade  # fade reached the end
             elif tf.xfade_state == TrackFrame.state_xfade_fadingout:
+                # fading out, slide volume down from what it was at to 0%
                 fade_progress = (datetime.datetime.now() - tf.xfade_started)
                 fade_progress = (self.xfade_duration - fade_progress.total_seconds()) / self.xfade_duration
                 volume = max(0, tf.xfade_start_volume * fade_progress)
-                tf.volume = volume
-                if volume==0:
+                tf.volume = max(volume, 0)
+                if volume <= 0:
                     tf.xfade_state = TrackFrame.state_xfade_nofade   # fade reached the end
 
     def play_sample(self, sample):
@@ -173,6 +191,7 @@ class TrackFrame(ttk.LabelFrame):
     state_playing = 2
     state_needtrack = 3
     state_switching = 4
+    state_loading = 5
     state_xfade_nofade = 0
     state_xfade_fadingout = 1
     state_xfade_fadingin = 2
@@ -227,6 +246,8 @@ class TrackFrame(ttk.LabelFrame):
         self._state = value
         if self.state == self.state_idle:
             self.stateLabel.configure(text=" Waiting ", bg="white", fg="black")
+        elif self.state == self.state_loading:
+            self.stateLabel.configure(text=" Loading ", bg="white", fg="black")
         elif self.state == self.state_playing:
             self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
             self.playback_started = datetime.datetime.now()
