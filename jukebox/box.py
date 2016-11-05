@@ -118,6 +118,7 @@ class Player:
                 # start loading the track from a thread to avoid gui stutters when loading takes a bit of time
                 tf.stream = AudiofileToWavStream(filename, hqresample=hqresample)
                 self.mixer.add_stream(tf.stream, [tf.volumefilter])
+                tf.playback_started = datetime.datetime.now()
                 tf.state = TrackFrame.state_playing
                 tf.volume = volume
             tf.state = TrackFrame.state_loading
@@ -250,7 +251,6 @@ class TrackFrame(ttk.LabelFrame):
             self.stateLabel.configure(text=" Loading ", bg="white", fg="black")
         elif self.state == self.state_playing:
             self.stateLabel.configure(text=" Playing ", bg="light green", fg="black")
-            self.playback_started = datetime.datetime.now()
         elif self.state in (self.state_needtrack, self.state_switching):
             self.stateLabel.configure(text=" Needs Track ", bg="red", fg="white")
 
