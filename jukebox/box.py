@@ -4,17 +4,18 @@ Jukebox Gui
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
-# @todo improvement: play audio samples from a worker thread instead of from the gui event loop (messing with the gui may cause audio stutter now)
 # @todo crossfade-in new track when the current one starts fading out
 # @todo pre-load a track when it is almost ready to start playing (solved with crossfade anyway)
 
 import sys
 import signal
 import os
+import time
 import math
 import subprocess
 import datetime
 import configparser
+from threading import Thread
 import tkinter as tk
 import tkinter.ttk as ttk
 import tkinter.font
@@ -40,8 +41,7 @@ except IOError:
 
 
 class Player:
-    async_queue_size = 3     # larger is less chance of getting skips, but latency increases
-    update_rate = 40         # larger is less cpu usage but more chance of getting skips
+    update_rate = 50    # 50 ms = 20 updates/sec
     levelmeter_lowest = -40  # dB
     xfade_duration = 5
 
@@ -51,11 +51,14 @@ class Player:
         self.app.after(self.update_rate, self.tick)
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
-        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_queue_size)
+        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
         for tf in self.trackframes:
             tf.player = self
+        player_thread = Thread(target=self._play_sample_in_thread, name="jukebox_sampleplayer")
+        player_thread.daemon = True
+        player_thread.start()
 
     def skip(self, trackframe):
         if trackframe.state != TrackFrame.state_needtrack and trackframe.stream:
@@ -75,23 +78,31 @@ class Player:
         self.output.close()
 
     def tick(self):
-        self._play_mixer_sample()
+        # the actual decoding and sound playing is done in a background thread
+        self._levelmeter()
         self._load_song()
         self._play_song()
         self._crossfade()
         if not self.stopping:
             self.app.after(self.update_rate, self.tick)
 
-    def _play_mixer_sample(self):
-        if self.output.queue_size() <= self.async_queue_size/2:
+    def _play_sample_in_thread(self):
+        """
+        This is run in a background thread to avoid GUI interactions interfering with audio output.
+        """
+        while True:
+            if self.stopping:
+                break
             _, sample = next(self.mixed_samples)
             if sample and sample.duration > 0:
-                self.output.play_sample(sample, async=True)
-                left, _, right, _ = self.levelmeter.update(sample)
-                self.app.update_levels(left, right)
+                self.output.play_sample(sample, async=False)   # no need for async, we're in our own thread already
+                self.levelmeter.update(sample)  # will be updated from the gui thread
             else:
                 self.levelmeter.reset()
-                self.app.update_levels(self.levelmeter.level_left, self.levelmeter.level_right)
+                time.sleep(self.update_rate/1000*4)   # avoid hogging the cpu while no samples are played
+
+    def _levelmeter(self):
+        self.app.update_levels(self.levelmeter.level_left, self.levelmeter.level_right)
 
     def _load_song(self):
         if self.stopping:
