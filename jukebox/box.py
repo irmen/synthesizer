@@ -597,6 +597,21 @@ class EffectsFrame(ttk.LabelFrame):
             cfg.write(fp)
 
 
+class BackendGui(tkinter.Toplevel):
+    def __init__(self, master, title, backend):
+        super().__init__(master)
+        self.geometry("+400+400")
+        self.title(title)
+        f = ttk.LabelFrame(self, text="Stats")
+        ttk.Label(f, text="Connected to Database backend at: "+backend._pyroUri.location).pack()
+        statstext = "Number of tracks in database: {0} -- Total playing time: {1}".format(backend.num_tracks, datetime.timedelta(seconds=backend.total_playtime))
+        ttk.Label(f, text=statstext).pack()
+        f.pack()
+        ttk.Label(self, text="Adding tracks etc. is done via the command-line interface for now.\n"
+                             "Type 'help' in the console there to see the commands available.").pack()
+        ttk.Button(self, text="Ok", command=self.destroy).pack()
+
+
 class JukeboxGui(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -623,6 +638,9 @@ class JukeboxGui(tk.Tk):
         self.searchFrame.pack()
         f2.pack(side=tk.TOP)
         f3 = ttk.Frame(f)
+        optionsFrame = ttk.Frame(f3)
+        ttk.Button(optionsFrame, text="Database Config", command=self.do_database_config).pack()
+        optionsFrame.pack(side=tk.LEFT)
         self.effectsFrame = EffectsFrame(self, f3)
         self.effectsFrame.pack()
         f3.pack(side=tk.TOP)
@@ -657,21 +675,32 @@ class JukeboxGui(tk.Tk):
         if duration and duration > 0:
             self.after(duration*1000, lambda: reset_status("Ready."))
 
-    def connect_backend(self):
+    def connect_backend(self, try_nameserver = True):
+        def backend_connected(backend):
+            playtime = datetime.timedelta(seconds=backend.total_playtime)
+            status = "Connected to backend @ {0:s} | number of tracks: {1:d} | total playtime: {2}"\
+                     .format(backend._pyroUri.location, backend.num_tracks, playtime)
+            self.show_status(status, 5)
+        if try_nameserver:
+            # first try if we can find a backend in a name server somewhere
+            self.backend = Pyro4.Proxy("PYRONAME:jukebox.backend")
+            try:
+                self.backend._pyroBind()
+                return backend_connected(self.backend)
+            except Pyro4.errors.PyroError:
+                pass
         try:
+            # try a local backend
             self.backend = Pyro4.Proxy("PYRO:jukebox.backend@localhost:{0}".format(BACKEND_PORT))
             self.backend._pyroBind()
-            playtime = datetime.timedelta(seconds=self.backend.total_playtime)
-            status = "Connected to backend @ {0:s} | number of tracks: {1:d} | total playtime: {2}"\
-                     .format(self.backend._pyroUri.location, self.backend.num_tracks, playtime)
-            self.show_status(status, 5)
+            return backend_connected(self.backend)
         except Exception as x:
             self.show_status("ERROR! Connection to backend failed: "+str(x))
             answer = tkinter.messagebox.askokcancel("Connect backend", "Cannot connect to backend. Maybe it is not started.\n\nDo you want me to start the backend server?")
             if answer:
-                p = subprocess.Popen([sys.executable, "-m", "jukebox.backend", "-noscan"])
+                p = subprocess.Popen([sys.executable, "-m", "jukebox.backend", "-noscan", "-localhost"])
                 self.backend_process = p.pid
-                self.after(2000, self.connect_backend)
+                self.after(2000, self.connect_backend, False)
 
     def enqueue(self, track):
         self.playlistFrame.enqueue(track)
@@ -687,6 +716,13 @@ class JukeboxGui(tk.Tk):
 
     def play_sample(self, sample):
         self.player.play_sample(sample)
+
+    def do_database_config(self):
+        bg = BackendGui(self, "Jukebox - Backend Config", self.backend)
+        # make it a modal window and wait till it is closed:
+        bg.transient(self)
+        bg.grab_set()
+        self.wait_window(bg)
 
 
 if __name__ == "__main__":

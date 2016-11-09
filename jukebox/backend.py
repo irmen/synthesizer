@@ -4,15 +4,16 @@ Provides a CLI and a Pyro remote API.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
-import sys
 import cmd
 import shlex
 import threading
+import argparse
 import Pyro4
+import Pyro4.socketutil
 from .musicfiledb import MusicFileDatabase
 
 
-BACKEND_PORT = 39776
+BACKEND_PORT = 39776    # used when not registering with the Pyro name server
 
 
 class JukeboxBackendRemoting:
@@ -159,10 +160,14 @@ class JukeboxBackendCli(cmd.Cmd):
 
 
 class Backend:
-    def __init__(self, scan=True):
+    def __init__(self, scan=True, use_pyro_ns=False, bind_localhost=False):
         self.mdb = MusicFileDatabase(scan_changes=scan)
-        self.pyro_daemon = Pyro4.Daemon(host="", port=BACKEND_PORT)
+        host = "localhost" if bind_localhost else Pyro4.socketutil.getIpAddress(None, workaround127=True)
+        self.pyro_daemon = Pyro4.Daemon(host=host, port=0 if use_pyro_ns else BACKEND_PORT)
         self.pyro_uri = self.pyro_daemon.register(JukeboxBackendRemoting, "jukebox.backend")
+        if use_pyro_ns:
+            with Pyro4.locateNS() as ns:
+                ns.register("jukebox.backend", self.pyro_uri)
         self.cli = JukeboxBackendCli(self.mdb, self.pyro_uri)
 
     def run(self):
@@ -183,13 +188,10 @@ class Backend:
 
 
 if __name__ == "__main__":
-    scan_changes = True
-    if len(sys.argv) > 1:
-        if sys.argv[1] in ("-h", "--help"):
-            print("Arguments:")
-            print("  -noscan   = don't scan disk for changes")
-            raise SystemExit
-        if sys.argv[1] == "-noscan":
-            scan_changes = False
-    backend = Backend(scan_changes)
+    parser = argparse.ArgumentParser(description="Jukebox datatbase backend.")
+    parser.add_argument("-noscan", required=False, action="store_true", help="don't scan disk for changes")
+    parser.add_argument("-pyrons", required=False, action="store_true", help="use Pyro name server")
+    parser.add_argument("-localhost", required=False, action="store_true", help="bind server only on localhost")
+    args = parser.parse_args()
+    backend = Backend(not args.noscan, args.pyrons, args.localhost)
     backend.run()
