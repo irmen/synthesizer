@@ -442,8 +442,8 @@ class Sample:
         decrease = 1-target_volume
         for i in range(int(numsamples)):
             amplitude = 1-(i/numsamples)*decrease
-            s = audioop.getsample(end, self.__samplewidth, i)
-            faded.append(int(s*amplitude))
+            s = audioop.getsample(end, self.__samplewidth, i)       # @todo performance bottleneck
+            faded.append(int(s*amplitude))      # @todo performance bottleneck
         end = faded.tobytes()
         if sys.byteorder == "big":
             end = audioop.byteswap(end, self.__samplewidth)
@@ -462,8 +462,8 @@ class Sample:
         increase = 1-start_volume
         for i in range(int(numsamples)):
             amplitude = i*increase/numsamples+start_volume
-            s = audioop.getsample(begin, self.__samplewidth, i)
-            faded.append(int(s*amplitude))
+            s = audioop.getsample(begin, self.__samplewidth, i)     # @todo performance bottleneck
+            faded.append(int(s*amplitude))      # @todo performance bottleneck
         begin = faded.tobytes()
         if sys.byteorder == "big":
             begin = audioop.byteswap(begin, self.__samplewidth)

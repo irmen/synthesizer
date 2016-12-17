@@ -45,7 +45,7 @@ def demo_tones():
         out.play_sample(sample)
 
 
-def demo_song():
+def demo_song(profiling=False):
     synth = WaveSynth()
     notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
     tempo = 0.3
@@ -56,26 +56,30 @@ def demo_song():
         return a.envelope(0.05, 0.2, 0.8, 0.5)
 
     print("Synthesizing tones...")
+    perf_c = time.perf_counter()
     quarter_notes = {note: instrument(notes[note], tempo) for note in notes}
     half_notes = {note: instrument(notes[note], tempo*2) for note in notes}
     full_notes = {note: instrument(notes[note], tempo*4) for note in notes}
-    song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
-        "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
-    with Output(synth.samplerate, synth.samplewidth, 1) as out:
-        for note in song.split():
-            if note == ";":
-                print()
-                time.sleep(tempo*2)
-                continue
-            print(note, end="  ", flush=True)
-            if note.endswith(".."):
-                sample = full_notes[note[:-2]]
-            elif note.endswith("."):
-                sample = half_notes[note[:-1]]
-            else:
-                sample = quarter_notes[note]
-            out.play_sample(sample)
-        print()
+    if profiling:
+        print(time.perf_counter()-perf_c)
+    else:
+        song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
+            "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
+        with Output(synth.samplerate, synth.samplewidth, 1) as out:
+            for note in song.split():
+                if note == ";":
+                    print()
+                    time.sleep(tempo*2)
+                    continue
+                print(note, end="  ", flush=True)
+                if note.endswith(".."):
+                    sample = full_notes[note[:-2]]
+                elif note.endswith("."):
+                    sample = half_notes[note[:-1]]
+                else:
+                    sample = quarter_notes[note]
+                out.play_sample(sample)
+            print()
 
 
 def demo_plot():
@@ -492,7 +496,7 @@ if __name__ == "__main__":
     demo_plot()
     a440()
     demo_tones()
-    demo_song()
+    demo_song(profiling=False)
     modulate_amp()
     envelope()
     lfo_envelope()
