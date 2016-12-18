@@ -264,8 +264,9 @@ class PianoKeyboardGUI(tk.Frame):
         black_key_height = white_key_height * 0.6
         num_octaves = 5
         first_octave = 2
-        canvas = tk.Canvas(self, width=white_key_width*num_octaves*7+1, height=white_key_height+1+20, borderwidth=0)
+        canvas = tk.Canvas(self, width=white_key_width*num_octaves*7+2, height=white_key_height+1+20, borderwidth=0)
         # white keys:
+        xy_offset = 3
         for key_nr, key in enumerate("CDEFGAB"*num_octaves):
             octave = first_octave+key_nr//7
             def key_pressed(event, note=key, octave=octave):
@@ -273,23 +274,22 @@ class PianoKeyboardGUI(tk.Frame):
                 gui.pressed(event, note, octave, False)
             def key_released(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, True)
-            x = key_nr * white_key_width + 2
-            key_rect = canvas.create_rectangle(x, 2, x+white_key_width, 2+white_key_height, fill="white", outline="gray50", width=1, activewidth=2)
+            x = key_nr * white_key_width
+            key_rect = canvas.create_rectangle(x+xy_offset, xy_offset, x+white_key_width+xy_offset, white_key_height+xy_offset, fill="white", outline="gray50", width=1, activewidth=2)
             canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
             canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
-            canvas.create_text(x+white_key_width/2, white_key_height+2, text=key, anchor=tk.N, fill="gray")
+            canvas.create_text(x+white_key_width/2+2, white_key_height+xy_offset+1, text=key, anchor=tk.N, fill="gray")
         # black keys:
         for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
             if key:
                 octave = first_octave + key_nr // 7
                 def key_pressed(event, note=key, octave=octave):
                     force = min(black_key_height, event.y * 1.1) / black_key_height   # @todo control output volume, unused for now...
-                    print(force)
                     gui.pressed(event, note, octave, False)
                 def key_released(event, note=key, octave=octave):
                     gui.pressed(event, note, octave, True)
-                x = key_nr * white_key_width + white_key_width*0.75 + 2
-                key_rect = canvas.create_rectangle(x, 2, x + black_key_width, 2+black_key_height, fill="black", outline="gray50", width=1, activewidth=2)
+                x = key_nr * white_key_width + white_key_width*0.75
+                key_rect = canvas.create_rectangle(x+xy_offset, xy_offset, x+black_key_width+xy_offset, black_key_height+xy_offset, fill="black", outline="gray50", width=1, activewidth=2)
                 canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
                 canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
         canvas.pack()
