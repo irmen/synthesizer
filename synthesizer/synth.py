@@ -313,9 +313,7 @@ class WaveSynth:
 
     def __render_sample(self, duration, wave):
         wave = iter(wave)
-        samples = Sample.get_array(self.samplewidth)
-        for _ in range(int(duration*self.samplerate)):
-            samples.append(int(next(wave)))     # @todo performance bottleneck
+        samples = Sample.get_array(self.samplewidth, [int(next(wave)) for _ in range(int(duration*self.samplerate))])
         return Sample.from_array(samples, self.samplerate, 1)
 
 

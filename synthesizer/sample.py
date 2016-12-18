@@ -433,17 +433,15 @@ class Sample:
     def fadeout(self, seconds, target_volume=0.0):
         """Fade the end of the sample out to the target volume (usually zero) in the given time."""
         assert not self.__locked
-        faded = Sample.get_array(self.__samplewidth)
         seconds = min(seconds, self.duration)
         i = self.frame_idx(self.duration-seconds)
         begin = self.__frames[:i]
         end = self.__frames[i:]  # we fade this chunk
         numsamples = len(end)/self.__samplewidth
-        decrease = 1-target_volume
-        for i in range(int(numsamples)):
-            amplitude = 1-(i/numsamples)*decrease
-            s = audioop.getsample(end, self.__samplewidth, i)       # @todo performance bottleneck
-            faded.append(int(s*amplitude))      # @todo performance bottleneck
+        decrease = 1.0-target_volume
+        _sw = self.__samplewidth     # optimization
+        _getsample = audioop.getsample   # optimization
+        faded = Sample.get_array(_sw, [int(_getsample(end, _sw, i)*(1.0-i*decrease/numsamples)) for i in range(int(numsamples))])
         end = faded.tobytes()
         if sys.byteorder == "big":
             end = audioop.byteswap(end, self.__samplewidth)
@@ -453,17 +451,16 @@ class Sample:
     def fadein(self, seconds, start_volume=0.0):
         """Fade the start of the sample in from the starting volume (usually zero) in the given time."""
         assert not self.__locked
-        faded = Sample.get_array(self.__samplewidth)
         seconds = min(seconds, self.duration)
         i = self.frame_idx(seconds)
         begin = self.__frames[:i]  # we fade this chunk
         end = self.__frames[i:]
         numsamples = len(begin)/self.__samplewidth
-        increase = 1-start_volume
-        for i in range(int(numsamples)):
-            amplitude = i*increase/numsamples+start_volume
-            s = audioop.getsample(begin, self.__samplewidth, i)     # @todo performance bottleneck
-            faded.append(int(s*amplitude))      # @todo performance bottleneck
+        increase = 1.0-start_volume
+        _sw = self.__samplewidth     # optimization
+        _getsample = audioop.getsample   # optimization
+        _incr = increase/numsamples    # optimization
+        faded = Sample.get_array(_sw, [int(_getsample(begin, _sw, i)*(i*_incr+start_volume)) for i in range(int(numsamples))])
         begin = faded.tobytes()
         if sys.byteorder == "big":
             begin = audioop.byteswap(begin, self.__samplewidth)
