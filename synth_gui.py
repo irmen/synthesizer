@@ -67,7 +67,7 @@ class OscillatorGUI(tk.LabelFrame):
         self.freq_entry = tk.Entry(f, width=10, textvariable=self.input_freq)
         self.freq_entry.grid(row=row, column=1)
         row += 1
-        self.keys_label = tk.Label(f, text="from piano?")
+        self.keys_label = tk.Label(f, text="from keys?")
         self.keys_label.grid(row=row, column=0, sticky=tk.E)
         self.keys_checkbox = tk.Checkbutton(f, variable=self.input_freq_keys, command=self.from_keys_selected)
         self.keys_checkbox.grid(row=row, column=1)
@@ -256,49 +256,43 @@ class OscillatorGUI(tk.LabelFrame):
 
 
 class PianoKeyboardGUI(tk.Frame):
-    # XXX the keyboard buttons are all wrong on OSX because they can't be resized/styled there... :(
     def __init__(self, master, gui):
         super().__init__(master)
-        black_keys = tk.Frame(self)
-        white_keys = tk.Frame(self)
+        white_key_width = 30
+        white_key_height = 110
+        black_key_width = white_key_width * 0.5
+        black_key_height = white_key_height * 0.6
         num_octaves = 5
         first_octave = 2
-        # somehow the button spacing differs per platform, try to compensate a bit:
-        if platform.system() == "Windows":
-            black_padx = "5p"
-        else:
-            black_padx = "6p"
-        for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
-            octave = first_octave+key_nr//7
-
-            def key_pressed(event, note=key, octave=octave):
-                gui.pressed(event, note, octave, False)
-
-            def key_released(event, note=key, octave=octave):
-                gui.pressed(event, note, octave, True)
-
-            if key:
-                b = tk.Button(black_keys, bg='black', fg='lightgray', width=2, height=3, padx=0, pady=0, text=key, relief=tk.RAISED, borderwidth=1)
-                b.bind("<ButtonPress-1>", key_pressed)
-                b.bind("<ButtonRelease-1>", key_released)
-                b.pack(side=tk.LEFT, padx=black_padx, pady=0)
-            else:
-                tk.Button(black_keys, width=2, height=3, padx=0, pady=0, text="", relief=tk.FLAT, borderwidth=1, state="disabled").pack(side=tk.LEFT, padx=black_padx)
-        black_keys.pack(side=tk.TOP, anchor=tk.W, padx="13p", pady=0)
+        canvas = tk.Canvas(self, width=white_key_width*num_octaves*7+1, height=white_key_height+1+20, borderwidth=0)
+        # white keys:
         for key_nr, key in enumerate("CDEFGAB"*num_octaves):
             octave = first_octave+key_nr//7
-
             def key_pressed(event, note=key, octave=octave):
+                force = min(white_key_height, event.y*1.08)/white_key_height   # @todo control output volume, unused for now...
                 gui.pressed(event, note, octave, False)
-
             def key_released(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, True)
-
-            b = tk.Button(white_keys, bg='white', fg='gray', width=4, height=4, padx=0, pady=0, text=key, relief=tk.RAISED, borderwidth=1)
-            b.bind("<ButtonPress-1>", key_pressed)
-            b.bind("<ButtonRelease-1>", key_released)
-            b.pack(side=tk.LEFT, padx=0, pady=0)
-        white_keys.pack(side=tk.TOP, anchor=tk.W, pady=(0, 10))
+            x = key_nr * white_key_width + 2
+            key_rect = canvas.create_rectangle(x, 2, x+white_key_width, 2+white_key_height, fill="white", outline="gray50", width=1, activewidth=2)
+            canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
+            canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
+            canvas.create_text(x+white_key_width/2, white_key_height+2, text=key, anchor=tk.N, fill="gray")
+        # black keys:
+        for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
+            if key:
+                octave = first_octave + key_nr // 7
+                def key_pressed(event, note=key, octave=octave):
+                    force = min(black_key_height, event.y * 1.1) / black_key_height   # @todo control output volume, unused for now...
+                    print(force)
+                    gui.pressed(event, note, octave, False)
+                def key_released(event, note=key, octave=octave):
+                    gui.pressed(event, note, octave, True)
+                x = key_nr * white_key_width + white_key_width*0.75 + 2
+                key_rect = canvas.create_rectangle(x, 2, x + black_key_width, 2+black_key_height, fill="black", outline="gray50", width=1, activewidth=2)
+                canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
+                canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
+        canvas.pack()
 
 
 class EchoFilterGUI(tk.LabelFrame):
@@ -911,9 +905,4 @@ class SynthGUI(tk.Frame):
 if __name__ == "__main__":
     root = tk.Tk()
     app = SynthGUI(master=root)
-    if platform.system() == "Darwin":
-        # @todo fix the piano keyboard on osx....
-        warning = "Sorry but the piano keyboard buttons are messed up on OSX due to not being able to resize buttons..."
-        print(warning)
-        app.statusbar["text"] = warning
     app.mainloop()
