@@ -15,19 +15,13 @@ import os
 import wave
 import audioop
 import array
-import threading
-import queue
 import math
 import itertools
-try:
-    import pyaudio
-except ImportError:
-    pyaudio = None
-    import winsound
 try:
     import numpy
 except ImportError:
     numpy = None
+from .audioout import AudioApiNotAvailableError, PyAudio  # @todo use best
 
 
 __all__ = ["Sample", "Output", "LevelMeter"]
@@ -742,71 +736,17 @@ class Sample:
 
 class Output:
     """Plays samples to audio output device or streams them to a file."""
-
-    class SoundOutputter(threading.Thread):
-        """Sound outputter running in its own thread. Requires PyAudio."""
-        def __init__(self, samplerate, samplewidth, nchannels, queuesize=100):
-            super().__init__(name="soundoutputter", daemon=True)
-            self.audio = pyaudio.PyAudio()
-            self.stream = self.audio.open(
-                format=self.pyaudio_format_from_width(samplewidth),
-                channels=nchannels, rate=samplerate, output=True)
-            self.queue = queue.Queue(maxsize=queuesize)
-
-        def pyaudio_format_from_width(self, width):
-            if width == 2:
-                return pyaudio.paInt16
-            elif width == 3:
-                return pyaudio.paInt24
-            elif width == 4:
-                return pyaudio.paInt32
-            else:
-                raise ValueError("Invalid width: %d" % width)
-
-        def run(self):
-            while True:
-                sample = self.queue.get()
-                if not sample:
-                    break
-                sample.write_frames(self.stream)
-
-        def play_immediately(self, sample):
-            sample.write_frames(self.stream)
-
-        def add_to_queue(self, sample):
-            self.queue.put(sample)
-
-        _wipe_lock = threading.Lock()
-
-        def wipe_queue(self):
-            with self._wipe_lock:
-                try:
-                    while True:
-                        self.queue.get(block=False)
-                except queue.Empty:
-                    pass
-
-        def queue_size(self):
-            return self.queue.qsize()
-
-        def close(self):
-            if self.stream:
-                self.stream.close()
-                self.stream = None
-            if self.audio:
-                self.audio.terminate()
-                self.audio = None
-
     def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels, queuesize=100):
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.nchannels = nchannels
-        if pyaudio:
-            self.outputter = Output.SoundOutputter(samplerate, samplewidth, nchannels, queuesize)
-            self.outputter.start()
-            self.supports_streaming = True
-        else:
-            self.outputter = None
+        try:
+            audio_api = PyAudio(queue_size=queuesize)       # @todo select best(), don't hardcode api
+            audio_api.set_params(samplerate, samplewidth, nchannels, queuesize)
+            self.outputter = audio_api.get_outputter()
+            self.supports_streaming = audio_api.supports_streaming
+        except AudioApiNotAvailableError:
+            self.outputter = None   # @todo use winsound or whatever api
             self.supports_streaming = False
 
     def __repr__(self):
