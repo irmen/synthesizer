@@ -7,6 +7,7 @@ Various audio output options.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
+
 import threading
 import queue
 from abc import ABC, abstractmethod
@@ -78,41 +79,46 @@ class PyAudio(AudioApi):
         super().__init__(queue_size)
         import pyaudio
         self.pyaudio = pyaudio
-        self.outputter = None
+        self.samp_queue = None
+        self.stream = None
 
     def __del__(self):
         self.play_queue(None)
 
     def close(self):
         self.play_queue(None)
-        self.outputter = None
-
-    class SoundOutputter(threading.Thread):
-        def __init__(self, pyaudio, samplerate, samplewidth, nchannels, queue_size=100):
-            super().__init__(name="soundoutputter-pyaudio", daemon=True)
-            self.audio = pyaudio.PyAudio()
-            audio_format = self.audio.get_format_from_width(samplewidth) if samplewidth != 4 else pyaudio.paInt32
-            self.stream = self.audio.open(format=audio_format, channels=nchannels, rate=samplerate, output=True)
-            self.queue = queue.Queue(maxsize=queue_size)
-
-        def run(self):
-            while True:
-                sample = self.queue.get()
-                if not sample:
-                    break
-                sample.write_frames(self.stream)
-            self.stream.close()
-            self.audio.terminate()
 
     def _recreate_outputter(self):
-        if self.outputter:
+        if self.samp_queue:
             self.play_queue(None)
-        self.outputter = PyAudio.SoundOutputter(self.pyaudio, self.samplerate, self.samplewidth, self.nchannels, self.queue_size)
-        self.outputter.start()
+        self.samp_queue = queue.Queue(maxsize=self.queue_size)
+        stream_ready = threading.Event()
+
+        def audio_thread():
+            audio = self.pyaudio.PyAudio()
+            try:
+                audio_format = audio.get_format_from_width(self.samplewidth) if self.samplewidth != 4 else self.pyaudio.paInt32
+                self.stream = audio.open(format=audio_format, channels=self.nchannels, rate=self.samplerate, output=True)
+                stream_ready.set()
+                q = self.samp_queue
+                try:
+                    while True:
+                        sample = q.get()
+                        if not sample:
+                            break
+                        sample.write_frames(self.stream)
+                finally:
+                    self.stream.close()
+            finally:
+                audio.terminate()
+
+        outputter = threading.Thread(target=audio_thread, name="audio-pyaudio", daemon=True)
+        outputter.start()
+        stream_ready.wait()
 
     def query_devices(self):
+        audio = self.pyaudio.PyAudio()
         try:
-            audio = self.pyaudio.PyAudio()
             num_devices = audio.get_device_count()
             info = [audio.get_device_info_by_index(i) for i in range(num_devices)]
             return info
@@ -120,8 +126,8 @@ class PyAudio(AudioApi):
             audio.terminate()
 
     def query_apis(self):
+        audio = self.pyaudio.PyAudio()
         try:
-            audio = self.pyaudio.PyAudio()
             num_apis = audio.get_host_api_count()
             info = [audio.get_host_api_info_by_index(i) for i in range(num_apis)]
             return info
@@ -129,15 +135,15 @@ class PyAudio(AudioApi):
             audio.terminate()
 
     def play_immediately(self, sample):
-        sample.write_frames(self.outputter.stream)
+        sample.write_frames(self.stream)
 
     def play_queue(self, sample):
-        self.outputter.queue.put(sample)
+        self.samp_queue.put(sample)
 
     def wipe_queue(self):
         try:
             while True:
-                self.outputter.queue.get(block=False)
+                self.samp_queue.get(block=False)
         except queue.Empty:
             pass
 
