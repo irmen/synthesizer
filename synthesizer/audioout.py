@@ -180,7 +180,8 @@ class Sounddevice(AudioApi):
     def __del__(self):
         if self.samp_queue:
             self.play_queue(None)
-        sounddevice.stop()
+        if sounddevice:
+            sounddevice.stop()
 
     def close(self):
         if self.samp_queue:
