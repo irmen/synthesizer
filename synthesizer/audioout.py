@@ -91,10 +91,10 @@ class PyAudio(AudioApi):
 
     def __init__(self):
         super().__init__()
-        global pyaudio
-        import pyaudio
         self.samp_queue = None
         self.stream = None
+        global pyaudio
+        import pyaudio
 
     def __del__(self):
         if self.samp_queue:
@@ -172,10 +172,10 @@ class Sounddevice(AudioApi):
 
     def __init__(self):
         super().__init__()
-        global sounddevice
-        import sounddevice
         self.samp_queue = None
         self.stream = None
+        global sounddevice
+        import sounddevice
 
     def __del__(self):
         if self.samp_queue:
