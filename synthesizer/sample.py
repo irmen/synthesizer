@@ -11,7 +11,6 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
 import sys
-import os
 import wave
 import audioop
 import array
@@ -21,7 +20,7 @@ try:
     import numpy
 except ImportError:
     numpy = None
-from .audioout import AudioApiNotAvailableError, PyAudio  # @todo use best
+from .audioout import AudioApiNotAvailableError, PyAudio, Winsound
 
 
 __all__ = ["Sample", "Output", "LevelMeter"]
@@ -741,13 +740,11 @@ class Output:
         self.samplewidth = samplewidth
         self.nchannels = nchannels
         try:
-            audio_api = PyAudio(queue_size=queuesize)       # @todo select best(), don't hardcode api
-            audio_api.set_params(samplerate, samplewidth, nchannels, queuesize)
-            self.outputter = audio_api.get_outputter()
-            self.supports_streaming = audio_api.supports_streaming
+            self.audio_api = PyAudio(queue_size=queuesize)       # @todo select best(), don't hardcode api
+            self.audio_api.set_params(samplerate, samplewidth, nchannels, queuesize)
         except AudioApiNotAvailableError:
-            self.outputter = None   # @todo use winsound or whatever api
-            self.supports_streaming = False
+            self.audio_api = Winsound()
+        self.supports_streaming = self.audio_api.supports_streaming
 
     def __repr__(self):
         return "<Output at 0x{0:x}, {1:d} channels, {2:d} bits, rate {3:d}>"\
@@ -764,37 +761,28 @@ class Output:
         self.close()
 
     def close(self):
-        if self.outputter:
-            self.outputter.add_to_queue(None)
+        self.audio_api.play_queue(None)
 
     def play_sample(self, sample, async=False):
         """Play a single sample."""
         assert sample.samplewidth == self.samplewidth
         assert sample.samplerate == self.samplerate
         assert sample.nchannels == self.nchannels
-        if self.outputter:
-            if async:
-                self.outputter.add_to_queue(sample)
-            else:
-                self.outputter.play_immediately(sample)
+        if async:
+            self.audio_api.play_queue(sample)
         else:
-            # try to fallback to winsound (only works on windows)
-            sample_file = "__temp_sample.wav"
-            sample.write_wav(sample_file)
-            winsound.PlaySound(sample_file, winsound.SND_FILENAME)
-            os.remove(sample_file)
+            self.audio_api.play_immediately(sample)
 
     def play_samples(self, samples, async=False):
         """Plays all the given samples immediately after each other, with no pauses."""
-        if self.outputter:
+        if self.audio_api.supports_streaming:
             for s in self.normalized_samples(samples, 26000):
                 if async:
-                    self.outputter.add_to_queue(s)
+                    self.audio_api.play_queue(s)
                 else:
-                    self.outputter.play_immediately(s)
+                    self.audio_api.play_immediately(s)
         else:
-            # winsound doesn't cut it when playing many small sample files...
-            raise RuntimeError("Sorry but pyaudio is not installed. You need it to play streaming audio output.")
+            raise RuntimeError("You need an audio api that supports streaming, to play many samples in sequence.")
 
     def normalized_samples(self, samples, global_amplification=26000):
         """Generator that produces samples normalized to 16 bit using a single amplification value for all."""
@@ -822,11 +810,7 @@ class Output:
 
     def wipe_queue(self):
         """Remove all pending samples to be played from the queue"""
-        self.outputter.wipe_queue()
-
-    def queue_size(self):
-        """Return approximation of the number of items in the async play queue"""
-        return self.outputter.queue_size()
+        self.audio_api.wipe_queue()
 
 
 # noinspection PyAttributeOutsideInit
