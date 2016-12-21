@@ -30,14 +30,15 @@ def play_console(filename_or_stream):
         update_rate = 20   # lower this if you hear the sound crackle!
         levelmeter = LevelMeter(rms_mode=False, lowest=-50.0)
         with Output(samplerate, samplewidth, nchannels, int(update_rate/4)) as out:
+            print("Audio API used:", out.audio_api)
             while True:
                 frames = wav.readframes(samplerate//update_rate)
                 if not frames:
                     break
                 sample = Sample.from_raw_frames(frames, wav.getsampwidth(), wav.getframerate(), wav.getnchannels())
-                out.play_sample(sample, async=True)
+                out.play_sample(sample, async=False)
                 levelmeter.update(sample)
-                time.sleep(sample.duration*0.4)   # print the peak meter more or less halfway during the sample
+                # time.sleep(sample.duration*0.4)   # update the peak meter more or less halfway during the sample (only useful when playing with async)
                 levelmeter.print(bar_width)
     print("\ndone")
     input("Enter to exit:")
@@ -74,7 +75,7 @@ class LevelGUI(tk.Frame):
         frame.pack()
         self.info.pack(side=tk.TOP)
         self.pack()
-        self.update_rate = 19   # lower this if you hear the sound crackle!
+        self.update_rate = 15   # lower this if you hear the sound crackle!
         self.open_audio_file(audio_source)
         self.after_idle(self.update)
 
@@ -99,7 +100,7 @@ class LevelGUI(tk.Frame):
             return
         sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
         self.audio_out.play_sample(sample, async=True)
-        time.sleep(sample.duration/3)   # print the peak meter more or less halfway during the sample
+        time.sleep(sample.duration*0.4)   # update the peak meter more or less halfway during the sample
         left, peak_l, right, peak_r = self.levelmeter.update(sample)
         self.pbvar_left.set(left-self.lowest_level)
         self.pbvar_right.set(right-self.lowest_level)
@@ -133,6 +134,7 @@ if __name__ == "__main__":
         if stream.conversion_required and not hqresample:
             print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
         try:
+            # play_console(stream)
             play_gui(stream)
         finally:
             try:

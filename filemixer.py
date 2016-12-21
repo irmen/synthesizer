@@ -1,8 +1,7 @@
 import os
 import sys
-import time
 from synthesizer.streaming import AudiofileToWavStream, StreamMixer
-from synthesizer.sample import Output, Sample, LevelMeter
+from synthesizer.sample import Output, LevelMeter
 
 
 def main(args):
@@ -19,7 +18,7 @@ def main(args):
             for timestamp, sample in mixed_samples:
                 levelmeter.update(sample)
                 output.play_sample(sample)
-                time.sleep(sample.duration*0.4)
+                # time.sleep(sample.duration*0.4)   no use when not playing async
                 levelmeter.print(bar_width=60)
     print("done.")
 
@@ -33,4 +32,3 @@ if __name__ == "__main__":
             os.system("stty sane")   # needed because spawning ffmpeg sometimes breaks the terminal...
         except ImportError:
             pass
-    
