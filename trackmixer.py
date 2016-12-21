@@ -1,8 +1,5 @@
 """
 Sample mixer and sequencer meant to create rhythms. Inspired by the Roland TR-909.
-Uses PyAudio (https://pypi.python.org/pypi/PyAudio) for playing sound. On windows
-it can fall back to using the winsound module if pysound isn't available.
-
 Sample mix rate is configured at 44.1 khz. You may want to change this if most of
 the samples you're using are of a different sample rate (such as 48Khz), to avoid
 the slight loss of quality due to resampling.

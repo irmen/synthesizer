@@ -1,5 +1,6 @@
 """
-Various audio output options.
+Various audio output options. Here the specific audio library code is located.
+Supported audio output libraries:
 - pyaudio
 - sounddevice (@todo)
 - winsound (@todo)
@@ -14,6 +15,10 @@ from abc import ABC, abstractmethod
 
 
 __all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "Winsound"]
+
+pyaudio = None
+sounddevice = None
+winsound = None
 
 
 class AudioApiNotAvailableError(Exception):
@@ -35,6 +40,9 @@ class AudioApi(ABC):
         self.nchannels = nchannels
         self.queue_size = queue_size
         self._recreate_outputter()
+
+    def close(self):
+        pass
 
     def query_devices(self):
         raise NotImplementedError
@@ -77,16 +85,19 @@ class PyAudio(AudioApi):
 
     def __init__(self, queue_size=100):
         super().__init__(queue_size)
-        import pyaudio
-        self.pyaudio = pyaudio
+        import pyaudio as _pyaudio
+        global pyaudio
+        pyaudio = _pyaudio
         self.samp_queue = None
         self.stream = None
 
     def __del__(self):
-        self.play_queue(None)
+        if self.samp_queue:
+            self.play_queue(None)
 
     def close(self):
-        self.play_queue(None)
+        if self.samp_queue:
+            self.play_queue(None)
 
     def _recreate_outputter(self):
         if self.samp_queue:
@@ -95,9 +106,9 @@ class PyAudio(AudioApi):
         stream_ready = threading.Event()
 
         def audio_thread():
-            audio = self.pyaudio.PyAudio()
+            audio = pyaudio.PyAudio()
             try:
-                audio_format = audio.get_format_from_width(self.samplewidth) if self.samplewidth != 4 else self.pyaudio.paInt32
+                audio_format = audio.get_format_from_width(self.samplewidth) if self.samplewidth != 4 else pyaudio.paInt32
                 self.stream = audio.open(format=audio_format, channels=self.nchannels, rate=self.samplerate, output=True)
                 stream_ready.set()
                 q = self.samp_queue
@@ -117,7 +128,7 @@ class PyAudio(AudioApi):
         stream_ready.wait()
 
     def query_devices(self):
-        audio = self.pyaudio.PyAudio()
+        audio = pyaudio.PyAudio()
         try:
             num_devices = audio.get_device_count()
             info = [audio.get_device_info_by_index(i) for i in range(num_devices)]
@@ -126,7 +137,7 @@ class PyAudio(AudioApi):
             audio.terminate()
 
     def query_apis(self):
-        audio = self.pyaudio.PyAudio()
+        audio = pyaudio.PyAudio()
         try:
             num_apis = audio.get_host_api_count()
             info = [audio.get_host_api_info_by_index(i) for i in range(num_apis)]
@@ -153,20 +164,36 @@ class Sounddevice(AudioApi):
 
     def __init__(self, queue_size=100):
         super().__init__(queue_size)
-        import sounddevice
-        self.sounddevice = sounddevice
+        import sounddevice as _sounddevice
+        global sounddevice
+        sounddevice = _sounddevice
 
     def __del__(self):
-        self.sounddevice.stop()
+        sounddevice.stop()
+
+    def close(self):
+        sounddevice.stop()
 
     def query_devices(self):
-        return list(self.sounddevice.query_devices())
+        return list(sounddevice.query_devices())
 
     def query_devices_sd(self, device=None, kind=None):
-        return self.sounddevice.query_devices(device, kind)
+        return sounddevice.query_devices(device, kind)
 
     def query_apis(self):
-        return list(self.sounddevice.query_hostapis())
+        return list(sounddevice.query_hostapis())
+
+    def play_immediately(self, sample):
+        raise NotImplementedError       # @todo
+
+    def play_queue(self, sample):
+        raise NotImplementedError
+
+    def wipe_queue(self):
+        raise NotImplementedError
+
+    def _recreate_outputter(self):
+        raise NotImplementedError
 
 
 class Winsound(AudioApi):
@@ -174,8 +201,9 @@ class Winsound(AudioApi):
 
     def __init__(self):
         super().__init__()
-        import winsound
-        self.winsound = winsound
+        import winsound as _winsound
+        global winsound
+        winsound = _winsound
 
     """
                 # try to fallback to winsound (only works on windows)
