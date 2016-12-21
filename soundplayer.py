@@ -85,6 +85,7 @@ class LevelGUI(tk.Frame):
         self.nchannels = self.wave.getnchannels()
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.lowest_level)
         self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels, int(self.update_rate/4))
+        print("Audio API used:", self.audio_out.audio_api)
         filename = filename_or_stream if isinstance(filename_or_stream, str) else "<stream>"
         info = "Source:\n{}\n\nRate: {:g} Khz\nBits: {}\nChannels: {}".format(filename, self.samplerate/1000, 8*self.samplewidth, self.nchannels)
         self.info.configure(text=info)

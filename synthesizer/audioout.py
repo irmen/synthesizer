@@ -14,22 +14,31 @@ import queue
 from abc import ABC, abstractmethod
 
 
-__all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "Winsound"]
-
-pyaudio = None
-sounddevice = None
-winsound = None
+__all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "Winsound", "best_api"]
 
 
 class AudioApiNotAvailableError(Exception):
     pass
 
 
+def best_api():
+    try:
+        return Sounddevice()
+    except ImportError:
+        try:
+            return PyAudio()
+        except ImportError:
+            try:
+                return Winsound()
+            except ImportError:
+                raise AudioApiNotAvailableError("no suitable audio output api available") from None
+
+
 class AudioApi(ABC):
     supports_streaming = True
 
-    def __init__(self, queue_size=100):
-        self.queue_size = queue_size
+    def __init__(self):
+        self.queue_size = None
         self.samplerate = None
         self.samplewidth = None
         self.nchannels = None
@@ -41,14 +50,24 @@ class AudioApi(ABC):
         self.queue_size = queue_size
         self._recreate_outputter()
 
+    def __str__(self):
+        api_ver = self.query_api_version()
+        if api_ver and api_ver != "unknown":
+            return self.__class__.__name__ + ", " + self.query_api_version()
+        else:
+            return self.__class__.__name__
+
     def close(self):
         pass
 
     def query_devices(self):
-        raise NotImplementedError
+        return []
 
     def query_apis(self):
-        raise NotImplementedError
+        return []
+
+    def query_api_version(self):
+        return "unknown"
 
     @abstractmethod
     def _recreate_outputter(self):
@@ -67,27 +86,13 @@ class AudioApi(ABC):
         pass
 
 
-def best():
-    try:
-        return Sounddevice()
-    except ImportError:
-        try:
-            return PyAudio()
-        except ImportError:
-            try:
-                return Winsound()
-            except ImportError:
-                raise AudioApiNotAvailableError("no suitable audio output api available") from None
-
-
 class PyAudio(AudioApi):
     supports_streaming = True
 
-    def __init__(self, queue_size=100):
-        super().__init__(queue_size)
-        import pyaudio as _pyaudio
+    def __init__(self):
+        super().__init__()
         global pyaudio
-        pyaudio = _pyaudio
+        import pyaudio
         self.samp_queue = None
         self.stream = None
 
@@ -145,6 +150,9 @@ class PyAudio(AudioApi):
         finally:
             audio.terminate()
 
+    def query_api_version(self):
+        return pyaudio.get_portaudio_version_text()
+
     def play_immediately(self, sample):
         sample.write_frames(self.stream)
 
@@ -162,16 +170,21 @@ class PyAudio(AudioApi):
 class Sounddevice(AudioApi):
     supports_streaming = True
 
-    def __init__(self, queue_size=100):
-        super().__init__(queue_size)
-        import sounddevice as _sounddevice
+    def __init__(self):
+        super().__init__()
         global sounddevice
-        sounddevice = _sounddevice
+        import sounddevice
+        self.samp_queue = None
+        self.stream = None
 
     def __del__(self):
+        if self.samp_queue:
+            self.play_queue(None)
         sounddevice.stop()
 
     def close(self):
+        if self.samp_queue:
+            self.play_queue(None)
         sounddevice.stop()
 
     def query_devices(self):
@@ -183,17 +196,59 @@ class Sounddevice(AudioApi):
     def query_apis(self):
         return list(sounddevice.query_hostapis())
 
+    def query_api_version(self):
+        return sounddevice.get_portaudio_version()[1]
+
     def play_immediately(self, sample):
-        raise NotImplementedError       # @todo
+        sample.write_frames(self.stream)
 
     def play_queue(self, sample):
-        raise NotImplementedError
+        self.samp_queue.put(sample)
 
     def wipe_queue(self):
-        raise NotImplementedError
+        try:
+            while True:
+                self.samp_queue.get(block=False)
+        except queue.Empty:
+            pass
 
     def _recreate_outputter(self):
-        raise NotImplementedError
+        if self.samp_queue:
+            self.play_queue(None)
+        self.samp_queue = queue.Queue(maxsize=self.queue_size)
+        stream_ready = threading.Event()
+
+        def audio_thread():   # @todo use callback stream instead?
+            try:
+                if self.samplewidth == 1:
+                    dtype = "int8"
+                elif self.samplewidth == 2:
+                    dtype = "int16"
+                elif self.samplewidth == 3:
+                    dtype = "int24"
+                elif self.samplewidth == 4:
+                    dtype = "int32"
+                else:
+                    raise ValueError("invalid sample width")
+                self.stream = sounddevice.RawOutputStream(self.samplerate, channels=self.nchannels, dtype=dtype)
+                self.stream.start()
+                stream_ready.set()
+                q = self.samp_queue
+                try:
+                    while True:
+                        sample = q.get()
+                        if not sample:
+                            break
+                        sample.write_frames(self.stream)
+                finally:
+                    self.stream.stop()
+                    self.stream.close()
+            finally:
+                pass
+
+        outputter = threading.Thread(target=audio_thread, name="audio-sounddevice", daemon=True)
+        outputter.start()
+        stream_ready.wait()
 
 
 class Winsound(AudioApi):

@@ -15,7 +15,7 @@ try:
     import numpy
 except ImportError:
     numpy = None
-from .audioout import AudioApiNotAvailableError, PyAudio, Winsound
+from .audioout import best_api
 
 
 __all__ = ["Sample", "Output", "LevelMeter"]
@@ -734,11 +734,8 @@ class Output:
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.nchannels = nchannels
-        try:
-            self.audio_api = PyAudio(queue_size=queuesize)       # @todo select best(), don't hardcode api
-            self.audio_api.reset_params(samplerate, samplewidth, nchannels, queuesize)
-        except AudioApiNotAvailableError:
-            self.audio_api = Winsound()
+        self.audio_api = best_api()
+        self.audio_api.reset_params(samplerate, samplewidth, nchannels, queuesize)
         self.supports_streaming = self.audio_api.supports_streaming
 
     def __repr__(self):
