@@ -741,7 +741,7 @@ class Output:
         self.nchannels = nchannels
         try:
             self.audio_api = PyAudio(queue_size=queuesize)       # @todo select best(), don't hardcode api
-            self.audio_api.set_params(samplerate, samplewidth, nchannels, queuesize)
+            self.audio_api.reset_params(samplerate, samplewidth, nchannels, queuesize)
         except AudioApiNotAvailableError:
             self.audio_api = Winsound()
         self.supports_streaming = self.audio_api.supports_streaming

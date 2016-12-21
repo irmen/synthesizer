@@ -12,13 +12,11 @@ import queue
 from abc import ABC, abstractmethod
 
 
+__all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "Winsound"]
+
+
 class AudioApiNotAvailableError(Exception):
     pass
-
-
-norm_samplerate = 44100
-norm_nchannels = 2
-norm_samplewidth = 2
 
 
 class AudioApi(ABC):
@@ -26,21 +24,26 @@ class AudioApi(ABC):
 
     def __init__(self, queue_size=100):
         self.queue_size = queue_size
-        self.samplerate = norm_samplerate
-        self.samplewidth = norm_samplewidth
-        self.nchannels = norm_nchannels
+        self.samplerate = None
+        self.samplewidth = None
+        self.nchannels = None
 
-    def set_params(self, samplerate, samplewidth, nchannels, queue_size=100):
+    def reset_params(self, samplerate, samplewidth, nchannels, queue_size=100):
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.nchannels = nchannels
         self.queue_size = queue_size
+        self._recreate_outputter()
 
     def query_devices(self):
         raise NotImplementedError
 
     def query_apis(self):
         raise NotImplementedError
+
+    @abstractmethod
+    def _recreate_outputter(self):
+        pass
 
     @abstractmethod
     def play_queue(self, sample):
@@ -75,8 +78,7 @@ class PyAudio(AudioApi):
         super().__init__(queue_size)
         import pyaudio
         self.pyaudio = pyaudio
-        self.outputter = PyAudio.SoundOutputter(pyaudio, self.samplerate, self.samplewidth, self.nchannels, self.queue_size)
-        self.outputter.start()
+        self.outputter = None
 
     def __del__(self):
         self.play_queue(None)
@@ -101,6 +103,12 @@ class PyAudio(AudioApi):
                 sample.write_frames(self.stream)
             self.stream.close()
             self.audio.terminate()
+
+    def _recreate_outputter(self):
+        if self.outputter:
+            self.play_queue(None)
+        self.outputter = PyAudio.SoundOutputter(self.pyaudio, self.samplerate, self.samplewidth, self.nchannels, self.queue_size)
+        self.outputter.start()
 
     def query_devices(self):
         try:
