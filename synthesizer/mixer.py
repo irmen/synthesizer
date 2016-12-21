@@ -334,7 +334,7 @@ class Repl(cmd.Cmd):
         patterns = [self.song.patterns[name] for name in names]
         try:
             m = Mixer(patterns, self.song.bpm, self.song.ticks, self.song.instruments)
-            result = m.mix(verbose=len(patterns) > 1)
+            result = m.mix(verbose=len(patterns) > 1).make_16bit()
             self.out.play_sample(result, True)
         except ValueError as x:
             print("ERROR:", x)
@@ -356,12 +356,13 @@ class Repl(cmd.Cmd):
         if pattern:
             self.play_single_bar(sample, pattern)
         else:
-            self.out.play_sample(sample, True)
+            sample = sample.copy().make_16bit()
+            self.out.play_sample(sample, False)
 
     def play_single_bar(self, sample, pattern):
         try:
             m = Mixer([{"sample": pattern}], self.song.bpm, self.song.ticks, {"sample": sample})
-            result = m.mix(verbose=False)
+            result = m.mix(verbose=False).make_16bit()
             self.out.play_sample(result, True)
         except ValueError as x:
             print("ERROR:", x)
