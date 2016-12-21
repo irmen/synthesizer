@@ -11,10 +11,15 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import threading
 import queue
-from abc import ABC, abstractmethod
 
 
 __all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "Winsound", "best_api"]
+
+
+# stubs for optional audio library modules:
+sounddevice = None
+pyaudio = None
+winsound = None
 
 
 class AudioApiNotAvailableError(Exception):
@@ -34,7 +39,7 @@ def best_api():
                 raise AudioApiNotAvailableError("no suitable audio output api available") from None
 
 
-class AudioApi(ABC):
+class AudioApi:
     supports_streaming = True
 
     def __init__(self):
@@ -69,19 +74,15 @@ class AudioApi(ABC):
     def query_api_version(self):
         return "unknown"
 
-    @abstractmethod
     def _recreate_outputter(self):
         pass
 
-    @abstractmethod
     def play_queue(self, sample):
         pass
 
-    @abstractmethod
     def play_immediately(self, sample):
         pass
 
-    @abstractmethod
     def wipe_queue(self):
         pass
 
