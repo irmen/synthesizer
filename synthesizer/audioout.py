@@ -14,7 +14,7 @@ import queue
 import time
 
 
-__all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "Winsound", "best_api"]
+__all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "SounddeviceThread", "Winsound", "best_api"]
 
 
 # stubs for optional audio library modules:
@@ -29,10 +29,10 @@ class AudioApiNotAvailableError(Exception):
 
 def best_api():
     try:
-        return SounddeviceCB()
+        return Sounddevice()
     except ImportError:
         try:
-            return Sounddevice()
+            return SounddeviceThread()
         except ImportError:
             try:
                 return PyAudio()
@@ -172,7 +172,7 @@ class PyAudio(AudioApi):
             pass
 
 
-class Sounddevice(AudioApi):
+class SounddeviceThread(AudioApi):
     supports_streaming = True
 
     def __init__(self):
@@ -254,7 +254,7 @@ class Sounddevice(AudioApi):
         stream_ready.wait()
 
 
-class SounddeviceCB(AudioApi):
+class Sounddevice(AudioApi):
     supports_streaming = True
 
     class BufferQueueReader:
@@ -369,7 +369,7 @@ class SounddeviceCB(AudioApi):
         else:
             raise ValueError("invalid sample width")
         frames_per_chunk = self.samplerate // 20
-        self.buffer_queue_reader = SounddeviceCB.BufferQueueReader(self.buffer_queue)
+        self.buffer_queue_reader = Sounddevice.BufferQueueReader(self.buffer_queue)
         self.stream = sounddevice.RawOutputStream(self.samplerate, channels=self.nchannels, dtype=dtype,
             blocksize=frames_per_chunk, callback=self.streamcallback)
         self.stream.start()
