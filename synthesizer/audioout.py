@@ -2,9 +2,8 @@
 Various audio output options. Here the specific audio library code is located.
 Supported audio output libraries:
 - pyaudio
-- sounddevice (@todo)
-- winsound (@todo)
-- file? (@todo)
+- sounddevice (both thread and nonblocking callback stream variants)
+- winsound
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
@@ -12,6 +11,8 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import threading
 import queue
 import time
+import os
+import tempfile
 
 
 __all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "SounddeviceThread", "Winsound", "best_api"]
@@ -82,16 +83,17 @@ class AudioApi:
         pass
 
     def play_queue(self, sample):
-        pass
+        raise NotImplementedError
 
     def play_immediately(self, sample):
-        pass
+        raise NotImplementedError
 
     def wipe_queue(self):
         pass
 
 
 class PyAudio(AudioApi):
+    """Api to the somewhat older pyaudio library (that uses portaudio)"""
     supports_streaming = True
 
     def __init__(self):
@@ -173,6 +175,8 @@ class PyAudio(AudioApi):
 
 
 class SounddeviceThread(AudioApi):
+    """Api to the more featureful sounddevice library (that uses portaudio) -
+    using blocking streams with an audio output thread"""
     supports_streaming = True
 
     def __init__(self):
@@ -255,6 +259,8 @@ class SounddeviceThread(AudioApi):
 
 
 class Sounddevice(AudioApi):
+    """Api to the more featureful sounddevice library (that uses portaudio) -
+    using callback stream, without a separate audio output thread"""
     supports_streaming = True
 
     class BufferQueueReader:
@@ -390,21 +396,37 @@ class Sounddevice(AudioApi):
 
 
 class Winsound(AudioApi):
+    """Minimally featured api for the winsound library that comes with Python"""
     supports_streaming = False
 
     def __init__(self):
         super().__init__()
+        self.temporary_files = []
         import winsound as _winsound
         global winsound
         winsound = _winsound
 
-    # @todo
+    def __del__(self):
+        self.close()
 
-    """
-                # try to fallback to winsound (only works on windows)
-            sample_file = "__temp_sample.wav"
+    def close(self):
+        if self.temporary_files:
+            for f in self.temporary_files:
+                os.unlink(f.name)
+            self.temporary_files = []
+
+    def play_queue(self, sample):
+        # actually doesn't _queue_ the sample, it does play it async.
+        # but as soon as you play another sample, the currently playing sample will stop
+        # and is immediately replaced by the next sample...
+        with tempfile.NamedTemporaryFile(delete=False) as sample_file:
             sample.write_wav(sample_file)
-            winsound.PlaySound(sample_file, winsound.SND_FILENAME)
-            os.remove(sample_file)
-"""
+        self.temporary_files.append(sample_file)
+        winsound.PlaySound(sample_file.name, winsound.SND_FILENAME|winsound.SND_ASYNC)
 
+    def play_immediately(self, sample):
+        with tempfile.NamedTemporaryFile(delete=False) as sample_file:
+            sample.write_wav(sample_file)
+            sample_file.flush()
+            winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)
+        os.unlink(sample_file.name)
