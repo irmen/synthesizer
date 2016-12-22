@@ -11,6 +11,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import threading
 import queue
+import time
 
 
 __all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "Winsound", "best_api"]
@@ -28,15 +29,18 @@ class AudioApiNotAvailableError(Exception):
 
 def best_api():
     try:
-        return Sounddevice()
+        return SounddeviceCB()
     except ImportError:
         try:
-            return PyAudio()
+            return Sounddevice()
         except ImportError:
             try:
-                return Winsound()
+                return PyAudio()
             except ImportError:
-                raise AudioApiNotAvailableError("no suitable audio output api available") from None
+                try:
+                    return Winsound()
+                except ImportError:
+                    raise AudioApiNotAvailableError("no suitable audio output api available") from None
 
 
 class AudioApi:
@@ -175,18 +179,15 @@ class Sounddevice(AudioApi):
         super().__init__()
         self.samp_queue = None
         self.stream = None
+        self.output_thread = None
         global sounddevice
         import sounddevice
-
-    def __del__(self):
-        if self.samp_queue:
-            self.play_queue(None)
-        if sounddevice:
-            sounddevice.stop()
 
     def close(self):
         if self.samp_queue:
             self.play_queue(None)
+        if self.output_thread:
+            self.output_thread.join()
         sounddevice.stop()
 
     def query_devices(self):
@@ -220,7 +221,7 @@ class Sounddevice(AudioApi):
         self.samp_queue = queue.Queue(maxsize=self.queue_size)
         stream_ready = threading.Event()
 
-        def audio_thread():   # @todo use callback stream instead?
+        def audio_thread():
             try:
                 if self.samplewidth == 1:
                     dtype = "int8"
@@ -243,14 +244,150 @@ class Sounddevice(AudioApi):
                             break
                         sample.write_frames(self.stream)
                 finally:
-                    self.stream.stop()
+                    # self.stream.stop()  causes pop
                     self.stream.close()
             finally:
                 pass
 
-        outputter = threading.Thread(target=audio_thread, name="audio-sounddevice", daemon=True)
-        outputter.start()
+        self.output_thread = threading.Thread(target=audio_thread, name="audio-sounddevice", daemon=True)
+        self.output_thread.start()
         stream_ready.wait()
+
+
+class SounddeviceCB(AudioApi):
+    supports_streaming = True
+
+    class BufferQueueReader:
+        def __init__(self, bufferqueue):
+            self.queue_items = self.iter_queue(bufferqueue)
+            self.current_item = None
+            self.i = 0
+        def iter_queue(self, bufferqueue):
+            while True:
+                try:
+                    yield bufferqueue.get_nowait()
+                except queue.Empty:
+                    yield None
+        def next_chunk(self, size):
+            if not self.current_item:
+                data = next(self.queue_items)
+                if not data:
+                    return None
+                self.current_item = memoryview(data)
+                self.i = 0
+            rest_current = len(self.current_item) - self.i
+            if size <= rest_current:
+                # current item still contains enough data
+                result = self.current_item[self.i:self.i+size]
+                self.i += size
+                return result
+            # current item is too small, get more data from the queue
+            # we assume the size of the chunks in the queue is >= required block size
+            data = next(self.queue_items)
+            if data:
+                result = self.current_item[self.i:].tobytes()
+                self.i = size - len(result)
+                result += data[0:self.i]
+                self.current_item = memoryview(data)
+                assert len(result)==size, "queue blocks need to be >= buffersize"
+                return result
+            else:
+                # no new data available, just return the last remaining data from current block
+                result = self.current_item[self.i:]
+                self.current_item = None
+                return result or None
+
+    def __init__(self):
+        super().__init__()
+        self.buffer_queue = None
+        self.stream = None
+        self.buffer_queue_reader = None
+        global sounddevice
+        import sounddevice
+
+    def __del__(self):
+        if sounddevice:
+            sounddevice.stop()
+
+    def close(self):
+        if self.stream:
+            # self.stream.stop()   causes pop
+            self.stream.close()
+            self.stream = None
+        self.buffer_queue = None
+        sounddevice.stop()
+
+    def query_devices(self):
+        return list(sounddevice.query_devices())
+
+    def query_devices_sd(self, device=None, kind=None):
+        return sounddevice.query_devices(device, kind)
+
+    def query_apis(self):
+        return list(sounddevice.query_hostapis())
+
+    def query_api_version(self):
+        return sounddevice.get_portaudio_version()[1]
+
+    def play_immediately(self, sample):
+        self.play_queue(sample)
+        time.sleep(sample.duration-0.04)   # XXX
+        while not self.buffer_queue.empty():
+            time.sleep(0.05)
+
+    def play_queue(self, sample):
+        class SampleBufferGrabber:
+            def __init__(self):
+                self.buffer = None
+            def write(self, buffer):
+                assert self.buffer is None
+                self.buffer = buffer
+        grabber = SampleBufferGrabber()
+        sample.write_frames(grabber)
+        self.buffer_queue.put(grabber.buffer)
+
+    def wipe_queue(self):
+        try:
+            while True:
+                self.buffer_queue.get(block=False)
+        except queue.Empty:
+            pass
+
+    def _recreate_outputter(self):
+        if self.stream:
+            # self.stream.stop()   causes pop
+            self.stream.close()
+        self.buffer_queue = queue.Queue(maxsize=self.queue_size)
+        if self.samplewidth == 1:
+            dtype = "int8"
+        elif self.samplewidth == 2:
+            dtype = "int16"
+        elif self.samplewidth == 3:
+            dtype = "int24"
+        elif self.samplewidth == 4:
+            dtype = "int32"
+        else:
+            raise ValueError("invalid sample width")
+        frames_per_chunk = self.samplerate // 20
+        self.buffer_queue_reader = SounddeviceCB.BufferQueueReader(self.buffer_queue)
+        self.stream = sounddevice.RawOutputStream(self.samplerate, channels=self.nchannels, dtype=dtype,
+            blocksize=frames_per_chunk, callback=self.streamcallback)
+        self.stream.start()
+
+    def streamcallback(self, outdata, frames, time, status):
+        print("cb!", frames, time.currentTime)   # XXX
+        data = self.buffer_queue_reader.next_chunk(len(outdata))
+        if not data:
+            # no frames available, use silence
+            data = b"\0" * len(outdata)
+            # raise sounddevice.CallbackAbort   this will abort the stream
+        if len(data) < len(outdata):
+            # underflow, pad with silence
+            outdata[:len(data)] = data
+            outdata[len(data):] = b"\0"*(len(outdata)-len(data))
+            # raise sounddevice.CallbackStop    this will play the remaining samples and then stop the stream
+        else:
+            outdata[:] = data
 
 
 class Winsound(AudioApi):
