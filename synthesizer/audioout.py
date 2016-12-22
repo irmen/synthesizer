@@ -262,11 +262,13 @@ class SounddeviceCB(AudioApi):
             self.queue_items = self.iter_queue(bufferqueue)
             self.current_item = None
             self.i = 0
+            self.queue_empty_event = threading.Event()
         def iter_queue(self, bufferqueue):
             while True:
                 try:
                     yield bufferqueue.get_nowait()
                 except queue.Empty:
+                    self.queue_empty_event.set()
                     yield None
         def next_chunk(self, size):
             if not self.current_item:
@@ -331,9 +333,7 @@ class SounddeviceCB(AudioApi):
 
     def play_immediately(self, sample):
         self.play_queue(sample)
-        time.sleep(sample.duration-0.04)   # XXX
-        while not self.buffer_queue.empty():
-            time.sleep(0.05)
+        time.sleep(sample.duration-0.0005)
 
     def play_queue(self, sample):
         class SampleBufferGrabber:
@@ -375,7 +375,6 @@ class SounddeviceCB(AudioApi):
         self.stream.start()
 
     def streamcallback(self, outdata, frames, time, status):
-        print("cb!", frames, time.currentTime)   # XXX
         data = self.buffer_queue_reader.next_chunk(len(outdata))
         if not data:
             # no frames available, use silence
@@ -398,6 +397,8 @@ class Winsound(AudioApi):
         import winsound as _winsound
         global winsound
         winsound = _winsound
+
+    # @todo
 
     """
                 # try to fallback to winsound (only works on windows)
