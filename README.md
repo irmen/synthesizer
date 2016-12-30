@@ -9,11 +9,10 @@ Note: *requires Python 3.x.*
 
 
 The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.
-They are written to a [pyaudio](http://people.csail.mit.edu/hubert/pyaudio/) audiostream to let you hear the rhythm mix
-as it is produced in real time.
-
-Apart from [pyaudio](http://people.csail.mit.edu/hubert/pyaudio/) which is used for audio output, no other custom libraries are required.
-On windows you can even run it without having pyaudio installed (it will use winsound, but you won't be able to stream).
+These are written to an audio stream of one of the supported audio libraries.
+Libraries supported are: [``sounddevice``](http://python-sounddevice.readthedocs.io/),
+[``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) and ``winsound`` (in this order). 
+``winsound`` cannot stream audio however so not everything works with this one.
 
 # synthesizer.synth
 
@@ -23,7 +22,14 @@ It also supports Frequency Modulation, Pulse-width modulation, and ADSR envelope
 
 ![Synth GUI screenshot](./screenshot.png?raw=true "Screenshot of the Synth GUI")
 
-## how it works
+# jukebox.box
+
+This is a jukebox like party sound player that allows to prepare a playlist,
+fade from a track to the next from the list, and insert random soundbytes for added fun.
+The songs are queried from a backend audio file database server program.
+ 
+
+## how the track mixer works
 
 You assemble rhythm samples into bars and patterns, which are then mixed.
 Samples have to be in .wav format but can be anything that the Python wave module understands. 
