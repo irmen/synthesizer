@@ -12,7 +12,7 @@ import threading
 import queue
 import os
 import tempfile
-
+import time
 
 __all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "SounddeviceThread", "Winsound", "best_api"]
 
@@ -387,33 +387,20 @@ class Winsound(AudioApi):
 
     def __init__(self):
         super().__init__()
-        self.temporary_files = []
         import winsound as _winsound
         global winsound
         winsound = _winsound
 
-    def __del__(self):
-        self.close()
-
-    def close(self):
-        if self.temporary_files:
-            for f in self.temporary_files:
-                os.unlink(f.name)
-            self.temporary_files = []
-
     def play(self, sample):
-        # actually doesn't _queue_ the sample, it does play it async.
-        # but as soon as you play another sample, the currently playing sample will stop
-        # and is immediately replaced by the next sample...
-        # XXX thread that clears up the tempfile afterwards see below
+        # plays the sample in a background thread so that we can continue while the sound plays.
+        # we don't use SND_ASYNC because that complicates cleaning up the temp files a lot.
+        t = threading.Thread(target=self._play, args=(sample,), daemon=True)
+        t.start()
+        time.sleep(0.0005)
+
+    def _play(self, sample):
         with tempfile.NamedTemporaryFile(delete=False) as sample_file:
             sample.write_wav(sample_file)
-        self.temporary_files.append(sample_file)
-        winsound.PlaySound(sample_file.name, winsound.SND_FILENAME|winsound.SND_ASYNC)
-
-    # def play_immediately(self, sample):
-    #     with tempfile.NamedTemporaryFile(delete=False) as sample_file:
-    #         sample.write_wav(sample_file)
-    #         sample_file.flush()
-    #         winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)
-    #     os.unlink(sample_file.name)
+            sample_file.flush()
+            winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)
+        os.unlink(sample_file.name)

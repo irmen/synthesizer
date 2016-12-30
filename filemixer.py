@@ -14,6 +14,8 @@ def main(args):
     with StreamMixer(wav_streams, endless=True) as mixer:
         mixed_samples = iter(mixer)
         with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels, queuesize=200) as output:
+            if not output.supports_streaming:
+                raise RuntimeError("need api that supports streaming")
             levelmeter = LevelMeter(rms_mode=False, lowest=-50)
             for timestamp, sample in mixed_samples:
                 levelmeter.update(sample)    # @todo update it from the actual sample that is currently played rather than put into the queue

@@ -30,6 +30,8 @@ def play_console(filename_or_stream):
         levelmeter = LevelMeter(rms_mode=False, lowest=-50.0)
         with Output(samplerate, samplewidth, nchannels) as out:
             print("Audio API used:", out.audio_api)
+            if not out.supports_streaming:
+                raise RuntimeError("need api that supports streaming")
             while True:
                 frames = wav.readframes(samplerate//update_rate)
                 if not frames:
@@ -85,6 +87,8 @@ class LevelGUI(tk.Frame):
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.lowest_level)
         self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels)
         print("Audio API used:", self.audio_out.audio_api)
+        if not self.audio_out.supports_streaming:
+            raise RuntimeError("need api that supports streaming")
         filename = filename_or_stream if isinstance(filename_or_stream, str) else "<stream>"
         info = "Source:\n{}\n\nRate: {:g} Khz\nBits: {}\nChannels: {}".format(filename, self.samplerate/1000, 8*self.samplewidth, self.nchannels)
         self.info.configure(text=info)
