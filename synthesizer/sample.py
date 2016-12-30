@@ -771,6 +771,9 @@ class Output:
         else:
             raise RuntimeError("You need an audio api that supports streaming, to play many samples in sequence.")
 
+    def wait_all_played(self):
+        self.audio_api.wait_all_played()
+
     def normalized_samples(self, samples, global_amplification=26000):
         """Generator that produces samples normalized to 16 bit using a single amplification value for all."""
         for sample in samples:

@@ -22,13 +22,13 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
-        with Output() as out:
+        with Output(queuesize=3) as out:
             if out.supports_streaming:
                 # mix and stream output in real time
                 print("Mixing and streaming to speakers...")
                 out.play_samples(song.mix_generator())
-                # @todo wait till output queue is empty
                 print("\r                          ")
+                out.wait_all_played()
             else:
                 # output can't stream, fallback on mixing everything to a wav
                 print("(Sorry, streaming audio is not possible, perhaps because you don't have sounddevice or pyaudio installed?)")
@@ -36,7 +36,7 @@ def main(track_file, outputfile=None, interactive=False):
                 mix = Sample(wave_file=outputfile)
                 print("Playing sound...")
                 out.play_sample(mix)
-                # @todo wait till output queue is empty
+                out.wait_all_played()
 
 
 def usage():

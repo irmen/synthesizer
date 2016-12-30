@@ -355,7 +355,7 @@ class Repl(cmd.Cmd):
         else:
             sample = sample.copy().make_16bit()
             self.out.play_sample(sample)
-            # @todo wait till output queue is empty
+            self.out.wait_all_played()
 
     def play_single_bar(self, sample, pattern):
         try:
@@ -397,7 +397,7 @@ class Repl(cmd.Cmd):
         try:
             self.out.play_samples(self.song.mix_generator())
             print("\r                          ")
-            # @todo wait till output queue is empty
+            self.out.wait_all_played()
         except KeyboardInterrupt:
             print("Stopped.")
 

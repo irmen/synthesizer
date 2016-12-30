@@ -87,6 +87,9 @@ class AudioApi:
     def wipe_queue(self):
         pass
 
+    def wait_all_played(self):
+        pass
+
 
 class PyAudio(AudioApi):
     """Api to the somewhat older pyaudio library (that uses portaudio)"""
@@ -96,6 +99,7 @@ class PyAudio(AudioApi):
         super().__init__()
         self.samp_queue = None
         self.stream = None
+        self.all_played = threading.Event()
         global pyaudio
         import pyaudio
 
@@ -126,8 +130,12 @@ class PyAudio(AudioApi):
                         if not sample:
                             break
                         sample.write_frames(self.stream)
+                        if q.empty():
+                            time.sleep(sample.duration)
+                            self.all_played.set()
                 finally:
                     self.stream.close()
+                    self.all_played.set()
             finally:
                 audio.terminate()
 
@@ -157,14 +165,19 @@ class PyAudio(AudioApi):
         return pyaudio.get_portaudio_version_text()
 
     def play(self, sample):
+        self.all_played.clear()
         self.samp_queue.put(sample)
 
     def wipe_queue(self):
         try:
             while True:
                 self.samp_queue.get(block=False)
+            self.all_played.set()
         except queue.Empty:
             pass
+
+    def wait_all_played(self):
+        self.all_played.wait()
 
 
 class SounddeviceThread(AudioApi):
@@ -177,6 +190,7 @@ class SounddeviceThread(AudioApi):
         self.samp_queue = None
         self.stream = None
         self.output_thread = None
+        self.all_played = threading.Event()
         global sounddevice
         import sounddevice
 
@@ -200,12 +214,14 @@ class SounddeviceThread(AudioApi):
         return sounddevice.get_portaudio_version()[1]
 
     def play(self, sample):
+        self.all_played.clear()
         self.samp_queue.put(sample)
 
     def wipe_queue(self):
         try:
             while True:
                 self.samp_queue.get(block=False)
+            self.all_played.set()
         except queue.Empty:
             pass
 
@@ -237,15 +253,22 @@ class SounddeviceThread(AudioApi):
                         if not sample:
                             break
                         sample.write_frames(self.stream)
+                        if q.empty():
+                            time.sleep(sample.duration)
+                            self.all_played.set()
                 finally:
                     # self.stream.stop()  causes pop
                     self.stream.close()
+                    self.all_played.set()
             finally:
                 pass
 
         self.output_thread = threading.Thread(target=audio_thread, name="audio-sounddevice", daemon=True)
         self.output_thread.start()
         stream_ready.wait()
+
+    def wait_all_played(self):
+        self.all_played.wait()
 
 
 class Sounddevice(AudioApi):
@@ -300,6 +323,7 @@ class Sounddevice(AudioApi):
         self.buffer_queue = None
         self.stream = None
         self.buffer_queue_reader = None
+        self.all_played = threading.Event()
         global sounddevice
         import sounddevice
 
@@ -334,6 +358,7 @@ class Sounddevice(AudioApi):
             def write(self, buffer):
                 assert self.buffer is None
                 self.buffer = buffer
+        self.all_played.clear()
         grabber = SampleBufferGrabber()
         sample.write_frames(grabber)
         self.buffer_queue.put(grabber.buffer)
@@ -342,6 +367,7 @@ class Sounddevice(AudioApi):
         try:
             while True:
                 self.buffer_queue.get(block=False)
+            self.all_played.set()
         except queue.Empty:
             pass
 
@@ -371,6 +397,7 @@ class Sounddevice(AudioApi):
         if not data:
             # no frames available, use silence
             data = b"\0" * len(outdata)
+            self.all_played.set()
             # raise sounddevice.CallbackAbort   this will abort the stream
         if len(data) < len(outdata):
             # underflow, pad with silence
@@ -379,6 +406,9 @@ class Sounddevice(AudioApi):
             # raise sounddevice.CallbackStop    this will play the remaining samples and then stop the stream
         else:
             outdata[:] = data
+
+    def wait_all_played(self):
+        self.all_played.wait()
 
 
 class Winsound(AudioApi):
@@ -390,11 +420,13 @@ class Winsound(AudioApi):
         import winsound as _winsound
         global winsound
         winsound = _winsound
+        self.threads = []
 
     def play(self, sample):
         # plays the sample in a background thread so that we can continue while the sound plays.
         # we don't use SND_ASYNC because that complicates cleaning up the temp files a lot.
         t = threading.Thread(target=self._play, args=(sample,), daemon=True)
+        self.threads.append(t)
         t.start()
         time.sleep(0.0005)
 
@@ -404,3 +436,8 @@ class Winsound(AudioApi):
             sample_file.flush()
             winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)
         os.unlink(sample_file.name)
+
+    def wait_all_played(self):
+        while self.threads:
+            t = self.threads.pop()
+            t.join()
