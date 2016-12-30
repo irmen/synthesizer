@@ -802,6 +802,9 @@ class Output:
         """Remove all pending samples to be played from the queue"""
         self.audio_api.wipe_queue()
 
+    def register_notify_played(self, callback):
+        self.audio_api.register_notify_played(callback)
+
 
 # noinspection PyAttributeOutsideInit
 class LevelMeter:

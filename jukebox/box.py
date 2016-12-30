@@ -53,6 +53,7 @@ class Player:
         self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_buffers)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
+        self.output.register_notify_played(self.levelmeter.update)
         for tf in self.trackframes:
             tf.player = self
         player_thread = Thread(target=self._play_sample_in_thread, name="jukebox_sampleplayer")
@@ -95,7 +96,6 @@ class Player:
             _, sample = next(self.mixed_samples)
             if sample and sample.duration > 0:
                 self.output.play_sample(sample)
-                self.levelmeter.update(sample)  # will be updated from the gui thread.   @todo update from currently played sample
             else:
                 self.levelmeter.reset()
                 time.sleep(self.update_rate/1000*2)   # avoid hogging the cpu while no samples are played

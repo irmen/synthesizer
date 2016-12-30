@@ -32,13 +32,13 @@ def play_console(filename_or_stream):
             print("Audio API used:", out.audio_api)
             if not out.supports_streaming:
                 raise RuntimeError("need api that supports streaming")
+            out.register_notify_played(levelmeter.update)
             while True:
                 frames = wav.readframes(samplerate//update_rate)
                 if not frames:
                     break
                 sample = Sample.from_raw_frames(frames, wav.getsampwidth(), wav.getframerate(), wav.getnchannels())
                 out.play_sample(sample)
-                levelmeter.update(sample)   # @todo update from actual current sample instead
                 levelmeter.print(bar_width)
     print("\ndone")
     input("Enter to exit:")
@@ -89,6 +89,7 @@ class LevelGUI(tk.Frame):
         print("Audio API used:", self.audio_out.audio_api)
         if not self.audio_out.supports_streaming:
             raise RuntimeError("need api that supports streaming")
+        self.audio_out.register_notify_played(self.levelmeter.update)
         filename = filename_or_stream if isinstance(filename_or_stream, str) else "<stream>"
         info = "Source:\n{}\n\nRate: {:g} Khz\nBits: {}\nChannels: {}".format(filename, self.samplerate/1000, 8*self.samplewidth, self.nchannels)
         self.info.configure(text=info)
@@ -102,7 +103,8 @@ class LevelGUI(tk.Frame):
             return
         sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
         self.audio_out.play_sample(sample)
-        left, peak_l, right, peak_r = self.levelmeter.update(sample)      # @todo update from actual current sample instead
+        left, peak_l = self.levelmeter.level_left, self.levelmeter.peak_left
+        right, peak_r = self.levelmeter.level_right, self.levelmeter.peak_right
         self.pbvar_left.set(left-self.lowest_level)
         self.pbvar_right.set(right-self.lowest_level)
         if left > -3:

@@ -88,7 +88,10 @@ class AudioApi:
         pass
 
     def wait_all_played(self):
-        pass
+        raise NotImplementedError
+
+    def register_notify_played(self, callback):
+        raise NotImplementedError
 
 
 class PyAudio(AudioApi):
@@ -100,6 +103,7 @@ class PyAudio(AudioApi):
         self.samp_queue = None
         self.stream = None
         self.all_played = threading.Event()
+        self.played_callback = None
         global pyaudio
         import pyaudio
 
@@ -130,6 +134,8 @@ class PyAudio(AudioApi):
                         if not sample:
                             break
                         sample.write_frames(self.stream)
+                        if self.played_callback:
+                            self.played_callback(sample)
                         if q.empty():
                             time.sleep(sample.duration)
                             self.all_played.set()
@@ -179,6 +185,9 @@ class PyAudio(AudioApi):
     def wait_all_played(self):
         self.all_played.wait()
 
+    def register_notify_played(self, callback):
+        self.played_callback = callback
+
 
 class SounddeviceThread(AudioApi):
     """Api to the more featureful sounddevice library (that uses portaudio) -
@@ -191,6 +200,7 @@ class SounddeviceThread(AudioApi):
         self.stream = None
         self.output_thread = None
         self.all_played = threading.Event()
+        self.played_callback = None
         global sounddevice
         import sounddevice
 
@@ -253,6 +263,8 @@ class SounddeviceThread(AudioApi):
                         if not sample:
                             break
                         sample.write_frames(self.stream)
+                        if self.played_callback:
+                            self.played_callback(sample)
                         if q.empty():
                             time.sleep(sample.duration)
                             self.all_played.set()
@@ -269,6 +281,9 @@ class SounddeviceThread(AudioApi):
 
     def wait_all_played(self):
         self.all_played.wait()
+
+    def register_notify_played(self, callback):
+        self.played_callback = callback
 
 
 class Sounddevice(AudioApi):
@@ -324,6 +339,7 @@ class Sounddevice(AudioApi):
         self.stream = None
         self.buffer_queue_reader = None
         self.all_played = threading.Event()
+        self.played_callback = None
         global sounddevice
         import sounddevice
 
@@ -406,9 +422,16 @@ class Sounddevice(AudioApi):
             # raise sounddevice.CallbackStop    this will play the remaining samples and then stop the stream
         else:
             outdata[:] = data
+        if self.played_callback:
+            from .sample import Sample
+            sample = Sample.from_raw_frames(outdata, self.samplewidth, self.samplerate, self.nchannels)
+            self.played_callback(sample)
 
     def wait_all_played(self):
         self.all_played.wait()
+
+    def register_notify_played(self, callback):
+        self.played_callback = callback
 
 
 class Winsound(AudioApi):
@@ -421,10 +444,12 @@ class Winsound(AudioApi):
         global winsound
         winsound = _winsound
         self.threads = []
+        self.played_callback = None
 
     def play(self, sample):
         # plays the sample in a background thread so that we can continue while the sound plays.
         # we don't use SND_ASYNC because that complicates cleaning up the temp files a lot.
+        self.wait_all_played()
         t = threading.Thread(target=self._play, args=(sample,), daemon=True)
         self.threads.append(t)
         t.start()
@@ -435,9 +460,14 @@ class Winsound(AudioApi):
             sample.write_wav(sample_file)
             sample_file.flush()
             winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)
+            if self.played_callback:
+                self.played_callback(sample)
         os.unlink(sample_file.name)
 
     def wait_all_played(self):
         while self.threads:
             t = self.threads.pop()
             t.join()
+
+    def register_notify_played(self, callback):
+        self.played_callback = callback
