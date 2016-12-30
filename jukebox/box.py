@@ -26,7 +26,8 @@ import Pyro4
 import Pyro4.errors
 import Pyro4.futures
 
-StreamMixer.buffer_size = 4096      # larger is less skips and less cpu usage but more latency and slower meters
+StreamMixer.buffer_size = 4096      # larger means less skips and less cpu usage but more latency and slower levelmeters
+
 try:
     hqresample = AudiofileToWavStream.supports_hq_resample()
     if hqresample:
@@ -41,7 +42,7 @@ class Player:
     update_rate = 50    # 50 ms = 20 updates/sec
     levelmeter_lowest = -40  # dB
     xfade_duration = 7
-    async_buffers = 2
+    async_buffers = 4
 
     def __init__(self, app, trackframes):
         self.app = app
@@ -93,8 +94,8 @@ class Player:
                 break
             _, sample = next(self.mixed_samples)
             if sample and sample.duration > 0:
-                self.output.play_sample(sample, async=True)
-                self.levelmeter.update(sample)  # will be updated from the gui thread
+                self.output.play_sample(sample)
+                self.levelmeter.update(sample)  # will be updated from the gui thread.   @todo update from currently played sample
             else:
                 self.levelmeter.reset()
                 time.sleep(self.update_rate/1000*2)   # avoid hogging the cpu while no samples are played

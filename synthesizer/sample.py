@@ -730,7 +730,7 @@ class Sample:
 
 class Output:
     """Plays samples to audio output device or streams them to a file."""
-    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels, queuesize=100):
+    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels, queuesize=10):
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.nchannels = nchannels
@@ -755,24 +755,19 @@ class Output:
     def close(self):
         self.audio_api.close()
 
-    def play_sample(self, sample, async=False):
-        """Play a single sample."""
+    def play_sample(self, sample):
+        """Play a single sample (asynchronously)."""
         assert sample.samplewidth == self.samplewidth
         assert sample.samplerate == self.samplerate
         assert sample.nchannels == self.nchannels
-        if async:
-            self.audio_api.play_queue(sample)
-        else:
-            self.audio_api.play_immediately(sample)
+        self.audio_api.play(sample)
 
-    def play_samples(self, samples, async=False):
-        """Plays all the given samples immediately after each other, with no pauses."""
+    def play_samples(self, samples):
+        """Plays all the given samples immediately after each other, with no pauses.
+        Normalizes all the sample's volume to a common value."""
         if self.audio_api.supports_streaming:
             for s in self.normalized_samples(samples, 26000):
-                if async:
-                    self.audio_api.play_queue(s)
-                else:
-                    self.audio_api.play_immediately(s)
+                self.audio_api.play(s)
         else:
             raise RuntimeError("You need an audio api that supports streaming, to play many samples in sequence.")
 

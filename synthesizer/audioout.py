@@ -2,7 +2,7 @@
 Various audio output options. Here the specific audio library code is located.
 Supported audio output libraries:
 - pyaudio
-- sounddevice (both thread and nonblocking callback stream variants)
+- sounddevice (both thread+blocking stream, and nonblocking callback stream variants)
 - winsound
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
@@ -10,7 +10,6 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import threading
 import queue
-import time
 import os
 import tempfile
 
@@ -82,10 +81,7 @@ class AudioApi:
     def _recreate_outputter(self):
         pass
 
-    def play_queue(self, sample):
-        raise NotImplementedError
-
-    def play_immediately(self, sample):
+    def play(self, sample):
         raise NotImplementedError
 
     def wipe_queue(self):
@@ -105,15 +101,15 @@ class PyAudio(AudioApi):
 
     def __del__(self):
         if self.samp_queue:
-            self.play_queue(None)
+            self.play(None)
 
     def close(self):
         if self.samp_queue:
-            self.play_queue(None)
+            self.play(None)
 
     def _recreate_outputter(self):
         if self.samp_queue:
-            self.play_queue(None)
+            self.play(None)
         self.samp_queue = queue.Queue(maxsize=self.queue_size)
         stream_ready = threading.Event()
 
@@ -160,10 +156,7 @@ class PyAudio(AudioApi):
     def query_api_version(self):
         return pyaudio.get_portaudio_version_text()
 
-    def play_immediately(self, sample):
-        sample.write_frames(self.stream)
-
-    def play_queue(self, sample):
+    def play(self, sample):
         self.samp_queue.put(sample)
 
     def wipe_queue(self):
@@ -189,7 +182,7 @@ class SounddeviceThread(AudioApi):
 
     def close(self):
         if self.samp_queue:
-            self.play_queue(None)
+            self.play(None)
         if self.output_thread:
             self.output_thread.join()
         sounddevice.stop()
@@ -206,10 +199,7 @@ class SounddeviceThread(AudioApi):
     def query_api_version(self):
         return sounddevice.get_portaudio_version()[1]
 
-    def play_immediately(self, sample):
-        sample.write_frames(self.stream)
-
-    def play_queue(self, sample):
+    def play(self, sample):
         self.samp_queue.put(sample)
 
     def wipe_queue(self):
@@ -221,7 +211,7 @@ class SounddeviceThread(AudioApi):
 
     def _recreate_outputter(self):
         if self.samp_queue:
-            self.play_queue(None)
+            self.play(None)
         self.samp_queue = queue.Queue(maxsize=self.queue_size)
         stream_ready = threading.Event()
 
@@ -337,11 +327,7 @@ class Sounddevice(AudioApi):
     def query_api_version(self):
         return sounddevice.get_portaudio_version()[1]
 
-    def play_immediately(self, sample):
-        self.play_queue(sample)
-        time.sleep(sample.duration-0.0005)
-
-    def play_queue(self, sample):
+    def play(self, sample):
         class SampleBufferGrabber:
             def __init__(self):
                 self.buffer = None
@@ -415,18 +401,19 @@ class Winsound(AudioApi):
                 os.unlink(f.name)
             self.temporary_files = []
 
-    def play_queue(self, sample):
+    def play(self, sample):
         # actually doesn't _queue_ the sample, it does play it async.
         # but as soon as you play another sample, the currently playing sample will stop
         # and is immediately replaced by the next sample...
+        # XXX thread that clears up the tempfile afterwards see below
         with tempfile.NamedTemporaryFile(delete=False) as sample_file:
             sample.write_wav(sample_file)
         self.temporary_files.append(sample_file)
         winsound.PlaySound(sample_file.name, winsound.SND_FILENAME|winsound.SND_ASYNC)
 
-    def play_immediately(self, sample):
-        with tempfile.NamedTemporaryFile(delete=False) as sample_file:
-            sample.write_wav(sample_file)
-            sample_file.flush()
-            winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)
-        os.unlink(sample_file.name)
+    # def play_immediately(self, sample):
+    #     with tempfile.NamedTemporaryFile(delete=False) as sample_file:
+    #         sample.write_wav(sample_file)
+    #         sample_file.flush()
+    #         winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)
+    #     os.unlink(sample_file.name)

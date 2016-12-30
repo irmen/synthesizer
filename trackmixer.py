@@ -26,15 +26,17 @@ def main(track_file, outputfile=None, interactive=False):
             if out.supports_streaming:
                 # mix and stream output in real time
                 print("Mixing and streaming to speakers...")
-                out.play_samples(song.mix_generator(), False)
+                out.play_samples(song.mix_generator())
+                # @todo wait till output queue is empty
                 print("\r                          ")
             else:
                 # output can't stream, fallback on mixing everything to a wav
-                print("(Sorry, streaming audio is not possible, perhaps because you don't have pyaudio installed?)")
+                print("(Sorry, streaming audio is not possible, perhaps because you don't have sounddevice or pyaudio installed?)")
                 song.mix(outputfile)
                 mix = Sample(wave_file=outputfile)
                 print("Playing sound...")
                 out.play_sample(mix)
+                # @todo wait till output queue is empty
 
 
 def usage():

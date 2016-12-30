@@ -14,7 +14,6 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import os
 import sys
 import wave
-import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthesizer.sample import Sample, Output, LevelMeter
@@ -29,16 +28,15 @@ def play_console(filename_or_stream):
         bar_width = 60
         update_rate = 20   # lower this if you hear the sound crackle!
         levelmeter = LevelMeter(rms_mode=False, lowest=-50.0)
-        with Output(samplerate, samplewidth, nchannels, int(update_rate/4)) as out:
+        with Output(samplerate, samplewidth, nchannels) as out:
             print("Audio API used:", out.audio_api)
             while True:
                 frames = wav.readframes(samplerate//update_rate)
                 if not frames:
                     break
                 sample = Sample.from_raw_frames(frames, wav.getsampwidth(), wav.getframerate(), wav.getnchannels())
-                out.play_sample(sample, async=False)
-                levelmeter.update(sample)
-                # time.sleep(sample.duration*0.4)   # update the peak meter more or less halfway during the sample (only useful when playing with async)
+                out.play_sample(sample)
+                levelmeter.update(sample)   # @todo update from actual current sample instead
                 levelmeter.print(bar_width)
     print("\ndone")
     input("Enter to exit:")
@@ -85,7 +83,7 @@ class LevelGUI(tk.Frame):
         self.samplerate = self.wave.getframerate()
         self.nchannels = self.wave.getnchannels()
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.lowest_level)
-        self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels, int(self.update_rate/4))
+        self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels)
         print("Audio API used:", self.audio_out.audio_api)
         filename = filename_or_stream if isinstance(filename_or_stream, str) else "<stream>"
         info = "Source:\n{}\n\nRate: {:g} Khz\nBits: {}\nChannels: {}".format(filename, self.samplerate/1000, 8*self.samplewidth, self.nchannels)
@@ -99,9 +97,8 @@ class LevelGUI(tk.Frame):
             print("done!")
             return
         sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
-        self.audio_out.play_sample(sample, async=True)
-        time.sleep(sample.duration*0.4)   # update the peak meter more or less halfway during the sample
-        left, peak_l, right, peak_r = self.levelmeter.update(sample)
+        self.audio_out.play_sample(sample)
+        left, peak_l, right, peak_r = self.levelmeter.update(sample)      # @todo update from actual current sample instead
         self.pbvar_left.set(left-self.lowest_level)
         self.pbvar_right.set(right-self.lowest_level)
         if left > -3:

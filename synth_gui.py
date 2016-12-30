@@ -9,7 +9,6 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
 import time
-import platform
 import collections
 import tkinter as tk
 from tkinter.filedialog import askopenfile, asksaveasfile
@@ -651,7 +650,7 @@ class SynthGUI(tk.Frame):
         o = self.apply_filters(o)
         sample = self.generate_sample(iter(o), 1)
         with Output(self.synth.samplerate, self.synth.samplewidth, duration) as out:
-            out.play_sample(sample, async=True)
+            out.play_sample(sample)
 
     def do_plot(self, osc):
         o = self.create_osc(osc, all_oscillators=self.oscillators)
@@ -690,7 +689,7 @@ class SynthGUI(tk.Frame):
                 if sample.samplewidth != self.synth.samplewidth:
                     print("16 bit overflow!")  # XXX
                     sample.make_16bit()
-                self.output.play_sample(sample, async=True)
+                self.output.play_sample(sample)
             return
         if first:
             sample = self.generate_sample(oscillator, 0.1)
@@ -699,13 +698,13 @@ class SynthGUI(tk.Frame):
                 if sample.samplewidth != self.synth.samplewidth:
                     print("16 bit overflow!")  # XXX
                     sample.make_16bit()
-                self.output.play_sample(sample, async=True)
+                self.output.play_sample(sample)
         sample = self.generate_sample(oscillator, 0.1)
         if sample:
             if sample.samplewidth != self.synth.samplewidth:
                 print("16 bit overflow!")  # XXX
                 sample.make_16bit()
-            self.output.play_sample(sample, async=True)
+            self.output.play_sample(sample)
             self.after_idle(lambda: self.continue_play_note(oscillator, False))
 
     def render_and_play_note(self, oscillator, max_duration=4):
@@ -721,7 +720,7 @@ class SynthGUI(tk.Frame):
             if sample.samplewidth != self.synth.samplewidth:
                 print("16 bit overflow!")  # XXX
                 sample.make_16bit()
-            self.output.play_sample(sample, async=True)
+            self.output.play_sample(sample)
 
     def stop_playing_note(self):
         self.playing_note = False

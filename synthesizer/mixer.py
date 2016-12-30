@@ -332,7 +332,7 @@ class Repl(cmd.Cmd):
         try:
             m = Mixer(patterns, self.song.bpm, self.song.ticks, self.song.instruments)
             result = m.mix(verbose=len(patterns) > 1).make_16bit()
-            self.out.play_sample(result, True)
+            self.out.play_sample(result)
         except ValueError as x:
             print("ERROR:", x)
 
@@ -354,13 +354,14 @@ class Repl(cmd.Cmd):
             self.play_single_bar(sample, pattern)
         else:
             sample = sample.copy().make_16bit()
-            self.out.play_sample(sample, False)
+            self.out.play_sample(sample)
+            # @todo wait till output queue is empty
 
     def play_single_bar(self, sample, pattern):
         try:
             m = Mixer([{"sample": pattern}], self.song.bpm, self.song.ticks, {"sample": sample})
             result = m.mix(verbose=False).make_16bit()
-            self.out.play_sample(result, True)
+            self.out.play_sample(result)
         except ValueError as x:
             print("ERROR:", x)
 
@@ -394,8 +395,9 @@ class Repl(cmd.Cmd):
             return
         print("Mixing and streaming to speakers...")
         try:
-            self.out.play_samples(self.song.mix_generator(), async=False)
+            self.out.play_samples(self.song.mix_generator())
             print("\r                          ")
+            # @todo wait till output queue is empty
         except KeyboardInterrupt:
             print("Stopped.")
 
