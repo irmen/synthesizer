@@ -127,7 +127,7 @@ class AudiofileToWavStream(io.RawIOBase):
             log.debug("direct stream input from %s", self.filename)
             self.stream = open(self.filename, "rb")
         else:
-            command = [self.ffmpeg_executable, "-v", "error", "-hide_banner", "-loglevel", "error"]
+            command = [self.ffmpeg_executable, "-v", "fatal", "-hide_banner", "-nostdin"]
             if self._startfrom > 0:
                 command.extend(["-ss", str(self._startfrom)])    # seek start time in seconds
             command.extend(["-i", self.filename])
