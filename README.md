@@ -1,3 +1,5 @@
+[![saythanks](https://img.shields.io/badge/say-thanks-ff69b4.svg)](https://saythanks.io/to/irmen)
+
 # synthesizer.mixer and synthesizer.sample
 
 Sample mixer and sequencer, think a simple [Roland TR-909](https://en.wikipedia.org/wiki/Roland_TR-909).
