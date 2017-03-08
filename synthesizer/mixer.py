@@ -11,7 +11,7 @@ import os
 import cmd
 from configparser import ConfigParser
 from .sample import Sample
-from .audioout import Output
+from .playback import Output
 
 __all__ = ["Mixer", "Song", "Repl"]
 

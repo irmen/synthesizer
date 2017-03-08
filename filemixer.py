@@ -2,7 +2,7 @@ import os
 import sys
 from synthesizer.streaming import AudiofileToWavStream, StreamMixer
 from synthesizer.sample import LevelMeter
-from synthesizer.audioout import Output
+from synthesizer.playback import Output
 
 
 def main(args):
