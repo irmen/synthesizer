@@ -16,8 +16,9 @@ import sys
 import wave
 import tkinter as tk
 import tkinter.ttk as ttk
-from synthesizer.sample import Sample, Output, LevelMeter
+from synthesizer.sample import Sample, LevelMeter
 from synthesizer.streaming import AudiofileToWavStream
+from synthesizer.audioout import Output
 
 
 def play_console(filename_or_stream):

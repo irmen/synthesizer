@@ -10,7 +10,8 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import sys
 import os
 from synthesizer.mixer import Song, Repl
-from synthesizer.sample import Sample, Output
+from synthesizer.sample import Sample
+from synthesizer.audioout import Output
 
 
 def main(track_file, outputfile=None, interactive=False):

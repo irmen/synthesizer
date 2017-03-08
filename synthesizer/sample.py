@@ -1,6 +1,6 @@
 """
-Sample and Sample-output related code. Programmed to an abstract audio output Api
-so there's no dependency on any particular audio library here.
+Sample and Sample-output related code.
+No actual audio library dependent playback code is present in this module.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
@@ -15,10 +15,9 @@ try:
     import numpy
 except ImportError:
     numpy = None
-from .audioout import best_api
 
 
-__all__ = ["Sample", "Output", "LevelMeter"]
+__all__ = ["Sample", "LevelMeter"]
 
 
 samplewidths_to_arraycode = {
@@ -726,84 +725,6 @@ class Sample:
         if required_length > len(self.__frames):
             # we need to extend the current sample buffer to make room for the mixed sample at the end
             self.__frames += b"\0" * (required_length - len(self.__frames))
-
-
-class Output:
-    """Plays samples to audio output device or streams them to a file."""
-    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels, queuesize=10):
-        self.samplerate = samplerate
-        self.samplewidth = samplewidth
-        self.nchannels = nchannels
-        self.audio_api = best_api()
-        self.audio_api.reset_params(samplerate, samplewidth, nchannels, queuesize)
-        self.supports_streaming = self.audio_api.supports_streaming
-
-    def __repr__(self):
-        return "<Output at 0x{0:x}, {1:d} channels, {2:d} bits, rate {3:d}>"\
-            .format(id(self), self.nchannels, 8*self.samplewidth, self.samplerate)
-
-    @classmethod
-    def for_sample(cls, sample):
-        return cls(sample.samplerate, sample.samplewidth, sample.nchannels)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, xtype, value, traceback):
-        self.close()
-
-    def close(self):
-        self.audio_api.close()
-
-    def play_sample(self, sample):
-        """Play a single sample (asynchronously)."""
-        assert sample.samplewidth == self.samplewidth
-        assert sample.samplerate == self.samplerate
-        assert sample.nchannels == self.nchannels
-        self.audio_api.play(sample)
-
-    def play_samples(self, samples):
-        """Plays all the given samples immediately after each other, with no pauses.
-        Normalizes all the sample's volume to a common value."""
-        if self.audio_api.supports_streaming:
-            for s in self.normalized_samples(samples, 26000):
-                self.audio_api.play(s)
-        else:
-            raise RuntimeError("You need an audio api that supports streaming, to play many samples in sequence.")
-
-    def wait_all_played(self):
-        self.audio_api.wait_all_played()
-
-    def normalized_samples(self, samples, global_amplification=26000):
-        """Generator that produces samples normalized to 16 bit using a single amplification value for all."""
-        for sample in samples:
-            if sample.samplewidth != 2:
-                # We can't use automatic global max amplitude because we're streaming
-                # the samples individually. So use a fixed amplification value instead
-                # that will be used to amplify all samples in stream by the same amount.
-                sample = sample.amplify(global_amplification).make_16bit(False)
-            if sample.nchannels == 1:
-                sample.stereo()
-            assert sample.nchannels == 2
-            assert sample.samplerate == 44100
-            assert sample.samplewidth == 2
-            yield sample
-
-    def stream_to_file(self, filename, samples):
-        """Saves the samples after each other into one single output wav file."""
-        samples = self.normalized_samples(samples, 26000)
-        sample = next(samples)
-        with Sample.wave_write_begin(filename, sample) as out:
-            for sample in samples:
-                Sample.wave_write_append(out, sample)
-            Sample.wave_write_end(out)
-
-    def wipe_queue(self):
-        """Remove all pending samples to be played from the queue"""
-        self.audio_api.wipe_queue()
-
-    def register_notify_played(self, callback):
-        self.audio_api.register_notify_played(callback)
 
 
 # noinspection PyAttributeOutsideInit

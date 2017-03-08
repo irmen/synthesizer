@@ -1,6 +1,7 @@
 import time
 from collections import OrderedDict
-from synthesizer.sample import Output, Sample
+from synthesizer.sample import Sample
+from synthesizer.audioout import Output
 from synthesizer.synth import WaveSynth, key_freq, octave_notes, major_chord_keys, note_freq, key_num
 from synthesizer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, SawtoothH, WhiteNoise, Linear, Harmonics
 from synthesizer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle

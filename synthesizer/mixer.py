@@ -10,7 +10,8 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import os
 import cmd
 from configparser import ConfigParser
-from .sample import Sample, Output
+from .sample import Sample
+from .audioout import Output
 
 __all__ = ["Mixer", "Song", "Repl"]
 
