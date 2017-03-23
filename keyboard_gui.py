@@ -548,6 +548,10 @@ class SynthGUI(tk.Frame):
             self.pressed(event, note, octave, True)
             self.pressed_keyboard_keys.remove(key)
         self.master.bind(key, kbpress)
+        if key=='[':
+            key = "bracketleft"
+        if key==']':
+            key = "bracketright"
         self.master.bind("<KeyRelease-%s>" % key, kbrelease)
 
     def create_synth(self):
