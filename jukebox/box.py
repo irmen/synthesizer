@@ -20,7 +20,8 @@ import tkinter.messagebox
 import tkinter.filedialog
 from .backend import BACKEND_PORT
 from synthesizer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
-from synthesizer.sample import Sample, Output, LevelMeter
+from synthesizer.sample import Sample, LevelMeter
+from synthesizer.playback import Output
 import appdirs
 import Pyro4
 import Pyro4.errors

@@ -1,0 +1,8 @@
+tinytag
+appdirs
+tqdm
+Pyro4
+sounddevice
+pyaudio
+matplotlib
+numpy
