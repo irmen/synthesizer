@@ -428,7 +428,7 @@ def osc_bench():
     print("{:.3f} / {:.3f}".format(duration1, duration2))
     print("     Noise:   ", end="")
     start = time.time()
-    get_values(WhiteNoise())
+    get_values(WhiteNoise(5000))
     duration1 = time.time()-start
     print("        {:.3f}".format(duration1))
     print("    Linear:   ", end="")

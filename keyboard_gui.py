@@ -203,7 +203,15 @@ class OscillatorGUI(tk.LabelFrame):
             self.harmonics_label.grid_remove()
             self.harmonics_text.grid_remove()
 
-        if wf in ("noise", "linear"):
+        if wf == "noise":
+            # remove some of the input fields
+            self.phase_label.grid_remove()
+            self.phase_slider.grid_remove()
+            if hasattr(self, "fm_label"):
+                self.fm_label.grid_remove()
+                self.fm_select.grid_remove()
+
+        if wf == "linear":
             # remove most of the input fields
             self.freq_label.grid_remove()
             self.freq_entry.grid_remove()
@@ -213,23 +221,22 @@ class OscillatorGUI(tk.LabelFrame):
             self.ratio_entry.grid_remove()
             self.phase_label.grid_remove()
             self.phase_slider.grid_remove()
+            self.amp_label.grid_remove()
+            self.amp_slider.grid_remove()
+            self.bias_label.grid_remove()
+            self.bias_slider.grid_remove()
             if hasattr(self, "fm_label"):
                 self.fm_label.grid_remove()
                 self.fm_select.grid_remove()
-            if wf == "linear":
-                # remove more stuff and show the linear fields
-                self.amp_label.grid_remove()
-                self.amp_slider.grid_remove()
-                self.bias_label.grid_remove()
-                self.bias_slider.grid_remove()
-                self.lin_start_label.grid()
-                self.lin_start_entry.grid()
-                self.lin_increment_label.grid()
-                self.lin_increment_entry.grid()
-                self.lin_min_label.grid()
-                self.lin_min_entry.grid()
-                self.lin_max_label.grid()
-                self.lin_max_entry.grid()
+            # show the linear fields
+            self.lin_start_label.grid()
+            self.lin_start_entry.grid()
+            self.lin_increment_label.grid()
+            self.lin_increment_entry.grid()
+            self.lin_min_label.grid()
+            self.lin_min_entry.grid()
+            self.lin_max_label.grid()
+            self.lin_max_entry.grid()
 
         if wf == "pulse":
             self.pw_label.grid()
@@ -592,7 +599,8 @@ class SynthGUI(tk.Frame):
             amp = from_gui.input_amp.get()
             bias = from_gui.input_bias.get()
             if waveform == "noise":
-                return WhiteNoise(amplitude=amp, bias=bias, samplerate=self.synth.samplerate)
+                freq = from_gui.input_freq.get()
+                return WhiteNoise(freq, amplitude=amp, bias=bias, samplerate=self.synth.samplerate)
             elif waveform == "linear":
                 startlevel = from_gui.input_lin_start.get()
                 increment = from_gui.input_lin_increment.get()

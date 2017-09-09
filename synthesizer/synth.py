@@ -295,9 +295,9 @@ class WaveSynth:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return Harmonics(frequency, harmonics, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
 
-    def __white_noise(self, amplitude, bias):
-        scale = self.__check_and_get_scale(1, amplitude, bias)
-        return WhiteNoise(amplitude*scale, bias*scale, samplerate=self.samplerate)
+    def __white_noise(self, frequency, amplitude, bias):
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
+        return WhiteNoise(frequency, amplitude*scale, bias*scale, samplerate=self.samplerate)
 
     def __linear(self, duration, start_amp, finish_amp):
         num_samples = int(duration*self.samplerate)
@@ -712,14 +712,18 @@ class SawtoothH(Harmonics):
 
 class WhiteNoise(Oscillator):
     """Oscillator that produces white noise (randomness) waveform."""
-    def __init__(self, amplitude=1.0, bias=0.0, samplerate=Sample.norm_samplerate):
+    def __init__(self, frequency, amplitude=1.0, bias=0.0, samplerate=Sample.norm_samplerate):
         super().__init__(samplerate=samplerate)
         self.amplitude = amplitude
         self.bias = bias
+        self.frequency = frequency
+        self.frequency = frequency
 
     def generator(self):
+        cycles = int(self._samplerate / self.frequency)
         while True:
-            yield random.uniform(-self.amplitude, self.amplitude) + self.bias
+            value = random.uniform(-self.amplitude, self.amplitude) + self.bias
+            yield from [value] * cycles
 
 
 class Linear(Oscillator):
