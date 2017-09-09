@@ -15,7 +15,7 @@ from tkinter.filedialog import askopenfile, asksaveasfile
 from threading import Semaphore
 from configparser import ConfigParser
 from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
-from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpMudulationFilter, EnvelopeFilter
+from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
 from synthesizer.synth import major_chord_keys
 from synthesizer.sample import Sample
 from synthesizer.playback import Output
@@ -384,7 +384,7 @@ class TremoloFilterGUI(tk.LabelFrame):
             modulator = SawtoothH(freq, 9, amp, bias=bias, samplerate=samplerate)
         elif wave == "square":
             modulator = SquareH(freq, 9, amp, bias=bias, samplerate=samplerate)
-        return AmpMudulationFilter(source, iter(modulator))
+        return AmpModulationFilter(source, iter(modulator))
 
 
 class ArpeggioFilterGUI(tk.LabelFrame):

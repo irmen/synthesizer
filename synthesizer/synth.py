@@ -16,7 +16,7 @@ __all__ = ["key_num", "key_freq", "note_freq", "octave_notes", "note_alias", "ma
            "WaveSynth", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
            "Pulse", "Harmonics", "WhiteNoise", "Linear",
            "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare",
-           "EnvelopeFilter", "MixingFilter", "AmpMudulationFilter", "DelayFilter", "EchoFilter",
+           "EnvelopeFilter", "MixingFilter", "AmpModulationFilter", "DelayFilter", "EchoFilter",
            "ClipFilter", "AbsFilter", "NullFilter"]
 
 
@@ -408,7 +408,7 @@ class MixingFilter(Oscillator):
             yield sum([next(src) for src in sources])
 
 
-class AmpMudulationFilter(Oscillator):
+class AmpModulationFilter(Oscillator):
     """Modulate the amplitude of the wave of the oscillator by another oscillator (the modulator)."""
     def __init__(self, source, modulator):
         super().__init__(source)
@@ -469,7 +469,7 @@ class EchoFilter(Oscillator):
         echo_delay = self._delay
         for echo in echo_oscs[1:]:
             echo = DelayFilter(echo, echo_delay)
-            echo = AmpMudulationFilter(echo, itertools.repeat(amp))
+            echo = AmpModulationFilter(echo, itertools.repeat(amp))
             # @todo sometimes mixing the echos causes pops and clicks. Perhaps solvable by using a (very fast) fadein on the echo osc?
             echos.append(echo)
             echo_delay += self._delay
