@@ -384,7 +384,7 @@ class TremoloFilterGUI(tk.LabelFrame):
             modulator = SawtoothH(freq, 9, amp, bias=bias, samplerate=samplerate)
         elif wave == "square":
             modulator = SquareH(freq, 9, amp, bias=bias, samplerate=samplerate)
-        return AmpModulationFilter(source, iter(modulator))
+        return AmpModulationFilter(source, modulator)
 
 
 class ArpeggioFilterGUI(tk.LabelFrame):

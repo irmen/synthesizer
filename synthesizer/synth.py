@@ -415,8 +415,9 @@ class AmpModulationFilter(Oscillator):
         self.modulator = modulator
 
     def generator(self):
+        modulator = iter(self.modulator)
         for v in self._source:
-            yield v*next(self.modulator)
+            yield v*next(modulator)
 
 
 class DelayFilter(Oscillator):
