@@ -10,6 +10,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import time
 import collections
+import itertools
 import tkinter as tk
 from tkinter.filedialog import askopenfile, asksaveasfile
 from threading import Semaphore
@@ -673,19 +674,20 @@ class SynthGUI(tk.Frame):
         if osc.input_waveformtype.get() == "linear":
             self.statusbar["text"] = "cannot output linear osc to speakers"
             return
-        duration = 1
+        duration = 1.0
         osc.set_title_status("TO SPEAKER")
-        osc.after(duration*1000, lambda: osc.set_title_status(None))
+        self.update()
+        osc.after(int(duration*1000), lambda: osc.set_title_status(None))
         o = self.create_osc(osc, all_oscillators=self.oscillators, is_audio=True)
         o = self.apply_filters(o)
-        sample = self.generate_sample(iter(o), 1)
-        with Output(self.synth.samplerate, self.synth.samplewidth, duration) as out:
+        sample = self.generate_sample(iter(o), duration)
+        with Output(self.synth.samplerate, self.synth.samplewidth, nchannels=1) as out:
             out.play_sample(sample)
+            out.wait_all_played()
 
     def do_plot(self, osc):
         o = self.create_osc(osc, all_oscillators=self.oscillators)
-        o = iter(o)
-        frames = [next(o) for _ in range(self.synth.samplerate)]
+        frames = list(itertools.islice(o, self.synth.samplerate))
         if not plot:
             self.statusbar["text"] = "Cannot plot! To plot things, you need to have matplotlib installed!"
             return
@@ -697,10 +699,9 @@ class SynthGUI(tk.Frame):
         # see http://matplotlib.org/examples/user_interfaces/embedding_in_tk2.html
 
     def generate_sample(self, oscillator, duration, use_fade=False):
-        o = oscillator  # iter(oscillator)
         scale = 2**(8*self.synth.samplewidth-1)
         try:
-            frames = [int(next(o)*scale) for _ in range(int(self.synth.samplerate*duration))]
+            frames = [int(v*scale) for v in itertools.islice(oscillator, int(self.synth.samplerate*duration))]
         except StopIteration:
             return None
         else:

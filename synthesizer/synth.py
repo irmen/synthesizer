@@ -236,16 +236,7 @@ class WaveSynth:
         while True:
             yield int(next(wave))
 
-    def linear(self, duration, start_amp, finish_amp):
-        """A linear constant or sloped waveform."""
-        wave = self.__linear(duration, start_amp, finish_amp)
-        return self.__render_sample(duration, wave)
-
-    def linear_gen(self, duration, startamp, finishamp):
-        """Generator for linear constant or sloped waveform (it ends when it reaches the specified duration)"""
-        wave = self.__linear(duration, startamp, finishamp).generator()
-        for _ in range(int(duration*self.samplerate)):
-            yield int(next(wave))
+    # note: 'linear'  is not offered as a sampled waveform directly, because this LFO it makes little sense as a sample
 
     def __sine(self, frequency, amplitude, phase, bias, fm_lfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -299,11 +290,6 @@ class WaveSynth:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return WhiteNoise(frequency, amplitude*scale, bias*scale, samplerate=self.samplerate)
 
-    def __linear(self, duration, start_amp, finish_amp):
-        num_samples = int(duration*self.samplerate)
-        increment = (finish_amp - start_amp) / (num_samples - 1)
-        return Linear(start_amp, increment, samplerate=self.samplerate)
-
     def __check_and_get_scale(self, freq, amplitude, bias):
         assert freq <= self.samplerate/2    # don't exceed the Nyquist frequency
         assert 0 <= amplitude <= 1.0
@@ -312,8 +298,8 @@ class WaveSynth:
         return scale
 
     def __render_sample(self, duration, wave):
-        wave = iter(wave)
-        samples = Sample.get_array(self.samplewidth, [int(next(wave)) for _ in range(int(duration*self.samplerate))])
+        values = [int(v) for v in itertools.islice(wave, int(duration*self.samplerate))]
+        samples = Sample.get_array(self.samplewidth, values)
         return Sample.from_array(samples, self.samplerate, 1)
 
 
@@ -431,14 +417,12 @@ class DelayFilter(Oscillator):
         self._seconds = seconds
 
     def generator(self):
-        src = iter(self._source)
         if self._seconds < 0.0:
-            for _ in range(int(-self._samplerate*self._seconds)):
-                next(src)
+            amount = int(-self._samplerate*self._seconds)
+            next(itertools.islice(self._source, amount, amount), None)   # consume
         else:
-            for _ in range(int(self._samplerate*self._seconds)):
-                yield 0.0
-        yield from src
+            yield from itertools.repeat(0.0, int(self._samplerate*self._seconds))
+        yield from self._source
 
 
 class EchoFilter(Oscillator):
@@ -459,13 +443,11 @@ class EchoFilter(Oscillator):
         self.echo_duration = self._after + self._amount*self._delay
 
     def generator(self):
-        oscillator = iter(self._source)
         # first play the first part till the echos start
-        for _ in range(int(self._samplerate*self._after)):
-            yield next(oscillator)
+        yield from itertools.islice(self._source, int(self._samplerate*self._after))
         # now start mixing the echos
         amp = self._decay
-        echo_oscs = [Oscillator(src, samplerate=self._samplerate) for src in itertools.tee(oscillator, self._amount+1)]
+        echo_oscs = [Oscillator(src, samplerate=self._samplerate) for src in itertools.tee(self._source, self._amount+1)]
         echos = [echo_oscs[0]]
         echo_delay = self._delay
         for echo in echo_oscs[1:]:
@@ -863,46 +845,80 @@ class FastPulse(Oscillator):
                 t += increment
 
 
-if __name__ == "__main__":
+def check_waveforms():
     # check the wavesynth and generators
     ws = WaveSynth(samplerate=1000)
+    scale = 2 ** (ws.samplewidth * 8 - 1) - 1
     s = ws.sine(440, 1)
     sgen = ws.sine_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.square(440, 1)
     sgen = ws.square_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.square_h(440, 1)
     sgen = ws.square_h_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.triangle(440, 1)
     sgen = ws.triangle_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.sawtooth(440, 1)
     sgen = ws.sawtooth_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.sawtooth_h(440, 1)
     sgen = ws.sawtooth_h_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.pulse(440, 1)
     sgen = ws.pulse_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.harmonics(440, 1, [(n, 1/n) for n in range(1, 8)])
     sgen = ws.harmonics_gen(440, [(n, 1/n) for n in range(1, 8)])
-    s2 = [next(sgen) for _ in range(1000)]
-    assert list(s.get_frame_array()) == s2
-    s = ws.linear(1, 0.1, 0.9)
-    sgen = ws.linear_gen(1, 0.1, 0.9)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert list(s.get_frame_array()) == s2
     s = ws.white_noise(440, 1)
     sgen = ws.white_noise_gen(440)
-    s2 = [next(sgen) for _ in range(1000)]
+    s2 = list(itertools.islice(sgen, 0, 1000))
     assert len(s) == len(s2) == 1000
+
+
+def plot_waveforms():
+    import matplotlib.pyplot as plot
+    ws = WaveSynth(samplerate=100, samplewidth=2)
+    ws2 = WaveSynth(samplerate=1000, samplewidth=2)
+    ncols = 4
+    nrows = 4
+    freq = 2.0
+    dur = 1.0
+    harmonics = [(n, 1 / n) for n in range(3, 5 * 2, 2)]
+    waveforms = [
+        ('sine', ws.sine(freq, dur)),
+        ('square', ws.square(freq, dur)),
+        ('square_h', ws.square_h(freq, dur, num_harmonics=5)),
+        ('triangle', ws.triangle(freq, dur)),
+        ('sawtooth', ws.sawtooth(freq, dur)),
+        ('sawtooth_h', ws.sawtooth_h(freq, dur, num_harmonics=5)),
+        ('pulse', ws.pulse(freq, dur)),
+        ('harmonics', ws.harmonics(freq, dur, harmonics=harmonics)),
+        ('white_noise', ws2.white_noise(50.0, dur)),
+        # XXX ('linear', ws2.linear(20, 0, 1))
+    ]
+    plot.figure(1, figsize=(16,10))
+    plot.suptitle("waveforms (2 cycles)")
+    for i, (waveformname, sample) in enumerate(waveforms, start=1):
+        plot.subplot(nrows, ncols, i)
+        plot.title(waveformname)
+        plot.grid(True)
+        plot.plot(sample.get_frame_array())
+    plot.subplots_adjust(hspace=0.5, wspace=0.5, top=0.90, bottom=0.1, left=0.05, right=0.95)
+    plot.show()
+
+
+if __name__ == "__main__":
+    check_waveforms()
+    plot_waveforms()

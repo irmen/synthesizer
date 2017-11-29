@@ -1,4 +1,5 @@
 import time
+import itertools
 from collections import OrderedDict
 from synthesizer.sample import Sample
 from synthesizer.playback import Output
@@ -42,8 +43,9 @@ def demo_tones():
             sample = synth.harmonics(freq, 0.4, harmonics).fadein(0.02).fadeout(0.1)
             out.play_sample(sample)
         print("noise")
-        sample = synth.white_noise(duration=1.5).fadein(0.1).fadeout(0.1)
+        sample = synth.white_noise(frequency=440, duration=1.5).fadein(0.1).fadeout(0.1)
         out.play_sample(sample)
+        out.wait_all_played()
 
 
 def demo_song(profiling=False):
@@ -61,6 +63,7 @@ def demo_song(profiling=False):
     quarter_notes = {note: instrument(notes[note], tempo) for note in notes}
     half_notes = {note: instrument(notes[note], tempo*2) for note in notes}
     full_notes = {note: instrument(notes[note], tempo*4) for note in notes}
+    silence = Sample.from_array([0]*int(synth.samplerate*tempo*2), synth.samplerate, numchannels=1)
     if profiling:
         print(time.perf_counter()-perf_c)
     else:
@@ -70,7 +73,7 @@ def demo_song(profiling=False):
             for note in song.split():
                 if note == ";":
                     print()
-                    time.sleep(tempo*2)
+                    out.play_sample(silence)
                     continue
                 print(note, end="  ", flush=True)
                 if note.endswith(".."):
@@ -81,6 +84,7 @@ def demo_song(profiling=False):
                     sample = quarter_notes[note]
                 out.play_sample(sample)
             print()
+            out.wait_all_played()
 
 
 def demo_plot():
@@ -115,6 +119,7 @@ def modulate_amp():
     plot.show()
     with Output(nchannels=1) as out:
         out.play_sample(s1)
+        out.wait_all_played()
     s1 = synth.triangle(freq, duration=2)
     m = Sine(3, amplitude=0.4, bias=0.5)
     s1.modulate_amp(m)
@@ -123,6 +128,7 @@ def modulate_amp():
     plot.show()
     with Output(nchannels=1) as out:
         out.play_sample(s1)
+        out.wait_all_played()
 
 
 def envelope():
@@ -136,6 +142,7 @@ def envelope():
     plot.show()
     with Output(nchannels=1) as out:
         out.play_sample(s)
+        out.wait_all_played()
 
 
 def fm():
@@ -179,6 +186,7 @@ def fm():
         s_all.join(s1)
         out.play_sample(s1)
         # s_all.write_wav("fmtestall.wav")
+        out.wait_all_played()
 
 
 def pwm():
@@ -197,6 +205,7 @@ def pwm():
         s1 = synth.pulse(440/6, amplitude=0.5, duration=6, fm_lfo=None, pwm_lfo=lfo2)
         out.play_sample(s1)
         # s1.write_wav("pwmtest.wav")
+        out.wait_all_played()
 
 
 def oscillator():
@@ -204,15 +213,15 @@ def oscillator():
     l2 = SquareH(4, samplerate=1000)
     plot.subplot(2, 1, 1)
     plot.title("Square from harmonics")
-    l2 = iter(l2)
-    plot.plot([next(l2) for _ in range(1000)])
+    values = list(itertools.islice(l2, 1000))
+    plot.plot(values)
     harmonics = [(1, 1)]
     harmonics.extend([(n, 1/n) for n in range(2, 8*2, 2)])
     l3 = Harmonics(4, harmonics, samplerate=1000)
     plot.subplot(2, 1, 2)
     plot.title("Even harmonics")
-    l3 = iter(l3)
-    plot.plot([next(l3) for _ in range(1000)])
+    values = list(itertools.islice(l3, 1000))
+    plot.plot(values)
     plot.show()
 
 
@@ -228,7 +237,7 @@ def bias():
     waves.append(synth.sawtooth_h(2, 4, 7, 0.02, bias=0.6))
     waves.append(synth.square(2, 4, 0.02, bias=0.7))
     waves.append(synth.square_h(2, 4, 7, 0.02, bias=0.8))
-    waves.append(synth.white_noise(4, amplitude=0.02, bias=0.9))
+    waves.append(synth.white_noise(frequency=100, duration=4, amplitude=0.02, bias=0.9))
     for wave in waves:
         plot.plot(wave.get_frame_array())
     plot.title("All waveforms biased to levels above zero")
@@ -250,6 +259,7 @@ def a440():
     a440 = synth.sine(440, duration=3)
     with Output.for_sample(a440) as out:
         out.play_sample(a440)
+        out.wait_all_played()
 
 
 def echo_sample():
@@ -261,6 +271,7 @@ def echo_sample():
         out.play_sample(e)
         e = s.copy().echo(1, 30, 0.15, 0.5)    # simple "reverberation" (simulated using fast echos)
         out.play_sample(e)
+        out.wait_all_played()
 
 
 def echo_lfo():
@@ -276,6 +287,7 @@ def echo_lfo():
     samp = Sample.from_array(frames, synth.samplerate, 1)
     with Output.for_sample(samp) as out:
         out.play_sample(samp)
+        out.wait_all_played()
 
 
 def lfo_func():
@@ -284,8 +296,7 @@ def lfo_func():
     s = AbsFilter(s)
     s = ClipFilter(s, minimum=20, maximum=80)
     s = DelayFilter(s, 0.5)
-    s = iter(s)
-    s = [next(s) for _ in range(rate*2)]
+    s = list(itertools.islice(s, rate*2))
     import matplotlib.pyplot as plot
     a = plot.subplot(111)
     a.set_ylim([-50, 100])
@@ -319,6 +330,7 @@ def bells():
     bells.make_16bit()
     with Output.for_sample(bells) as out:
         out.play_sample(bells)
+        out.wait_all_played()
 
 
 def stereo_pan():
@@ -329,6 +341,7 @@ def stereo_pan():
     panning = wave.copy().pan(lfo=osc).fadeout(0.2)
     with Output.for_sample(panning) as out:
         out.play_sample(panning)
+        out.wait_all_played()
     # panning a generated mono source:
     fm = Sine(0.5, 0.1999, bias=0.2)
     wave = synth.triangle(220, 5, fm_lfo=fm).lock()
@@ -336,6 +349,7 @@ def stereo_pan():
     panning = wave.copy().pan(lfo=osc).fadeout(0.2)
     with Output.for_sample(panning) as out:
         out.play_sample(panning)
+        out.wait_all_played()
 
 
 def osc_bench():
@@ -343,8 +357,7 @@ def osc_bench():
     duration = 2.0
 
     def get_values(osc):
-        oscv = iter(osc)
-        values = [next(oscv) for _ in range(int(rate*duration))]
+        values = list(itertools.islice(osc, int(rate*duration)))
 
     fm = FastSine(220)
     print("GENERATING {:g} SECONDS SAMPLE DATA {:d} HZ USING LFO.".format(duration, rate))
@@ -453,6 +466,7 @@ def vibrato():
         for f in [220, 330, 440]:
             sample = make_sample(f)
             out.play_sample(sample)
+        out.wait_all_played()
 
 
 def harmonics():
@@ -485,6 +499,7 @@ def chords():
             samples = [synth.sine(freq, 1.5, amplitude=0.333) for freq in freqs]
             s = samples[0].mix(samples[1]).mix(samples[2]).fadein(0.1).fadeout(0.1)
             out.play_sample(s)
+        out.wait_all_played()
 
 
 if __name__ == "__main__":

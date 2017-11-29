@@ -1,4 +1,5 @@
 import time
+import itertools
 from synthesizer import synth
 
 samplerate = 44100
@@ -32,8 +33,7 @@ for osctype in oscillators:
         osc=osc.generator()
     print("testing {:20.20s}... ".format(osctype.__name__), end="")
     start = time.time()
-    for _ in range(num_samples):
-        next(osc)
+    dummy = list(itertools.islice(osc, num_samples))
     duration = time.time()-start
     sample_duration = num_samples/samplerate
     print("{:6.0f} K iterations/sec ({:.1f} x realtime @ {:d} hz)".format(num_samples/duration/1000, sample_duration/duration, samplerate))
