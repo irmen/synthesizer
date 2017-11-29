@@ -897,24 +897,26 @@ def plot_waveforms():
     dur = 1.0
     harmonics = [(n, 1 / n) for n in range(3, 5 * 2, 2)]
     waveforms = [
-        ('sine', ws.sine(freq, dur)),
-        ('square', ws.square(freq, dur)),
-        ('square_h', ws.square_h(freq, dur, num_harmonics=5)),
-        ('triangle', ws.triangle(freq, dur)),
-        ('sawtooth', ws.sawtooth(freq, dur)),
-        ('sawtooth_h', ws.sawtooth_h(freq, dur, num_harmonics=5)),
-        ('pulse', ws.pulse(freq, dur)),
-        ('harmonics', ws.harmonics(freq, dur, harmonics=harmonics)),
-        ('white_noise', ws2.white_noise(50.0, dur)),
-        # XXX ('linear', ws2.linear(20, 0, 1))
+        ('sine', ws.sine(freq, dur).get_frame_array()),
+        ('square', ws.square(freq, dur).get_frame_array()),
+        ('square_h', ws.square_h(freq, dur, num_harmonics=5).get_frame_array()),
+        ('triangle', ws.triangle(freq, dur).get_frame_array()),
+        ('sawtooth', ws.sawtooth(freq, dur).get_frame_array()),
+        ('sawtooth_h', ws.sawtooth_h(freq, dur, num_harmonics=5).get_frame_array()),
+        ('pulse', ws.pulse(freq, dur).get_frame_array()),
+        ('harmonics', ws.harmonics(freq, dur, harmonics=harmonics).get_frame_array()),
+        ('white_noise', ws2.white_noise(50.0, dur).get_frame_array()),
+        ('linear', list(itertools.islice(Linear(20, 1, max_value=100, samplerate=100), 100)))
     ]
     plot.figure(1, figsize=(16,10))
     plot.suptitle("waveforms (2 cycles)")
-    for i, (waveformname, sample) in enumerate(waveforms, start=1):
-        plot.subplot(nrows, ncols, i)
+    for i, (waveformname, values) in enumerate(waveforms, start=1):
+        ax = plot.subplot(nrows, ncols, i)
+        ax.set_yticklabels([])
+        ax.set_xticklabels([])
         plot.title(waveformname)
         plot.grid(True)
-        plot.plot(sample.get_frame_array())
+        plot.plot(values)
     plot.subplots_adjust(hspace=0.5, wspace=0.5, top=0.90, bottom=0.1, left=0.05, right=0.95)
     plot.show()
 
