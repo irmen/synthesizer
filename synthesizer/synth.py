@@ -763,10 +763,11 @@ class WhiteNoise(Oscillator):
         self.amplitude = amplitude
         self.bias = bias
         self.frequency = frequency
-        self.frequency = frequency
 
     def generator(self):
         cycles = int(self._samplerate / self.frequency)
+        if cycles < 1:
+            raise ValueError("whitenoise frequency cannot be bigger than the sample rate")
         # optimizations:
         amplitude = self.amplitude
         bias = self.bias
@@ -1060,6 +1061,17 @@ class FastPointy(Oscillator):
 
 
 def check_waveforms():
+    # white noise frequency issue test
+    wn = WhiteNoise(100, samplerate=1000)
+    list(itertools.islice(wn, 2000))
+    wn = WhiteNoise(1000, samplerate=1000)
+    list(itertools.islice(wn, 2000))
+    wn = WhiteNoise(1001, samplerate=1000)
+    try:
+        list(itertools.islice(wn, 2000))
+        raise SystemExit("invalid whitenoise freq should raise exception")
+    except ValueError:
+        pass
     # check the wavesynth and generators
     ws = WaveSynth(samplerate=1000)
     scale = 2 ** (ws.samplewidth * 8 - 1) - 1
