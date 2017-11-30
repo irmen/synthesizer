@@ -12,6 +12,7 @@ oscillators = [synth.Linear,        # baseline
                synth.FastSawtooth,
                synth.FastSquare,
                synth.FastTriangle,
+               synth.FastSemicircle,
 
                synth.Sine,
                synth.Triangle,
@@ -22,7 +23,8 @@ oscillators = [synth.Linear,        # baseline
                synth.Pulse,
                # synth.Harmonics,   # used by sawtoothH and squareH already
                synth.WhiteNoise,
-               synth.Linear]
+               synth.Linear,
+               synth.Semicircle]
 
 
 for osctype in oscillators:

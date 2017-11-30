@@ -502,7 +502,20 @@ def chords():
         out.wait_all_played()
 
 
+def new_waveforms():
+    synth = WaveSynth(samplerate=44100, samplewidth=4)
+    fm = FastSine(120/2, 0.45, bias=0.5, samplerate=synth.samplerate)
+    a440a = synth.semicircle(120, duration=3, fm_lfo=fm)        # XXX doesn't sound nice :(  tweak? not half? sinewave instead of semicircle?
+    a440b = synth.sine(120, duration=3, fm_lfo=fm)
+    with Output.for_sample(a440a) as out:
+        out.play_sample(a440a)
+        out.play_sample(a440b)
+        out.wait_all_played()
+    raise SystemExit("derp!")
+
+
 if __name__ == "__main__":
+    new_waveforms()
     harmonics()
     osc_bench()
     lfo_func()

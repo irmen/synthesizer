@@ -1,6 +1,6 @@
 """
-Sample waveform synthesizer. Inspired by FM synthesizers such as the Yamaha DX-7.
-Creates some simple waveform samples with adjustable parameters.
+Sample waveform synthesizer. Inspired by FM synthesizers such as the Yamaha DX-7 and TX81Z.
+Creates various waveform samples with adjustable parameters.
 
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
@@ -14,8 +14,8 @@ from .sample import Sample
 
 __all__ = ["key_num", "key_freq", "note_freq", "octave_notes", "note_alias", "major_chords", "major_chord_keys",
            "WaveSynth", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
-           "Pulse", "Harmonics", "WhiteNoise", "Linear",
-           "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare",
+           "Pulse", "Harmonics", "WhiteNoise", "Linear", "Semicircle",
+           "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare", "FastSemicircle",
            "EnvelopeFilter", "MixingFilter", "AmpModulationFilter", "DelayFilter", "EchoFilter",
            "ClipFilter", "AbsFilter", "NullFilter"]
 
@@ -733,6 +733,32 @@ class Linear(Oscillator):
                 self.value = min(self.max_value, max(self.min_value, self.value+self.increment))
 
 
+class Semicircle(Oscillator):
+    """Semicircle half wave ('W3') oscillator."""
+    def __init__(self, frequency, amplitude=1.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
+        super().__init__(samplerate=samplerate)
+        self.frequency = frequency
+        self.amplitude = amplitude
+        self.bias = bias
+        self.fm = iter(fm_lfo or itertools.repeat(0.0))
+
+    def generator(self):
+        phase_correction = 0.0
+        freq_previous = self.frequency
+        increment = 4.0/self._samplerate
+        t = -1.0
+        sqrt = math.sqrt   # optimization
+        while True:
+            freq = self.frequency*(1.0+next(self.fm))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            ft = t*freq + phase_correction
+            half = (ft/2.0) % 2 >= 1
+            ft = (ft % 2.0) - 1.0
+            yield sqrt(1.0 - ft*ft) * self.amplitude + self.bias if half else 0.0
+            t += increment
+
+
 class FastSine(Oscillator):
     """Fast sine wave oscillator. Some parameters cannot be changed."""
     def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=Sample.norm_samplerate):
@@ -863,12 +889,16 @@ class FastSemicircle(Oscillator):
 
     def generator(self):
         rate = self._samplerate/self._frequency
+        increment = 4.0/rate
+        t = -1.0
         sqrt = math.sqrt   # optimization
-        t = 0.0
+        half = True
         while True:
-            yield sqrt(1.0 - t*t) * self.amplitude + self.bias
-            if t > 1:
-                t = 0
+            yield sqrt(1.0 - t*t) * self.amplitude + self.bias if half else 0.0
+            t += increment
+            if t >= 1.0:
+                t -= 2.0
+                half = not half
 
 
 def check_waveforms():
@@ -919,7 +949,7 @@ def check_waveforms():
 
 def plot_waveforms():
     import matplotlib.pyplot as plot
-    ws = WaveSynth(samplerate=100, samplewidth=2)
+    ws = WaveSynth(samplerate=80, samplewidth=2)
     ws2 = WaveSynth(samplerate=1000, samplewidth=2)
     ncols = 4
     nrows = 4
@@ -937,7 +967,7 @@ def plot_waveforms():
         ('harmonics', ws.harmonics(freq, dur, harmonics=harmonics).get_frame_array()),
         ('white_noise', ws2.white_noise(50.0, dur).get_frame_array()),
         ('linear', list(itertools.islice(Linear(20, 1, max_value=100, samplerate=100), 100))),
-        ('W3-semicircle', ws.semicircle(freq, dur).get_frame_array())
+        ('W3-semicircle', ws.semicircle(freq, dur, fm_lfo=None).get_frame_array())
     ]
     plot.figure(1, figsize=(16,10))
     plot.suptitle("waveforms (2 cycles)")
