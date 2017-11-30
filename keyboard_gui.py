@@ -15,7 +15,7 @@ import tkinter as tk
 from tkinter.filedialog import askopenfile, asksaveasfile
 from threading import Semaphore
 from configparser import ConfigParser
-from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear
+from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear, Semicircle, Pointy
 from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
 from synthesizer.synth import major_chord_keys
 from synthesizer.sample import Sample
@@ -57,7 +57,7 @@ class OscillatorGUI(tk.LabelFrame):
         self.input_lin_max = tk.DoubleVar()
         self.input_lin_max.set(1.0)
         row = 0
-        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "noise", "linear", "harmonics"]
+        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "semicircle", "pointy", "noise", "linear", "harmonics"]
         tk.Label(f, text="waveform").grid(row=row, column=0, sticky=tk.E)
         waveform = tk.OptionMenu(f, self.input_waveformtype, *waveforms, command=self.waveform_selected)
         waveform["width"] = 10
@@ -633,6 +633,9 @@ class SynthGUI(tk.Frame):
                 elif waveform == "harmonics":
                     harmonics = self.parse_harmonics(from_gui.harmonics_text.get(1.0, tk.END))
                     return create_chord_osc(Harmonics, frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+                elif waveform == "semicircle":
+                    # @todo add phase
+                    return create_chord_osc(Semicircle, frequency=freq, amplitude=amp, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
                 else:
                     o = {
                         "sine": Sine,
@@ -641,6 +644,8 @@ class SynthGUI(tk.Frame):
                         "sawtooth_h": SawtoothH,
                         "square": Square,
                         "square_h": SquareH,
+                        "semicircle": Semicircle,
+                        "pointy": Pointy,
                         }[waveform]
                     return create_chord_osc(o, frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
 

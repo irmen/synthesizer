@@ -14,8 +14,8 @@ from .sample import Sample
 
 __all__ = ["key_num", "key_freq", "note_freq", "octave_notes", "note_alias", "major_chords", "major_chord_keys",
            "WaveSynth", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
-           "Pulse", "Harmonics", "WhiteNoise", "Linear", "Semicircle",
-           "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare", "FastSemicircle",
+           "Pulse", "Harmonics", "WhiteNoise", "Linear", "Semicircle", "Pointy",
+           "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare", "FastSemicircle", "FastPointy",
            "EnvelopeFilter", "MixingFilter", "AmpModulationFilter", "DelayFilter", "EchoFilter",
            "ClipFilter", "AbsFilter", "NullFilter"]
 
@@ -801,6 +801,7 @@ class Linear(Oscillator):
 class Semicircle(Oscillator):
     """Semicircle half wave ('W3') oscillator."""
     def __init__(self, frequency, amplitude=1.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
+        # @todo add phase
         super().__init__(samplerate=samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
