@@ -323,7 +323,7 @@ class WaveSynth:
         return scale
 
     def __render_sample(self, duration, wave):
-        values = [int(v) for v in itertools.islice(wave, int(duration*self.samplerate))]
+        values = map(int, itertools.islice(wave, int(duration*self.samplerate)))
         samples = Sample.get_array(self.samplewidth, values)
         return Sample.from_array(samples, self.samplerate, 1)
 
@@ -495,8 +495,9 @@ class ClipFilter(Oscillator):
         self.max = maximum
 
     def generator(self):
+        vmax, vmin = self.max, self.min     # optimization
         for v in self._source:
-            yield max(min(v, self.max), self.min)
+            yield max(min(v, vmax), vmin)
 
 
 class AbsFilter(Oscillator):
@@ -538,12 +539,18 @@ class Sine(Oscillator):
         freq_previous = self.frequency
         increment = 2.0*math.pi/self._samplerate
         t = 0.0
-        sin = math.sin  # optimization
+        # optimizations:
+        sin = math.sin
+        frequency = self.frequency
+        fm = self.fm
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            freq = self.frequency*(1.0+next(self.fm))
+            freq = frequency*(1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
-            yield sin(t*freq+phase_correction)*self.amplitude+self.bias
+            yield sin(t*freq+phase_correction)*amplitude+bias
             t += increment
 
 
@@ -562,13 +569,19 @@ class Triangle(Oscillator):
         freq_previous = self.frequency
         increment = 1.0/self._samplerate
         t = 0.0
-        fabs = math.fabs  # optimization
+        # optimizations:
+        fabs = math.fabs
+        frequency = self.frequency
+        fm = self.fm
+        bias = self.bias
+        amplitude = self.amplitude
+        # loop:
         while True:
-            freq = self.frequency * (1.0+next(self.fm))
+            freq = frequency * (1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             tt = t*freq+phase_correction
-            yield 4.0*self.amplitude*(fabs((tt+0.75) % 1.0 - 0.5)-0.25)+self.bias
+            yield 4.0*amplitude*(fabs((tt+0.75) % 1.0 - 0.5)-0.25)+bias
             t += increment
 
 
@@ -587,12 +600,18 @@ class Square(Oscillator):
         freq_previous = self.frequency
         increment = 1.0/self._samplerate
         t = 0.0
+        # optimizations:
+        frequency = self.frequency
+        fm = self.fm
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            freq = self.frequency*(1.0+next(self.fm))
+            freq = frequency*(1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             tt = t*freq + phase_correction
-            yield (-self.amplitude if int(tt*2) % 2 else self.amplitude)+self.bias
+            yield (-amplitude if int(tt*2) % 2 else amplitude)+bias
             t += increment
 
 
@@ -611,13 +630,19 @@ class Sawtooth(Oscillator):
         freq_previous = self.frequency
         phase_correction = self._phase
         t = 0.0
-        floor = math.floor   # optimization
+        # optimizations:
+        floor = math.floor
+        frequency = self.frequency
+        fm = self.fm
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            freq = self.frequency*(1.0+next(self.fm))
+            freq = frequency*(1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             tt = t*freq + phase_correction
-            yield self.bias+self.amplitude*2.0*(tt - floor(0.5+tt))
+            yield bias+amplitude*2.0*(tt - floor(0.5+tt))
             t += increment
 
 
@@ -644,17 +669,24 @@ class Pulse(Oscillator):
         freq_previous = self.frequency
         phase_correction = self._phase
         t = 0.0
+        # optimizations:
+        frequency = self.frequency
+        fm = self.fm
+        pwm = self.pwm
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            pw = next(self.pwm)
+            pw = next(pwm)
             if pw <= 0.0:
                 pw = epsilon
             elif pw >= 1.0:
                 pw = 1.0-epsilon
-            freq = self.frequency*(1.0+next(self.fm))
+            freq = frequency*(1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             tt = t*freq+phase_correction
-            yield (self.amplitude if tt % 1.0 < pw else -self.amplitude)+self.bias
+            yield (amplitude if tt % 1.0 < pw else -amplitude)+bias
             t += increment
 
 
@@ -679,16 +711,22 @@ class Harmonics(Oscillator):
         t = 0.0
         # only keep harmonics below the Nyquist frequency
         harmonics = list(filter(lambda h: h[0]*self.frequency <= self._samplerate/2, self.harmonics))
-        sin = math.sin  # optimization
+        # optimizations:
+        sin = math.sin
+        frequency = self.frequency
+        fm = self.fm
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
             h = 0.0
-            freq = self.frequency*(1.0+next(self.fm))
+            freq = frequency*(1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             q = t*freq + phase_correction
             for k, amp in harmonics:
                 h += sin(q*k)*amp
-            yield h*self.amplitude+self.bias
+            yield h*amplitude+bias
             t += increment
 
 
@@ -729,8 +767,12 @@ class WhiteNoise(Oscillator):
 
     def generator(self):
         cycles = int(self._samplerate / self.frequency)
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            value = random.uniform(-self.amplitude, self.amplitude) + self.bias
+            value = random.uniform(-amplitude, amplitude) + bias
             yield from [value] * cycles
 
 
@@ -744,10 +786,16 @@ class Linear(Oscillator):
         self.max_value = max_value
 
     def generator(self):
+        # optimizations:
+        value = self.value
+        max_value = self.max_value
+        min_value = self.min_value
+        increment = self.increment
+        # loop:
         while True:
-            yield self.value
-            if self.increment:
-                self.value = min(self.max_value, max(self.min_value, self.value+self.increment))
+            yield value
+            if increment:
+                value = min(max_value, max(min_value, value+increment))
 
 
 class Semicircle(Oscillator):
@@ -764,14 +812,20 @@ class Semicircle(Oscillator):
         freq_previous = self.frequency
         increment = 2.0/self._samplerate
         t = -1.0
-        sqrt = math.sqrt   # optimization
+        # optimizations:
+        sqrt = math.sqrt
+        frequency = self.frequency
+        fm = self.fm
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            freq = self.frequency*(1.0+next(self.fm))
+            freq = frequency*(1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             ft = t*freq + phase_correction
             ft = (ft % 2.0) - 1.0
-            yield sqrt(1.0 - ft*ft) * self.amplitude + self.bias
+            yield sqrt(1.0 - ft*ft) * amplitude + bias
             t += increment
 
 
@@ -791,17 +845,23 @@ class Pointy(Oscillator):
         freq_previous = self.frequency
         increment = two_pi/self._samplerate
         t = 0.0
-        cos = math.cos  # optimization
+        # optimizations:
+        cos = math.cos
+        frequency = self.frequency
+        fm = self.fm
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            freq = self.frequency*(1.0+next(self.fm))
+            freq = frequency*(1.0+next(fm))
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             tt = t*freq + phase_correction
             vv = 1.0-abs(cos(tt))
             if tt % two_pi > math.pi:
-                yield -vv*vv*self.amplitude+self.bias
+                yield -vv*vv*amplitude+bias
             else:
-                yield vv*vv*self.amplitude+self.bias
+                yield vv*vv*amplitude+bias
             t += increment
 
 
@@ -818,9 +878,13 @@ class FastSine(Oscillator):
         rate = self._samplerate/self._frequency
         increment = 2.0*math.pi/rate
         t = self._phase*2.0*math.pi
-        sin = math.sin  # optimization
+        # optimizations:
+        sin = math.sin
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            yield sin(t)*self.amplitude+self.bias
+            yield sin(t)*amplitude+bias
             t += increment
 
 
@@ -837,9 +901,13 @@ class FastTriangle(Oscillator):
         freq = self._frequency
         t = self._phase/freq
         increment = 1.0/self._samplerate
-        fabs = math.fabs  # optimization
+        # optimizations:
+        fabs = math.fabs
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            yield 4.0*self.amplitude*(fabs((t*freq+0.75) % 1.0 - 0.5)-0.25)+self.bias
+            yield 4.0*amplitude*(fabs((t*freq+0.75) % 1.0 - 0.5)-0.25)+bias
             t += increment
 
 
@@ -856,8 +924,12 @@ class FastSquare(Oscillator):
         freq = self._frequency
         t = self._phase/freq
         increment = 1.0/self._samplerate
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            yield (-self.amplitude if int(t*freq*2) % 2 else self.amplitude)+self.bias
+            yield (-amplitude if int(t*freq*2) % 2 else amplitude)+bias
             t += increment
 
 
@@ -874,10 +946,14 @@ class FastSawtooth(Oscillator):
         freq = self._frequency
         t = self._phase/freq
         increment = 1.0/self._samplerate
-        floor = math.floor  # optimization
+        # optimizations:
+        floor = math.floor
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
             tt = t*freq
-            yield self.bias+2.0*self.amplitude*(tt - floor(0.5+tt))
+            yield bias+2.0*amplitude*(tt - floor(0.5+tt))
             t += increment
 
 
@@ -899,6 +975,9 @@ class FastPulse(Oscillator):
         self.bias = bias
 
     def generator(self):
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         if self._pwm:
             # optimized loop without FM, but with PWM
             epsilon = sys.float_info.epsilon
@@ -912,7 +991,7 @@ class FastPulse(Oscillator):
                     pw = epsilon
                 elif pw >= 1.0:
                     pw = 1.0-epsilon
-                yield (self.amplitude if t*freq % 1.0 < pw else -self.amplitude)+self.bias
+                yield (amplitude if t*freq % 1.0 < pw else -amplitude)+bias
                 t += increment
         else:
             # no FM, no PWM
@@ -921,7 +1000,7 @@ class FastPulse(Oscillator):
             t = self._phase/freq
             increment = 1.0/self._samplerate
             while True:
-                yield (self.amplitude if t*freq % 1.0 < pw else -self.amplitude)+self.bias
+                yield (amplitude if t*freq % 1.0 < pw else -amplitude)+bias
                 t += increment
 
 
@@ -938,8 +1017,12 @@ class FastSemicircle(Oscillator):
         increment = 2.0/rate
         t = -1.0
         sqrt = math.sqrt   # optimization
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
-            yield sqrt(1.0 - t*t) * self.amplitude + self.bias
+            yield sqrt(1.0 - t*t) * amplitude + bias
             t += increment
             if t >= 1.0:
                 t -= 2.0
@@ -959,14 +1042,18 @@ class FastPointy(Oscillator):
         two_pi = 2.0*math.pi
         increment = two_pi/rate
         t = self._phase*two_pi
-        cos = math.cos  # optimization
+        # optimizations:
+        cos = math.cos
+        amplitude = self.amplitude
+        bias = self.bias
+        # loop:
         while True:
             t %= two_pi
             vv = 1.0-abs(cos(t))
             if t > math.pi:
-                yield -vv*vv*self.amplitude+self.bias
+                yield -vv*vv*amplitude+bias
             else:
-                yield vv*vv*self.amplitude+self.bias
+                yield vv*vv*amplitude+bias
             t += increment
 
 
@@ -1044,7 +1131,7 @@ def plot_waveforms():
     plot.suptitle("waveforms (2 cycles)")
     for i, (waveformname, values) in enumerate(waveforms, start=1):
         ax = plot.subplot(nrows, ncols, i)
-        # XXX ax.set_yticklabels([])
+        ax.set_yticklabels([])
         ax.set_xticklabels([])
         plot.title(waveformname)
         plot.grid(True)
