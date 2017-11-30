@@ -633,9 +633,6 @@ class SynthGUI(tk.Frame):
                 elif waveform == "harmonics":
                     harmonics = self.parse_harmonics(from_gui.harmonics_text.get(1.0, tk.END))
                     return create_chord_osc(Harmonics, frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
-                elif waveform == "semicircle":
-                    # @todo add phase
-                    return create_chord_osc(Semicircle, frequency=freq, amplitude=amp, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
                 else:
                     o = {
                         "sine": Sine,

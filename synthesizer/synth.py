@@ -227,14 +227,14 @@ class WaveSynth:
         wave = self.__white_noise(frequency, amplitude, bias).generator()
         yield from map(int, wave)
 
-    def semicircle(self, frequency, duration, amplitude=0.9999, bias=0.0, fm_lfo=None):
+    def semicircle(self, frequency, duration, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None):
         """Semicircle half ('W3'). Optional FM using a supplied LFO."""
-        wave = self.__semicircle(frequency, amplitude, bias, fm_lfo)
+        wave = self.__semicircle(frequency, amplitude, phase, bias, fm_lfo)
         return self.__render_sample(duration, wave)
 
-    def semicircle_gen(self, frequency, amplitude=0.9999, bias=0.0, fm_lfo=None):
+    def semicircle_gen(self, frequency, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None):
         """Semicircle half ('W3') generator. Optional FM using a supplied LFO."""
-        wave = self.__semicircle(frequency, amplitude, bias, fm_lfo).generator()
+        wave = self.__semicircle(frequency, amplitude, phase, bias, fm_lfo).generator()
         yield from map(int, wave)
 
     def pointy(self, frequency, duration, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None):
@@ -256,12 +256,12 @@ class WaveSynth:
         else:
             return FastSine(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
-    def __semicircle(self, frequency, amplitude, bias, fm_lfo):
+    def __semicircle(self, frequency, amplitude, phase, bias, fm_lfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
-            return Semicircle(frequency, amplitude*scale, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
+            return Semicircle(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
-            return FastSemicircle(frequency, amplitude*scale, bias*scale, samplerate=self.samplerate)
+            return FastSemicircle(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
     def __pointy(self, frequency, amplitude, phase, bias, fm_lfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -800,16 +800,16 @@ class Linear(Oscillator):
 
 class Semicircle(Oscillator):
     """Semicircle half wave ('W3') oscillator."""
-    def __init__(self, frequency, amplitude=1.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
-        # @todo add phase
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
         super().__init__(samplerate=samplerate)
+        self._phase = phase
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
         self.fm = iter(fm_lfo or itertools.repeat(0.0))
 
     def generator(self):
-        phase_correction = 0.0
+        phase_correction = self._phase * 2.0
         freq_previous = self.frequency
         increment = 2.0/self._samplerate
         t = -1.0
@@ -1007,16 +1007,17 @@ class FastPulse(Oscillator):
 
 class FastSemicircle(Oscillator):
     """Fast semicircle half wave ('W3') oscillator. Some parameters cannot be changed."""
-    def __init__(self, frequency, amplitude=1.0, bias=0.0, samplerate=Sample.norm_samplerate):
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=Sample.norm_samplerate):
         super().__init__(samplerate=samplerate)
         self._frequency = frequency
+        self._phase = phase
         self.amplitude = amplitude
         self.bias = bias
 
     def generator(self):
         rate = self._samplerate/self._frequency
         increment = 2.0/rate
-        t = -1.0
+        t = -1.0 + self._phase * 2
         sqrt = math.sqrt   # optimization
         # optimizations:
         amplitude = self.amplitude
