@@ -237,6 +237,16 @@ class WaveSynth:
         wave = self.__semicircle(frequency, amplitude, bias, fm_lfo).generator()
         yield from map(int, wave)
 
+    def pointy(self, frequency, duration, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None):
+        """Pointy 'inverted cosine' ('W2'). Optional FM using a supplied LFO."""
+        wave = self.__pointy(frequency, amplitude, phase, bias, fm_lfo)
+        return self.__render_sample(duration, wave)
+
+    def pointy_gen(self, frequency, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None):
+        """Pointy 'inverted cosine' ('W2') generator. Optional FM using a supplied LFO."""
+        wave = self.__pointy(frequency, amplitude, phase, bias, fm_lfo).generator()
+        yield from map(int, wave)
+
     # note: 'linear'  is not offered as a sampled waveform directly, because this LFO it makes little sense as a sample
 
     def __sine(self, frequency, amplitude, phase, bias, fm_lfo):
@@ -252,6 +262,13 @@ class WaveSynth:
             return Semicircle(frequency, amplitude*scale, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
             return FastSemicircle(frequency, amplitude*scale, bias*scale, samplerate=self.samplerate)
+
+    def __pointy(self, frequency, amplitude, phase, bias, fm_lfo):
+        scale = self.__check_and_get_scale(frequency, amplitude, bias)
+        if fm_lfo:
+            return Pointy(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
+        else:
+            return FastPointy(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
     def __square(self, frequency, amplitude, phase, bias, fm_lfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -745,7 +762,7 @@ class Semicircle(Oscillator):
     def generator(self):
         phase_correction = 0.0
         freq_previous = self.frequency
-        increment = 4.0/self._samplerate
+        increment = 2.0/self._samplerate
         t = -1.0
         sqrt = math.sqrt   # optimization
         while True:
@@ -753,9 +770,38 @@ class Semicircle(Oscillator):
             phase_correction += (freq_previous-freq)*t
             freq_previous = freq
             ft = t*freq + phase_correction
-            half = (ft/2.0) % 2 >= 1
             ft = (ft % 2.0) - 1.0
-            yield sqrt(1.0 - ft*ft) * self.amplitude + self.bias if half else 0.0
+            yield sqrt(1.0 - ft*ft) * self.amplitude + self.bias
+            t += increment
+
+
+class Pointy(Oscillator):
+    """Pointy Wave ('inverted cosine', 'W2') oscillator."""
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=Sample.norm_samplerate):
+        super().__init__(samplerate=samplerate)
+        self.frequency = frequency
+        self.amplitude = amplitude
+        self.bias = bias
+        self.fm = iter(fm_lfo or itertools.repeat(0.0))
+        self._phase = phase
+
+    def generator(self):
+        two_pi = 2*math.pi
+        phase_correction = self._phase*two_pi
+        freq_previous = self.frequency
+        increment = two_pi/self._samplerate
+        t = 0.0
+        cos = math.cos  # optimization
+        while True:
+            freq = self.frequency*(1.0+next(self.fm))
+            phase_correction += (freq_previous-freq)*t
+            freq_previous = freq
+            tt = t*freq + phase_correction
+            vv = 1.0-abs(cos(tt))
+            if tt % two_pi > math.pi:
+                yield -vv*vv*self.amplitude+self.bias
+            else:
+                yield vv*vv*self.amplitude+self.bias
             t += increment
 
 
@@ -889,16 +935,39 @@ class FastSemicircle(Oscillator):
 
     def generator(self):
         rate = self._samplerate/self._frequency
-        increment = 4.0/rate
+        increment = 2.0/rate
         t = -1.0
         sqrt = math.sqrt   # optimization
-        half = True
         while True:
-            yield sqrt(1.0 - t*t) * self.amplitude + self.bias if half else 0.0
+            yield sqrt(1.0 - t*t) * self.amplitude + self.bias
             t += increment
             if t >= 1.0:
                 t -= 2.0
-                half = not half
+
+
+class FastPointy(Oscillator):
+    """Fast pointy wave ('inverted cosine', 'W2') oscillator. Some parameters cannot be changed."""
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=Sample.norm_samplerate):
+        super().__init__(samplerate=samplerate)
+        self._frequency = frequency
+        self._phase = phase
+        self.amplitude = amplitude
+        self.bias = bias
+
+    def generator(self):
+        rate = self._samplerate/self._frequency
+        two_pi = 2.0*math.pi
+        increment = two_pi/rate
+        t = self._phase*two_pi
+        cos = math.cos  # optimization
+        while True:
+            t %= two_pi
+            vv = 1.0-abs(cos(t))
+            if t > math.pi:
+                yield -vv*vv*self.amplitude+self.bias
+            else:
+                yield vv*vv*self.amplitude+self.bias
+            t += increment
 
 
 def check_waveforms():
@@ -952,10 +1021,11 @@ def plot_waveforms():
     ws = WaveSynth(samplerate=80, samplewidth=2)
     ws2 = WaveSynth(samplerate=1000, samplewidth=2)
     ncols = 4
-    nrows = 4
+    nrows = 3
     freq = 2.0
     dur = 1.0
     harmonics = [(n, 1 / n) for n in range(3, 5 * 2, 2)]
+    fm = FastSine(1, amplitude=0, bias=0, samplerate=ws.samplerate)
     waveforms = [
         ('sine', ws.sine(freq, dur).get_frame_array()),
         ('square', ws.square(freq, dur).get_frame_array()),
@@ -967,13 +1037,14 @@ def plot_waveforms():
         ('harmonics', ws.harmonics(freq, dur, harmonics=harmonics).get_frame_array()),
         ('white_noise', ws2.white_noise(50.0, dur).get_frame_array()),
         ('linear', list(itertools.islice(Linear(20, 1, max_value=100, samplerate=100), 100))),
-        ('W3-semicircle', ws.semicircle(freq, dur, fm_lfo=None).get_frame_array())
+        ('W2-pointy', ws.pointy(freq, dur, fm_lfo=fm).get_frame_array()),
+        ('W3-semicircle', ws.semicircle(freq, dur, fm_lfo=fm).get_frame_array())
     ]
     plot.figure(1, figsize=(16,10))
     plot.suptitle("waveforms (2 cycles)")
     for i, (waveformname, values) in enumerate(waveforms, start=1):
         ax = plot.subplot(nrows, ncols, i)
-        ax.set_yticklabels([])
+        # XXX ax.set_yticklabels([])
         ax.set_xticklabels([])
         plot.title(waveformname)
         plot.grid(True)
