@@ -24,7 +24,6 @@ oscillators = [synth.Linear,        # baseline
                synth.Pulse,
                # synth.Harmonics,   # used by sawtoothH and squareH already
                synth.WhiteNoise,
-               synth.Linear,
                synth.Semicircle,
                synth.Pointy]
 
