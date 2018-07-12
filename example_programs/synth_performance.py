@@ -31,9 +31,9 @@ oscillators = [synth.Linear,        # baseline
 for osctype in oscillators:
     osc = osctype(frequency, samplerate=samplerate)
     if hasattr(osc, "generator2"):
-        osc=osc.generator2()
+        osc = osc.generator2()
     else:
-        osc=osc.generator()
+        osc = osc.generator()
     print("testing {:20.20s}... ".format(osctype.__name__), end="")
     start = time.time()
     dummy = list(itertools.islice(osc, num_samples))

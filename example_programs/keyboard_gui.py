@@ -19,7 +19,7 @@ from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, Squar
 from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
 from synthesizer.synth import major_chord_keys
 from synthesizer.sample import Sample
-from synthesizer.playback import Output
+from synthesizer.tools.playback import Output
 try:
     import matplotlib
     matplotlib.use("tkagg")
@@ -57,7 +57,8 @@ class OscillatorGUI(tk.LabelFrame):
         self.input_lin_max = tk.DoubleVar()
         self.input_lin_max.set(1.0)
         row = 0
-        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square", "square_h", "semicircle", "pointy", "noise", "linear", "harmonics"]
+        waveforms = ["sine", "triangle", "pulse", "sawtooth", "sawtooth_h", "square",
+                     "square_h", "semicircle", "pointy", "noise", "linear", "harmonics"]
         tk.Label(f, text="waveform").grid(row=row, column=0, sticky=tk.E)
         waveform = tk.OptionMenu(f, self.input_waveformtype, *waveforms, command=self.waveform_selected)
         waveform["width"] = 10
@@ -80,24 +81,28 @@ class OscillatorGUI(tk.LabelFrame):
         row += 1
         self.amp_label = tk.Label(f, text="amp")
         self.amp_label.grid(row=row, column=0, sticky=tk.E)
-        self.amp_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0, resolution=.01, width=10, length=120)
+        self.amp_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_amp, from_=0, to=1.0,
+                                   resolution=.01, width=10, length=120)
         self.amp_slider.grid(row=row, column=1)
         row += 1
         self.pw_label = tk.Label(f, text="pulsewidth")
         self.pw_label.grid(row=row, column=0, sticky=tk.E)
         self.pw_label.grid_remove()
-        self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999, resolution=.001, width=10, length=120)
+        self.pw_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_pw, from_=.001, to=.999,
+                                  resolution=.001, width=10, length=120)
         self.pw_slider.grid(row=row, column=1)
         self.pw_slider.grid_remove()
         row += 1
         self.phase_label = tk.Label(f, text="phase")
         self.phase_label.grid(row=row, column=0, sticky=tk.E)
-        self.phase_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_phase, from_=0, to=1.0, resolution=.01, width=10, length=120)
+        self.phase_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_phase, from_=0, to=1.0,
+                                     resolution=.01, width=10, length=120)
         self.phase_slider.grid(row=row, column=1)
         row += 1
         self.bias_label = tk.Label(f, text="bias")
         self.bias_label.grid(row=row, column=0, sticky=tk.E)
-        self.bias_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_bias, from_=-1, to=1, resolution=.01, width=10, length=120)
+        self.bias_slider = tk.Scale(f, orient=tk.HORIZONTAL, variable=self.input_bias, from_=-1, to=1,
+                                    resolution=.01, width=10, length=120)
         self.bias_slider.grid(row=row, column=1)
         row += 1
         self.lin_start_label = tk.Label(f, text="start")
@@ -278,13 +283,18 @@ class PianoKeyboardGUI(tk.Frame):
         # white keys:
         for key_nr, key in enumerate("CDEFGAB"*num_octaves):
             octave = first_octave+key_nr//7
+
             def key_pressed(event, note=key, octave=octave):
                 force = min(white_key_height, event.y*1.08)/white_key_height   # @todo control output volume, unused for now...
                 gui.pressed(event, note, octave, False)
+
             def key_released(event, note=key, octave=octave):
                 gui.pressed(event, note, octave, True)
+
             x = key_nr * white_key_width
-            key_rect = canvas.create_rectangle(x+x_offset, y_offset, x+white_key_width+x_offset, white_key_height+y_offset, fill="white", outline="gray50", width=1, activewidth=2)
+            key_rect = canvas.create_rectangle(x+x_offset, y_offset,
+                                               x+white_key_width+x_offset, white_key_height+y_offset,
+                                               fill="white", outline="gray50", width=1, activewidth=2)
             canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
             canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
             canvas.create_text(x+white_key_width/2+2, 1, text=key, anchor=tk.N, fill="gray")
@@ -296,13 +306,18 @@ class PianoKeyboardGUI(tk.Frame):
         for key_nr, key in enumerate((["C#", "D#", None, "F#", "G#", "A#", None]*num_octaves)[:-1]):
             if key:
                 octave = first_octave + key_nr // 7
+
                 def key_pressed(event, note=key, octave=octave):
                     force = min(black_key_height, event.y * 1.1) / black_key_height   # @todo control output volume, unused for now...
                     gui.pressed(event, note, octave, False)
+
                 def key_released(event, note=key, octave=octave):
                     gui.pressed(event, note, octave, True)
+
                 x = key_nr * white_key_width + white_key_width*0.75
-                key_rect = canvas.create_rectangle(x+x_offset, y_offset, x+black_key_width+x_offset, black_key_height+y_offset, fill="black", outline="gray50", width=1, activewidth=2)
+                key_rect = canvas.create_rectangle(x+x_offset, y_offset,
+                                                   x+black_key_width+x_offset, black_key_height+y_offset,
+                                                   fill="black", outline="gray50", width=1, activewidth=2)
                 canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
                 canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
         canvas.pack()
@@ -325,16 +340,20 @@ class EchoFilterGUI(tk.LabelFrame):
         tk.Checkbutton(self, variable=self.input_enabled).grid(row=row, column=1, sticky=tk.W)
         row += 1
         tk.Label(self, text="after").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_after, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_after, from_=0, to=2.0, resolution=.01,
+                 width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="amount").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_amount, from_=1, to=10, resolution=1, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_amount, from_=1, to=10, resolution=1,
+                 width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="delay").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_delay, from_=0.0, to=0.5, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_delay, from_=0.0, to=0.5, resolution=.01,
+                 width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="decay").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.01, to=1.5, resolution=.1, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.01, to=1.5, resolution=.1,
+                 width=10, length=120).grid(row=row, column=1)
 
     def filter(self, source):
         if self.input_enabled.get():
@@ -364,10 +383,12 @@ class TremoloFilterGUI(tk.LabelFrame):
         menu.grid(row=row, column=1)
         row += 1
         tk.Label(self, text="rate").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.0, to=10.0, resolution=.1, width=10, length=100).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.0, to=10.0, resolution=.1,
+                 width=10, length=100).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="depth").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_depth, from_=0.0, to=1.0, resolution=.02, width=10, length=100).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_depth, from_=0.0, to=1.0, resolution=.02,
+                 width=10, length=100).grid(row=row, column=1)
 
     def filter(self, source):
         wave = self.input_waveform.get()
@@ -401,21 +422,28 @@ class ArpeggioFilterGUI(tk.LabelFrame):
         row = 0
         tk.Label(self, text="Major Chords Arp").grid(row=row, column=0, columnspan=2)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="off", text="off", pady=0, command=self.mode_off_selected).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="off", text="off", pady=0,
+                       command=self.mode_off_selected).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="chords3", text="Chords Maj. 3", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="chords3", text="Chords Maj. 3", pady=0)\
+            .grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="chords4", text="Chords Maj. 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="chords4", text="Chords Maj. 7th", pady=0)\
+            .grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio3", text="Arpeggio 3", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio3", text="Arpeggio 3", pady=0)\
+            .grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio4", text="Arpeggio 7th", pady=0).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio4", text="Arpeggio 7th", pady=0)\
+            .grid(row=row, column=1, sticky=tk.W)
         row += 1
         tk.Label(self, text="rate").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.02, to=.5, resolution=.01, width=10, length=100).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.02, to=.5, resolution=.01,
+                 width=10, length=100).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="ratio").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_ratio, from_=1, to=100, resolution=1, width=10, length=100).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_ratio, from_=1, to=100, resolution=1,
+                 width=10, length=100).grid(row=row, column=1)
 
     def mode_off_selected(self):
         self.gui.arpeggio_playing = False   # stop any arpeggio that may be running
@@ -444,19 +472,24 @@ class EnvelopeFilterGUI(tk.LabelFrame):
         menu.grid(row=row, column=1)
         row += 1
         tk.Label(self, text="attack").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_attack, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_attack, from_=0, to=2.0, resolution=.01,
+                 width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="decay").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0, to=2.0, resolution=.01,
+                 width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="sustain").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain, from_=0.0, to=2.0, resolution=.01,
+                 width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="sustain lvl").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain_level, from_=0.0, to=1.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_sustain_level, from_=0.0, to=1.0, resolution=.01,
+                 width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="release").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_release, from_=0.0, to=2.0, resolution=.01, width=10, length=120).grid(row=row, column=1)
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_release, from_=0.0, to=2.0, resolution=.01,
+                 width=10, length=120).grid(row=row, column=1)
         self.input_source.set("<none>")
 
     @property
@@ -504,8 +537,10 @@ class SynthGUI(tk.Frame):
         self.samplerate_choice.set(44100)
         tk.Label(lf, text="Samplerate:").pack(anchor=tk.W)
         subf = tk.Frame(lf)
-        tk.Radiobutton(subf, variable=self.samplerate_choice, value=44100, text="44.1 kHz", pady=0, command=self.create_synth).pack(side=tk.LEFT)
-        tk.Radiobutton(subf, variable=self.samplerate_choice, value=22050, text="22 kHz", pady=0, command=self.create_synth).pack(side=tk.LEFT)
+        tk.Radiobutton(subf, variable=self.samplerate_choice, value=44100, text="44.1 kHz",
+                       pady=0, command=self.create_synth).pack(side=tk.LEFT)
+        tk.Radiobutton(subf, variable=self.samplerate_choice, value=22050, text="22 kHz",
+                       pady=0, command=self.create_synth).pack(side=tk.LEFT)
         subf.pack()
         tk.Label(lf, text="Piano key response:").pack(anchor=tk.W)
         subf = tk.Frame(lf)
@@ -548,17 +583,20 @@ class SynthGUI(tk.Frame):
         self.pressed_keyboard_keys = set()
 
     def bind_keypress(self, key, note, octave):
+
         def kbpress(event):
             if key not in self.pressed_keyboard_keys:
                 self.pressed(event, note, octave, False)
             self.pressed_keyboard_keys.add(key)
+
         def kbrelease(event):
             self.pressed(event, note, octave, True)
             self.pressed_keyboard_keys.remove(key)
+
         self.master.bind(key, kbpress)
-        if key=='[':
+        if key == '[':
             key = "bracketleft"
-        if key==']':
+        if key == ']':
             key = "bracketright"
         self.master.bind("<KeyRelease-%s>" % key, kbrelease)
 
@@ -629,10 +667,14 @@ class SynthGUI(tk.Frame):
                 else:
                     raise ValueError("invalid fm choice")
                 if waveform == "pulse":
-                    return create_chord_osc(Pulse, frequency=freq, amplitude=amp, phase=phase, bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm, samplerate=self.synth.samplerate)
+                    return create_chord_osc(Pulse, frequency=freq, amplitude=amp, phase=phase,
+                                            bias=bias, pulsewidth=pw, fm_lfo=fm, pwm_lfo=pwm,
+                                            samplerate=self.synth.samplerate)
                 elif waveform == "harmonics":
                     harmonics = self.parse_harmonics(from_gui.harmonics_text.get(1.0, tk.END))
-                    return create_chord_osc(Harmonics, frequency=freq, harmonics=harmonics, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+                    return create_chord_osc(Harmonics, frequency=freq, harmonics=harmonics,
+                                            amplitude=amp, phase=phase, bias=bias, fm_lfo=fm,
+                                            samplerate=self.synth.samplerate)
                 else:
                     o = {
                         "sine": Sine,
@@ -644,7 +686,8 @@ class SynthGUI(tk.Frame):
                         "semicircle": Semicircle,
                         "pointy": Pointy,
                         }[waveform]
-                    return create_chord_osc(o, frequency=freq, amplitude=amp, phase=phase, bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
+                    return create_chord_osc(o, frequency=freq, amplitude=amp, phase=phase,
+                                            bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
 
         def envelope(osc, envelope_gui):
             adsr_src = envelope_gui.input_source.get()

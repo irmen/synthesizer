@@ -19,9 +19,9 @@ import tkinter.font
 import tkinter.messagebox
 import tkinter.filedialog
 from .backend import BACKEND_PORT
-from synthesizer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
 from synthesizer.sample import Sample, LevelMeter
-from synthesizer.playback import Output
+from synthesizer.tools.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
+from synthesizer.tools.playback import Output
 import appdirs
 import Pyro4
 import Pyro4.errors
@@ -178,7 +178,7 @@ class Player:
     def play_sample(self, sample):
         def unmute(trf, vol):
             if trf:
-                trf.volume=vol
+                trf.volume = vol
         if sample and sample.duration > 0:
             for tf in self.trackframes:
                 if tf.state == TrackFrame.state_playing:
@@ -337,12 +337,16 @@ class LevelmeterFrame(ttk.LabelFrame):
         ttk.Label(self, text="dB").pack(side=tkinter.TOP)
         frame = ttk.LabelFrame(self, text="L.")
         frame.pack(side=tk.LEFT)
-        self.pb_left = ttk.Progressbar(frame, orient=tk.VERTICAL, length=200, maximum=-self.lowest_level, variable=self.pbvar_left, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_left = ttk.Progressbar(frame, orient=tk.VERTICAL, length=200, maximum=-self.lowest_level,
+                                       variable=self.pbvar_left, mode='determinate',
+                                       style='yellow.Vertical.TProgressbar')
         self.pb_left.pack()
 
         frame = ttk.LabelFrame(self, text="R.")
         frame.pack(side=tk.LEFT)
-        self.pb_right = ttk.Progressbar(frame, orient=tk.VERTICAL, length=200, maximum=-self.lowest_level, variable=self.pbvar_right, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_right = ttk.Progressbar(frame, orient=tk.VERTICAL, length=200, maximum=-self.lowest_level,
+                                        variable=self.pbvar_right, mode='determinate',
+                                        style='yellow.Vertical.TProgressbar')
         self.pb_right.pack()
 
     def update_meters(self, left, right):
@@ -514,7 +518,9 @@ class SearchFrame(ttk.LabelFrame):
         except Exception as x:
             self.app.show_status("ERROR: "+str(x))
             return
-        result = sorted(result, key=lambda track: (track["title"], track["artist"] or "", track["album"] or "", track["year"] or 0, track["genre"] or ""))
+        result = sorted(result, key=lambda track: (track["title"],
+                                                   track["artist"] or "", track["album"] or "",
+                                                   track["year"] or 0, track["genre"] or ""))
         for track in result:
             self.resultTreeView.insert("", tk.END, iid=track["hash"], values=[
                 track["title"] or '-',
@@ -606,7 +612,8 @@ class BackendGui(tkinter.Toplevel):
         self.title(title)
         f = ttk.LabelFrame(self, text="Stats")
         ttk.Label(f, text="Connected to Database backend at: "+backend._pyroUri.location).pack()
-        statstext = "Number of tracks in database: {0} -- Total playing time: {1}".format(backend.num_tracks, datetime.timedelta(seconds=backend.total_playtime))
+        statstext = "Number of tracks in database: {0} -- Total playing time: {1}"\
+            .format(backend.num_tracks, datetime.timedelta(seconds=backend.total_playtime))
         ttk.Label(f, text=statstext).pack()
         f.pack()
         ttk.Label(self, text="Adding tracks etc. is done via the command-line interface for now.\n"
@@ -677,7 +684,7 @@ class JukeboxGui(tk.Tk):
         if duration and duration > 0:
             self.after(duration*1000, lambda: reset_status("Ready."))
 
-    def connect_backend(self, try_nameserver = True):
+    def connect_backend(self, try_nameserver=True):
         def backend_connected(backend):
             playtime = datetime.timedelta(seconds=backend.total_playtime)
             status = "Connected to backend @ {0:s} | number of tracks: {1:d} | total playtime: {2}"\
@@ -698,7 +705,9 @@ class JukeboxGui(tk.Tk):
             return backend_connected(self.backend)
         except Exception as x:
             self.show_status("ERROR! Connection to backend failed: "+str(x))
-            answer = tkinter.messagebox.askokcancel("Connect backend", "Cannot connect to backend. Maybe it is not started.\n\nDo you want me to start the backend server?")
+            answer = tkinter.messagebox.askokcancel("Connect backend",
+                                                    "Cannot connect to backend. Maybe it is not started.\n\n"
+                                                    "Do you want me to start the backend server?")
             if answer:
                 p = subprocess.Popen([sys.executable, "-m", "jukebox.backend", "-noscan", "-localhost"])
                 self.backend_process = p.pid

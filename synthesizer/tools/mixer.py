@@ -10,7 +10,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import os
 import cmd
 from configparser import ConfigParser
-from .sample import Sample
+from ..sample import Sample
 from .playback import Output
 
 __all__ = ["Mixer", "Song", "Repl"]
@@ -194,7 +194,8 @@ class Song:
         if unused_instruments and discard_unused_instruments:
             for instrument in list(unused_instruments):
                 del self.instruments[instrument]
-            print("Warning: there are unused instruments. They have been unloaded to save memory, and can safely be removed from the song file.")
+            print("Warning: there are unused instruments. They have been unloaded to save memory, "
+                  "and can safely be removed from the song file.")
             print("The unused instruments are:", ", ".join(sorted(unused_instruments)))
 
     def read_samples(self, instruments, samples_path):
@@ -217,10 +218,12 @@ class Song:
                     raise ValueError("instrument '{instr:s}' not defined (pattern: {pattern:s})".format(instr=instrument, pattern=name))
                 bars = bars.replace(' ', '')
                 if len(bars) % self.ticks != 0:
-                    raise ValueError("all patterns must be multiple of song ticks (pattern: {pattern:s}.{instr:s})".format(pattern=name, instr=instrument))
+                    raise ValueError("all patterns must be multiple of song ticks (pattern: {pattern:s}.{instr:s})"
+                                     .format(pattern=name, instr=instrument))
                 self.patterns[name][instrument] = bars
                 if 0 < bar_length != len(bars):
-                    raise ValueError("all bars must be of equal length in the same pattern (pattern: {pattern:s}.{instr:s})".format(pattern=name, instr=instrument))
+                    raise ValueError("all bars must be of equal length in the same pattern (pattern: {pattern:s}.{instr:s})"
+                                     .format(pattern=name, instr=instrument))
                 bar_length = len(bars)
             self.pattern_sequence.append(name)
 

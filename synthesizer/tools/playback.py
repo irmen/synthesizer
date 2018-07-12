@@ -13,7 +13,7 @@ import queue
 import os
 import tempfile
 import time
-from .sample import Sample
+from ..sample import Sample
 
 __all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "SounddeviceThread", "Winsound", "best_api", "Output"]
 
@@ -298,6 +298,7 @@ class Sounddevice(AudioApi):
             self.current_item = None
             self.i = 0
             self.queue_empty_event = threading.Event()
+
         def iter_queue(self, bufferqueue):
             while True:
                 try:
@@ -305,6 +306,7 @@ class Sounddevice(AudioApi):
                 except queue.Empty:
                     self.queue_empty_event.set()
                     yield None
+
         def next_chunk(self, size):
             if not self.current_item:
                 data = next(self.queue_items)
@@ -326,7 +328,7 @@ class Sounddevice(AudioApi):
                 self.i = size - len(result)
                 result += data[0:self.i]
                 self.current_item = memoryview(data)
-                assert len(result)==size, "queue blocks need to be >= buffersize"
+                assert len(result) == size, "queue blocks need to be >= buffersize"
                 return result
             else:
                 # no new data available, just return the last remaining data from current block
@@ -371,10 +373,13 @@ class Sounddevice(AudioApi):
     def play(self, sample):
         class SampleBufferGrabber:
             def __init__(self):
+
                 self.buffer = None
+
             def write(self, buffer):
                 assert self.buffer is None
                 self.buffer = buffer
+
         self.all_played.clear()
         grabber = SampleBufferGrabber()
         sample.write_frames(grabber)
@@ -406,7 +411,7 @@ class Sounddevice(AudioApi):
         frames_per_chunk = self.samplerate // 20
         self.buffer_queue_reader = Sounddevice.BufferQueueReader(self.buffer_queue)
         self.stream = sounddevice.RawOutputStream(self.samplerate, channels=self.nchannels, dtype=dtype,
-            blocksize=frames_per_chunk, callback=self.streamcallback)
+                                                  blocksize=frames_per_chunk, callback=self.streamcallback)
         self.stream.start()
 
     def streamcallback(self, outdata, frames, time, status):
@@ -424,7 +429,6 @@ class Sounddevice(AudioApi):
         else:
             outdata[:] = data
         if self.played_callback:
-            from .sample import Sample
             sample = Sample.from_raw_frames(outdata, self.samplewidth, self.samplerate, self.nchannels)
             self.played_callback(sample)
 
@@ -476,7 +480,8 @@ class Winsound(AudioApi):
 
 class Output:
     """Plays samples to audio output device or streams them to a file."""
-    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth, nchannels=Sample.norm_nchannels, queuesize=10):
+    def __init__(self, samplerate=Sample.norm_samplerate, samplewidth=Sample.norm_samplewidth,
+                 nchannels=Sample.norm_nchannels, queuesize=10):
         self.samplerate = samplerate
         self.samplewidth = samplewidth
         self.nchannels = nchannels

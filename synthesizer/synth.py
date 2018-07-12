@@ -303,9 +303,11 @@ class WaveSynth:
         assert 0 <= pulsewidth <= 1
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
-            return Pulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth, fm_lfo=fm_lfo, pwm_lfo=pwm_lfo, samplerate=self.samplerate)
+            return Pulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth,
+                         fm_lfo=fm_lfo, pwm_lfo=pwm_lfo, samplerate=self.samplerate)
         else:
-            return FastPulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth, pwm_lfo=pwm_lfo, samplerate=self.samplerate)
+            return FastPulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth,
+                             pwm_lfo=pwm_lfo, samplerate=self.samplerate)
 
     def __harmonics(self, frequency, harmonics, amplitude, phase, bias, fm_lfo):
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -656,7 +658,8 @@ class Pulse(Oscillator):
     Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
     The pwm_lfo oscillator will be clipped between 0 and 1 as pulse width factor.
     """
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1, fm_lfo=None, pwm_lfo=None, samplerate=Sample.norm_samplerate):
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1,
+                 fm_lfo=None, pwm_lfo=None, samplerate=Sample.norm_samplerate):
         assert 0 <= pulsewidth <= 1
         super().__init__(samplerate=samplerate)
         self.frequency = frequency
@@ -1145,7 +1148,7 @@ def plot_waveforms():
         ('W2-pointy', ws.pointy(freq, dur, fm_lfo=fm).get_frame_array()),
         ('W3-semicircle', ws.semicircle(freq, dur, fm_lfo=fm).get_frame_array())
     ]
-    plot.figure(1, figsize=(16,10))
+    plot.figure(1, figsize=(16, 10))
     plot.suptitle("waveforms (2 cycles)")
     for i, (waveformname, values) in enumerate(waveforms, start=1):
         ax = plot.subplot(nrows, ncols, i)

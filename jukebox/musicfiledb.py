@@ -201,7 +201,8 @@ class MusicFileDatabase:
         cursor = self.dbconn.cursor()
         for t in tracks:
             try:
-                cursor.execute("INSERT INTO tracks(title, artist, album, year, genre, duration, modified, location, hash) VALUES (?,?,?,?,?,?,?,?,?)",
+                cursor.execute("INSERT INTO tracks(title, artist, album, year, genre, duration, "
+                               "modified, location, hash) VALUES (?,?,?,?,?,?,?,?,?)",
                                (t.title, t.artist, t.album, t.year, t.genre, t.duration, t.modified, t.location, t.hash))
             except sqlite3.IntegrityError as x:
                 if str(x) == "UNIQUE constraint failed: tracks.hash":

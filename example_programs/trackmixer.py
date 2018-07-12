@@ -9,9 +9,9 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import sys
 import os
-from synthesizer.mixer import Song, Repl
+from synthesizer.tools.mixer import Song, Repl
+from synthesizer.tools.playback import Output
 from synthesizer.sample import Sample
-from synthesizer.playback import Output
 
 
 def main(track_file, outputfile=None, interactive=False):
@@ -44,6 +44,7 @@ def usage():
     print("Arguments:  [-i] trackfile.ini")
     print("   -i = start interactive editing mode")
     raise SystemExit(1)
+
 
 if __name__ == "__main__":
     if len(sys.argv) not in (2, 3):

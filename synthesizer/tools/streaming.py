@@ -13,7 +13,7 @@ import os
 import io
 import logging
 from functools import namedtuple
-from synthesizer.sample import Sample
+from ..sample import Sample
 
 
 __all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFramesFilter", "SampleStream"]
@@ -56,8 +56,8 @@ class AudiofileToWavStream(io.RawIOBase):
                 # probe the existing file format, to see if we can avoid needless conversion
                 probe = self.probe_format(self.filename)
                 self.conversion_required = probe.rate != samplerate or probe.channels != channels \
-                                           or probe.sampformat != sampleformat or probe.fileformat != "wav" \
-                                           or self._startfrom > 0 or self._duration > 0
+                    or probe.sampformat != sampleformat or probe.fileformat != "wav" \
+                    or self._startfrom > 0 or self._duration > 0
                 self.format_probe = probe
             except (subprocess.CalledProcessError, IOError, OSError):
                 pass
@@ -234,7 +234,8 @@ class StreamMixer:
     """
     buffer_size = 4096   # number of frames in a buffer
 
-    def __init__(self, streams, endless=False, samplewidth=Sample.norm_samplewidth, samplerate=Sample.norm_samplerate, nchannels=Sample.norm_nchannels):
+    def __init__(self, streams, endless=False, samplewidth=Sample.norm_samplewidth,
+                 samplerate=Sample.norm_samplerate, nchannels=Sample.norm_nchannels):
         # assume all wave streams are the same parameters
         self.samplewidth = samplewidth
         self.samplerate = samplerate

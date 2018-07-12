@@ -17,8 +17,8 @@ import wave
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthesizer.sample import Sample, LevelMeter
-from synthesizer.streaming import AudiofileToWavStream
-from synthesizer.playback import Output
+from synthesizer.tools.streaming import AudiofileToWavStream
+from synthesizer.tools.playback import Output
 
 
 def play_console(filename_or_stream):
@@ -62,13 +62,17 @@ class LevelGUI(tk.Frame):
         frame = tk.LabelFrame(self, text="Left")
         frame.pack(side=tk.LEFT)
         tk.Label(frame, text="dB").pack()
-        self.pb_left = ttk.Progressbar(frame, orient=tk.VERTICAL, length=300, maximum=-self.lowest_level, variable=self.pbvar_left, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_left = ttk.Progressbar(frame, orient=tk.VERTICAL, length=300,
+                                       maximum=-self.lowest_level, variable=self.pbvar_left,
+                                       mode='determinate', style='yellow.Vertical.TProgressbar')
         self.pb_left.pack()
 
         frame = tk.LabelFrame(self, text="Right")
         frame.pack(side=tk.LEFT)
         tk.Label(frame, text="dB").pack()
-        self.pb_right = ttk.Progressbar(frame, orient=tk.VERTICAL, length=300, maximum=-self.lowest_level, variable=self.pbvar_right, mode='determinate', style='yellow.Vertical.TProgressbar')
+        self.pb_right = ttk.Progressbar(frame, orient=tk.VERTICAL, length=300,
+                                        maximum=-self.lowest_level, variable=self.pbvar_right,
+                                        mode='determinate', style='yellow.Vertical.TProgressbar')
         self.pb_right.pack()
 
         frame = tk.LabelFrame(self, text="Info")
@@ -92,7 +96,8 @@ class LevelGUI(tk.Frame):
             raise RuntimeError("need api that supports streaming")
         self.audio_out.register_notify_played(self.levelmeter.update)
         filename = filename_or_stream if isinstance(filename_or_stream, str) else "<stream>"
-        info = "Source:\n{}\n\nRate: {:g} Khz\nBits: {}\nChannels: {}".format(filename, self.samplerate/1000, 8*self.samplewidth, self.nchannels)
+        info = "Source:\n{}\n\nRate: {:g} Khz\nBits: {}\nChannels: {}"\
+            .format(filename, self.samplerate/1000, 8*self.samplewidth, self.nchannels)
         self.info.configure(text=info)
 
     def update(self, *args, **kwargs):
