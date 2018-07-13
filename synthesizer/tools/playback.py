@@ -14,7 +14,7 @@ import os
 import tempfile
 import time
 from ..sample import Sample
-from .. import norm_samplerate, norm_samplewidth, norm_nchannels
+from .. import params
 
 
 __all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "SounddeviceThread", "Winsound", "best_api", "Output"]
@@ -482,13 +482,12 @@ class Winsound(AudioApi):
 
 class Output:
     """Plays samples to audio output device or streams them to a file."""
-    def __init__(self, samplerate=norm_samplerate, samplewidth=norm_samplewidth,
-                 nchannels=norm_nchannels, queuesize=10):
-        self.samplerate = samplerate
-        self.samplewidth = samplewidth
-        self.nchannels = nchannels
+    def __init__(self, samplerate=0, samplewidth=0, nchannels=0, queuesize=10):
+        self.samplerate = samplerate or params.norm_samplerate
+        self.samplewidth = samplewidth or params.norm_samplewidth
+        self.nchannels = nchannels or params.norm_nchannels
         self.audio_api = best_api()
-        self.audio_api.reset_params(samplerate, samplewidth, nchannels, queuesize)
+        self.audio_api.reset_params(self.samplerate, self.samplewidth, self.nchannels, queuesize)
         self.supports_streaming = self.audio_api.supports_streaming
 
     def __repr__(self):

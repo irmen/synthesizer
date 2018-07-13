@@ -11,7 +11,7 @@ import audioop
 import array
 import math
 import itertools
-from . import norm_nchannels, norm_samplewidth, norm_samplerate
+from . import params
 try:
     import numpy
 except ImportError:
@@ -49,9 +49,9 @@ class Sample:
             assert 2 <= self.__samplewidth <= 4
             assert self.__samplerate > 1
         else:
-            self.__samplerate = norm_samplerate
-            self.__nchannels = norm_nchannels
-            self.__samplewidth = norm_samplewidth
+            self.__samplerate = params.norm_samplerate
+            self.__nchannels = params.norm_nchannels
+            self.__samplewidth = params.norm_samplewidth
             self.__frames = b""
             self.__filename = None
 
@@ -272,11 +272,11 @@ class Sample:
         When mixing samples, they should all have the same properties, and this method is ideal to make sure of that.
         """
         assert not self.__locked
-        self.resample(norm_samplerate)
-        if self.samplewidth != norm_samplewidth:
+        self.resample(params.norm_samplerate)
+        if self.samplewidth != params.norm_samplewidth:
             # Convert to 16 bit sample size.
-            self.__frames = audioop.lin2lin(self.__frames, self.samplewidth, norm_samplewidth)
-            self.__samplewidth = norm_samplewidth
+            self.__frames = audioop.lin2lin(self.__frames, self.samplewidth, params.norm_samplewidth)
+            self.__samplewidth = params.norm_samplewidth
         if self.nchannels == 1:
             # convert to stereo
             self.__frames = audioop.tostereo(self.__frames, self.samplewidth, 1, 1)

@@ -9,7 +9,7 @@ import sys
 import itertools
 import random
 import math
-from . import norm_samplewidth, norm_samplerate
+from . import params, sample
 
 
 __all__ = ["key_num", "key_freq", "note_freq", "octave_notes", "note_alias", "major_chords", "major_chord_keys",
@@ -115,10 +115,11 @@ class WaveSynth:
     variable harmonics, white noise.  It also supports an optional LFO for Frequency Modulation.
     The resulting waveform sample data is in integer 16 or 32 bits format.
     """
-    def __init__(self, samplerate=norm_samplerate, samplewidth=norm_samplewidth):
+    def __init__(self, samplerate=0, samplewidth=0):
+        samplewidth = samplewidth or params.norm_samplewidth
         if samplewidth not in (2, 4):
             raise ValueError("only sample widths 2 and 4 are supported")
-        self.samplerate = samplerate
+        self.samplerate = samplerate or params.norm_samplerate
         self.samplewidth = samplewidth
 
     def sine(self, frequency, duration, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None):
@@ -326,8 +327,8 @@ class WaveSynth:
 
     def __render_sample(self, duration, wave):
         values = map(int, itertools.islice(wave, int(duration*self.samplerate)))
-        samples = Sample.get_array(self.samplewidth, values)
-        return Sample.from_array(samples, self.samplerate, 1)
+        samples = sample.Sample.get_array(self.samplewidth, values)
+        return sample.Sample.from_array(samples, self.samplerate, 1)
 
 
 class Oscillator:
@@ -340,7 +341,7 @@ class Oscillator:
     consider using the Fast versions instead. They contain optimized algorithms but
     some of their parameters cannot be changed.
     """
-    def __init__(self, source=None, samplerate=None):
+    def __init__(self, source=None, samplerate=0):
         self._samplerate = samplerate or source._samplerate
         self._source = source
 
@@ -528,12 +529,12 @@ class NullFilter(Oscillator):
 
 class Sine(Oscillator):
     """Sine Wave oscillator."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
         # The FM compensates for the phase change by means of phase_correction.
         # See http://stackoverflow.com/questions/3089832/sine-wave-glissando-from-one-pitch-to-another-in-numpy
         # and http://stackoverflow.com/questions/28185219/generating-vibrato-sine-wave
         # The same idea is applied to the other waveforms to correct their phase with FM.
-        super().__init__(samplerate=samplerate)
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
@@ -562,8 +563,8 @@ class Sine(Oscillator):
 
 class Triangle(Oscillator):
     """Perfect triangle wave oscillator (not using harmonics)."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
@@ -593,8 +594,8 @@ class Triangle(Oscillator):
 
 class Square(Oscillator):
     """Perfect square wave [max/-max] oscillator (not using harmonics)."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
@@ -623,8 +624,8 @@ class Square(Oscillator):
 
 class Sawtooth(Oscillator):
     """Perfect sawtooth waveform oscillator (not using harmonics)."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
@@ -658,10 +659,9 @@ class Pulse(Oscillator):
     Optional FM and/or Pulse-width modulation. If you use PWM, pulsewidth is ignored.
     The pwm_lfo oscillator will be clipped between 0 and 1 as pulse width factor.
     """
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1,
-                 fm_lfo=None, pwm_lfo=None, samplerate=norm_samplerate):
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1, fm_lfo=None, pwm_lfo=None, samplerate=0):
         assert 0 <= pulsewidth <= 1
-        super().__init__(samplerate=samplerate)
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
@@ -702,8 +702,8 @@ class Harmonics(Oscillator):
     Oscillator that produces a waveform based on harmonics.
     This is computationally intensive because many sine waves are added together.
     """
-    def __init__(self, frequency, harmonics, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, harmonics, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
@@ -743,9 +743,9 @@ class SquareH(Harmonics):
     It is a lot heavier to generate than square because it has to add many individual sine waves.
     It's done by adding only odd-integer harmonics, see https://en.wikipedia.org/wiki/Square_wave
     """
-    def __init__(self, frequency, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
+    def __init__(self, frequency, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
         harmonics = [(n, 1.0/n) for n in range(1, num_harmonics*2, 2)]  # only the odd harmonics
-        super().__init__(frequency, harmonics, amplitude, phase, bias, fm_lfo=fm_lfo, samplerate=samplerate)
+        super().__init__(frequency, harmonics, amplitude, phase, bias, fm_lfo=fm_lfo, samplerate=samplerate or params.norm_samplerate)
 
 
 class SawtoothH(Harmonics):
@@ -754,9 +754,9 @@ class SawtoothH(Harmonics):
     It is a lot heavier to generate than square because it has to add many individual sine waves.
     It's done by adding all harmonics, see https://en.wikipedia.org/wiki/Sawtooth_wave
     """
-    def __init__(self, frequency, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
+    def __init__(self, frequency, num_harmonics=16, amplitude=0.9999, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
         harmonics = [(n, 1.0/n) for n in range(1, num_harmonics+1)]  # all harmonics
-        super().__init__(frequency, harmonics, amplitude, phase+0.5, bias, fm_lfo=fm_lfo, samplerate=samplerate)
+        super().__init__(frequency, harmonics, amplitude, phase+0.5, bias, fm_lfo=fm_lfo, samplerate=samplerate or params.norm_samplerate)
 
     def generator(self):
         for y in super().generator():
@@ -765,8 +765,8 @@ class SawtoothH(Harmonics):
 
 class WhiteNoise(Oscillator):
     """Oscillator that produces white noise (randomness) waveform."""
-    def __init__(self, frequency, amplitude=1.0, bias=0.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, bias=0.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.amplitude = amplitude
         self.bias = bias
         self.frequency = frequency
@@ -786,8 +786,8 @@ class WhiteNoise(Oscillator):
 
 class Linear(Oscillator):
     """Oscillator that produces a linear sloped value, until it reaches a maximum or minimum value."""
-    def __init__(self, startlevel, increment=0.0, min_value=-1.0, max_value=1.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, startlevel, increment=0.0, min_value=-1.0, max_value=1.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.value = startlevel
         self.increment = increment
         self.min_value = min_value
@@ -808,8 +808,8 @@ class Linear(Oscillator):
 
 class Semicircle(Oscillator):
     """Semicircle half wave ('W3') oscillator."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._phase = phase
         self.frequency = frequency
         self.amplitude = amplitude
@@ -840,8 +840,8 @@ class Semicircle(Oscillator):
 
 class Pointy(Oscillator):
     """Pointy Wave ('inverted cosine', 'W2') oscillator."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, fm_lfo=None, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self.frequency = frequency
         self.amplitude = amplitude
         self.bias = bias
@@ -876,8 +876,8 @@ class Pointy(Oscillator):
 
 class FastSine(Oscillator):
     """Fast sine wave oscillator. Some parameters cannot be changed."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._frequency = frequency
         self._phase = phase
         self.amplitude = amplitude
@@ -899,8 +899,8 @@ class FastSine(Oscillator):
 
 class FastTriangle(Oscillator):
     """Fast perfect triangle wave oscillator (not using harmonics). Some parameters cannot be changed."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._frequency = frequency
         self._phase = phase
         self.amplitude = amplitude
@@ -922,8 +922,8 @@ class FastTriangle(Oscillator):
 
 class FastSquare(Oscillator):
     """Fast perfect square wave [max/-max] oscillator (not using harmonics). Some parameters cannot be changed."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._frequency = frequency
         self._phase = phase
         self.amplitude = amplitude
@@ -944,8 +944,8 @@ class FastSquare(Oscillator):
 
 class FastSawtooth(Oscillator):
     """Fast perfect sawtooth waveform oscillator (not using harmonics). Some parameters canot be changed."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._frequency = frequency
         self._phase = phase
         self.amplitude = amplitude
@@ -973,9 +973,9 @@ class FastPulse(Oscillator):
     Optional Pulse-width modulation. If used, the pulsewidth argument is ignored.
     The pwm_lfo oscillator will be clipped between 0 and 1 as pulse width factor.
     """
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1, pwm_lfo=None, samplerate=norm_samplerate):
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, pulsewidth=0.1, pwm_lfo=None, samplerate=0):
         assert 0 <= pulsewidth <= 1
-        super().__init__(samplerate=samplerate)
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._frequency = frequency
         self._phase = phase
         self._pulsewidth = pulsewidth
@@ -1015,8 +1015,8 @@ class FastPulse(Oscillator):
 
 class FastSemicircle(Oscillator):
     """Fast semicircle half wave ('W3') oscillator. Some parameters cannot be changed."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._frequency = frequency
         self._phase = phase
         self.amplitude = amplitude
@@ -1040,8 +1040,8 @@ class FastSemicircle(Oscillator):
 
 class FastPointy(Oscillator):
     """Fast pointy wave ('inverted cosine', 'W2') oscillator. Some parameters cannot be changed."""
-    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=norm_samplerate):
-        super().__init__(samplerate=samplerate)
+    def __init__(self, frequency, amplitude=1.0, phase=0.0, bias=0.0, samplerate=0):
+        super().__init__(samplerate=samplerate or params.norm_samplerate)
         self._frequency = frequency
         self._phase = phase
         self.amplitude = amplitude

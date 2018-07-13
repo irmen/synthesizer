@@ -14,7 +14,7 @@ import io
 import logging
 from functools import namedtuple
 from ..sample import Sample
-from .. import norm_samplerate, norm_nchannels, norm_samplewidth
+from .. import params
 
 
 __all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFramesFilter", "SampleStream"]
@@ -37,9 +37,11 @@ class AudiofileToWavStream(io.RawIOBase):
     ffmpeg_executable = "ffmpeg"
     ffprobe_executable = "ffprobe"
 
-    def __init__(self, filename, outputfilename=None, samplerate=norm_samplerate,
-                 channels=norm_nchannels, sampleformat=str(8*norm_samplewidth), hqresample=True,
-                 startfrom=0, duration=0):
+    def __init__(self, filename, outputfilename=None, samplerate=0,
+                 channels=0, sampleformat="", hqresample=True, startfrom=0, duration=0):
+        samplerate = samplerate or params.norm_samplerate
+        channels = channels or params.norm_nchannels
+        sampleformat = sampleformat or str(8*params.norm_samplewidth)
         self.filename = filename
         if not os.path.isfile(filename):
             raise FileNotFoundError(filename)
@@ -235,12 +237,11 @@ class StreamMixer:
     """
     buffer_size = 4096   # number of frames in a buffer
 
-    def __init__(self, streams, endless=False, samplewidth=norm_samplewidth,
-                 samplerate=norm_samplerate, nchannels=norm_nchannels):
+    def __init__(self, streams, endless=False, samplewidth=0, samplerate=0, nchannels=0):
         # assume all wave streams are the same parameters
-        self.samplewidth = samplewidth
-        self.samplerate = samplerate
-        self.nchannels = nchannels
+        self.samplewidth = samplewidth or params.norm_samplewidth
+        self.samplerate = samplerate or params.norm_samplerate
+        self.nchannels = nchannels or params.norm_nchannels
         self.timestamp = 0.0
         self.sample_streams = []
         self.wrapped_streams = {}   # samplestream->(wrappedstream, end_callback) (to close stuff properly)
