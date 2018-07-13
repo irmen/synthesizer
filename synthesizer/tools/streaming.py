@@ -30,12 +30,15 @@ class AudiofileToWavStream(io.RawIOBase):
     If the file is not already a .wav, and/or you want to resample it,
     ffmpeg/ffprobe are used to convert it in the background.
     For HQ resampling, ffmpeg has to be built with libsoxr support.
+    If ffmpeg is not available, it can use oggdec (from the vorbis-tools package)
+    instead to decode .ogg files, if needed. Resampling cannot be performed in this case.
 
     Input: audio file of any supported format
     Output: stream of audio data in WAV PCM format
     """
     ffmpeg_executable = "ffmpeg"
     ffprobe_executable = "ffprobe"
+    oggdec_executable = "oggdec"
 
     def __init__(self, filename, outputfilename=None, samplerate=0,
                  channels=0, sampleformat="", hqresample=True, startfrom=0, duration=0):
@@ -69,8 +72,8 @@ class AudiofileToWavStream(io.RawIOBase):
                 samplerate = int(samplerate)
                 assert 2000 <= samplerate <= 200000
                 if hqresample:
-                    if not self.supports_hq_resample():
-                        raise RuntimeError("ffmpeg isn't compiled with libsoxr, so hq resampling is not supported")
+                    if self.ffmpeg_executable and not self.supports_hq_resample():
+                        raise RuntimeError("ffmpeg not found or it isn't compiled with libsoxr, so hq resampling is not supported")
                     self.resample_options = ["-af", "aresample=resampler=soxr", "-ar", str(samplerate)]
                 else:
                     self.resample_options = ["-ar", str(samplerate)]
@@ -93,8 +96,13 @@ class AudiofileToWavStream(io.RawIOBase):
 
     @classmethod
     def supports_hq_resample(cls):
-        buildconf = subprocess.check_output([cls.ffmpeg_executable, "-v", "error", "-buildconf"]).decode()
-        return "--enable-libsoxr" in buildconf
+        if cls.ffmpeg_executable:
+            try:
+                buildconf = subprocess.check_output([cls.ffmpeg_executable, "-v", "error", "-buildconf"]).decode()
+                return "--enable-libsoxr" in buildconf
+            except FileNotFoundError:
+                return False
+        return False
 
     @classmethod
     def probe_format(cls, filename):
@@ -130,24 +138,47 @@ class AudiofileToWavStream(io.RawIOBase):
             log.debug("direct stream input from %s", self.filename)
             self.stream = open(self.filename, "rb")
         else:
-            command = [self.ffmpeg_executable, "-v", "fatal", "-hide_banner", "-nostdin"]
-            if self._startfrom > 0:
-                command.extend(["-ss", str(self._startfrom)])    # seek start time in seconds
-            command.extend(["-i", self.filename])
-            if self._duration > 0:
-                command.extend(["-to", str(self._duration)])    # clip duration in seconds
-            command.extend(self.resample_options)
-            command.extend(self.downmix_options)
-            command.extend(self.sampleformat_options)
-            if self.outputfilename:
-                command.extend(["-y", self.outputfilename])
-                log.debug("ffmpeg file conversion: %s", " ".join(command))
-                subprocess.check_call(command)
-                return
-            command.extend(["-f", "wav", "-"])
-            log.debug("ffmpeg streaming: %s", " ".join(command))
-            converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
-            self.stream = converter.stdout
+            if self.ffmpeg_executable:
+                command = [self.ffmpeg_executable, "-v", "fatal", "-hide_banner", "-nostdin"]
+                if self._startfrom > 0:
+                    command.extend(["-ss", str(self._startfrom)])    # seek start time in seconds
+                command.extend(["-i", self.filename])
+                if self._duration > 0:
+                    command.extend(["-to", str(self._duration)])    # clip duration in seconds
+                command.extend(self.resample_options)
+                command.extend(self.downmix_options)
+                command.extend(self.sampleformat_options)
+                if self.outputfilename:
+                    command.extend(["-y", self.outputfilename])
+                    log.debug("ffmpeg file conversion: %s", " ".join(command))
+                    subprocess.check_call(command)
+                    return
+                command.extend(["-f", "wav", "-"])
+                log.debug("ffmpeg streaming: %s", " ".join(command))
+                try:
+                    converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
+                    self.stream = converter.stdout
+                    return
+                except FileNotFoundError:
+                    # somehow the ffmpeg decoder executable couldn't be launched
+                    pass
+            if self.oggdec_executable:
+                # ffmpeg not available, try oggdec instead (only works on ogg files, but hey we can try)
+                try:
+                    if self.outputfilename:
+                        command = [self.oggdec_executable, "--quiet", "--output", self.outputfilename, self.filename]
+                        log.debug("oggdec file conversion: %s", " ".join(command))
+                        subprocess.check_call(command)
+                    else:
+                        command = [self.oggdec_executable, "--quiet", "--output", "-", self.filename]
+                        converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
+                        self.stream = converter.stdout
+                        log.debug("oggdec streaming: %s", " ".join(command))
+                    return
+                except FileNotFoundError:
+                    # somehow the oggdec decoder executable couldn't be launched
+                    pass
+            raise RuntimeError("ffmpeg or oggdec (vorbis-tools) required for sound file decoding")
         return self.stream
 
     def read(self, bytes):
