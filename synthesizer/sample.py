@@ -11,6 +11,7 @@ import audioop
 import array
 import math
 import itertools
+from typing import Callable, Generator
 from . import params
 try:
     import numpy
@@ -76,7 +77,10 @@ class Sample:
         assert 2 <= samplewidth <= 4
         assert samplerate > 1
         s = cls(name=name)
-        s.__frames = frames
+        if isinstance(frames, list):
+            s.__frames = bytes(frames)
+        else:
+            s.__frames = frames
         s.__samplerate = int(samplerate)
         s.__samplewidth = int(samplewidth)
         s.__nchannels = int(numchannels)
@@ -175,6 +179,37 @@ class Sample:
     def __len__(self):
         """returns the number of sample frames"""
         return len(self.__frames) // self.__samplewidth // self.__nchannels
+
+    def view_frame_data(self) -> memoryview:
+        """return a memoryview on the raw frame data."""
+        return memoryview(self.__frames)
+
+    def chunked_frame_data(self, chunksize: int, repeat: bool=False,
+                           stopcondition: Callable[[], bool]=lambda: False) -> Generator[memoryview, None, None]:
+        """
+        Generator that produces chunks of raw frame data bytes of the given length.
+        Stops when the stopcondition function returns True or the sample runs out,
+        unless repeat is set to True to let it loop endlessly.
+        """
+        if repeat:
+            # continuously repeated
+            bdata = self.__frames
+            if len(bdata) < chunksize:
+                bdata = bdata * int(math.ceil(chunksize / len(bdata)))
+            length = len(bdata)
+            bdata += bdata[:chunksize]
+            mdata = memoryview(bdata)
+            i = 0
+            while not stopcondition():
+                yield mdata[i: i + chunksize]
+                i = (i + chunksize) % length
+        else:
+            # one-shot
+            mdata = memoryview(self.__frames)
+            i = 0
+            while i < len(mdata) and not stopcondition():
+                yield mdata[i: i + chunksize]
+                i += chunksize
 
     def get_frame_array(self):
         """Returns the sample values as array. Warning: this can copy large amounts of data."""

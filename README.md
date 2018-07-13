@@ -7,7 +7,7 @@ It can mix the patterns into a single output file, but can also stream the mix.
 It provides a command line interface where you can edit the song and patterns,
 play samples and individual patterns, and mix or stream it by entering simple commands.
 
-Note: *requires Python 3.x.*
+Note: *requires Python 3.5 or newer*.
 
 
 The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.

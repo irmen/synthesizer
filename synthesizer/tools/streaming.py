@@ -12,7 +12,7 @@ import wave
 import os
 import io
 import logging
-from functools import namedtuple
+from collections import namedtuple
 from ..sample import Sample
 from .. import params
 
