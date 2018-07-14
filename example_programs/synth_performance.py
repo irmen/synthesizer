@@ -2,6 +2,7 @@ import time
 import itertools
 from synthesizer import synth
 
+
 samplerate = 44100
 frequency = 880
 num_samples = samplerate*10

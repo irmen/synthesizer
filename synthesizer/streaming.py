@@ -13,8 +13,8 @@ import os
 import io
 import logging
 from collections import namedtuple
-from ..sample import Sample
-from .. import params
+from .sample import Sample
+from . import params
 
 
 __all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFramesFilter", "SampleStream"]

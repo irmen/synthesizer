@@ -19,7 +19,7 @@ from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, Squar
 from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
 from synthesizer.synth import major_chord_keys
 from synthesizer.sample import Sample
-from synthesizer.tools.playback import Output
+from synthesizer.playback import Output
 try:
     import matplotlib
     matplotlib.use("tkagg")

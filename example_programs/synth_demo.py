@@ -6,7 +6,7 @@ from synthesizer.synth import WaveSynth, key_freq, octave_notes, major_chord_key
 from synthesizer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, SawtoothH, WhiteNoise, Linear, Harmonics
 from synthesizer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle
 from synthesizer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter, DelayFilter
-from synthesizer.tools.playback import Output
+from synthesizer.playback import Output
 
 
 # some note frequencies for octaves 1 to 7

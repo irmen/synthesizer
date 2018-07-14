@@ -13,11 +13,12 @@ import queue
 import os
 import tempfile
 import time
-from ..sample import Sample
-from .. import params
+from .sample import Sample
+from . import params
 
 
-__all__ = ["AudioApiNotAvailableError", "PyAudio", "Sounddevice", "SounddeviceThread", "Winsound", "best_api", "Output"]
+__all__ = ["Output", "best_api", "AudioApiNotAvailableError", "PyAudio",
+           "Sounddevice", "SounddeviceThread", "Winsound"]
 
 
 # stubs for optional audio library modules:
