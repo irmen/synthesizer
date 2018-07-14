@@ -59,8 +59,8 @@ class Sample:
 
     def __repr__(self):
         locked = " (locked)" if self.__locked else ""
-        return "<Sample at 0x{0:x}, {1:g} seconds, {2:d} channels, {3:d} bits, rate {4:d}{5:s}>"\
-            .format(id(self), self.duration, self.__nchannels, 8*self.__samplewidth, self.__samplerate, locked)
+        return "<Sample '{6:s}' at 0x{0:x}, {1:g} seconds, {2:d} channels, {3:d} bits, rate {4:d}{5:s}>"\
+            .format(id(self), self.duration, self.__nchannels, 8*self.__samplewidth, self.__samplerate, locked, self.name)
 
     def __eq__(self, other):
         if not isinstance(other, Sample):
@@ -222,7 +222,7 @@ class Sample:
 
     def copy(self):
         """Returns a copy of the sample (unlocked)."""
-        cpy = Sample()
+        cpy = self.__class__()
         cpy.copy_from(self)
         return cpy
 

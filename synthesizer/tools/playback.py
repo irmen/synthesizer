@@ -130,16 +130,15 @@ class PyAudio(AudioApi):
                 audio_format = audio.get_format_from_width(self.samplewidth) if self.samplewidth != 4 else pyaudio.paInt32
                 self.stream = audio.open(format=audio_format, channels=self.nchannels, rate=self.samplerate, output=True)
                 stream_ready.set()
-                q = self.samp_queue
                 try:
                     while True:
-                        sample = q.get()
+                        sample = self.samp_queue.get()
                         if not sample:
                             break
                         sample.write_frames(self.stream)
                         if self.played_callback:
                             self.played_callback(sample)
-                        if q.empty():
+                        if self.samp_queue.empty():
                             time.sleep(sample.duration)
                             self.all_played.set()
                 finally:
@@ -181,9 +180,8 @@ class PyAudio(AudioApi):
         try:
             while True:
                 self.samp_queue.get(block=False)
-            self.all_played.set()
         except queue.Empty:
-            pass
+            self.all_played.set()
 
     def wait_all_played(self):
         self.all_played.wait()
@@ -234,9 +232,8 @@ class SounddeviceThread(AudioApi):
         try:
             while True:
                 self.samp_queue.get(block=False)
-            self.all_played.set()
         except queue.Empty:
-            pass
+            self.all_played.set()
 
     def _recreate_outputter(self):
         if self.samp_queue:
@@ -259,16 +256,15 @@ class SounddeviceThread(AudioApi):
                 self.stream = sounddevice.RawOutputStream(self.samplerate, channels=self.nchannels, dtype=dtype)
                 self.stream.start()
                 stream_ready.set()
-                q = self.samp_queue
                 try:
                     while True:
-                        sample = q.get()
+                        sample = self.samp_queue.get()
                         if not sample:
                             break
                         sample.write_frames(self.stream)
                         if self.played_callback:
                             self.played_callback(sample)
-                        if q.empty():
+                        if self.samp_queue.empty():
                             time.sleep(sample.duration)
                             self.all_played.set()
                 finally:
@@ -373,27 +369,15 @@ class Sounddevice(AudioApi):
         return sounddevice.get_portaudio_version()[1]
 
     def play(self, sample):
-        class SampleBufferGrabber:
-            def __init__(self):
-
-                self.buffer = None
-
-            def write(self, buffer):
-                assert self.buffer is None
-                self.buffer = buffer
-
         self.all_played.clear()
-        grabber = SampleBufferGrabber()
-        sample.write_frames(grabber)
-        self.buffer_queue.put(grabber.buffer)
+        self.buffer_queue.put(sample.view_frame_data())
 
     def wipe_queue(self):
         try:
             while True:
                 self.buffer_queue.get(block=False)
-            self.all_played.set()
         except queue.Empty:
-            pass
+            self.all_played.set()
 
     def _recreate_outputter(self):
         if self.stream:
