@@ -282,7 +282,7 @@ class Repl(cmd.Cmd):
     def __init__(self, discard_unused_instruments=False):
         self.song = Song()
         self.discard_unused_instruments = discard_unused_instruments
-        self.out = Output()
+        self.out = Output(mixing="sequential", queue_size=1)
         super(Repl, self).__init__()
 
     def do_quit(self, args):
@@ -336,6 +336,7 @@ class Repl(cmd.Cmd):
             m = Mixer(patterns, self.song.bpm, self.song.ticks, self.song.instruments)
             result = m.mix(verbose=len(patterns) > 1).make_16bit()
             self.out.play_sample(result)
+            self.out.wait_all_played()
         except ValueError as x:
             print("ERROR:", x)
 
@@ -365,6 +366,7 @@ class Repl(cmd.Cmd):
             m = Mixer([{"sample": pattern}], self.song.bpm, self.song.ticks, {"sample": sample})
             result = m.mix(verbose=False).make_16bit()
             self.out.play_sample(result)
+            self.out.wait_all_played()
         except ValueError as x:
             print("ERROR:", x)
 
@@ -398,7 +400,9 @@ class Repl(cmd.Cmd):
             return
         print("Mixing and streaming to speakers...")
         try:
-            self.out.play_samples(self.song.mix_generator())
+            samples = self.out.normalized_samples(self.song.mix_generator())
+            for sample in samples:
+                self.out.play_sample(sample)
             print("\r                          ")
             self.out.wait_all_played()
         except KeyboardInterrupt:
@@ -484,13 +488,15 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
-        with Output() as out:
+        with Output(mixing="sequential", queue_size=1) as out:
             if out.supports_streaming:
                 # mix and stream output in real time
                 print("Mixing and streaming to speakers...")
-                out.play_samples(song.mix_generator())
-                print("\r                          ")
+                samples = out.normalized_samples(song.mix_generator())
+                for s in samples:
+                    out.play_sample(s)
                 out.wait_all_played()
+                print("\r                          ")
             else:
                 # output can't stream, fallback on mixing everything to a wav
                 print("(Sorry, streaming audio is not possible, perhaps because you don't have sounddevice or pyaudio installed?)")

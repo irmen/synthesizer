@@ -11,18 +11,23 @@ def main(args):
     hqresample = AudiofileToWavStream.supports_hq_resample()
     if not hqresample:
         print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
-    wav_streams = [AudiofileToWavStream(filename, hqresample=hqresample) for filename in args]
-    with StreamMixer(wav_streams, endless=True) as mixer:
+    wav_streams = [AudiofileToWavStream(filename, hqresample=False) for filename in args]
+    with StreamMixer(wav_streams, endless=False) as mixer:
         mixed_samples = iter(mixer)
-        with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels) as output:
+        with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels, mixing="sequential") as output:
             if not output.supports_streaming:
                 raise RuntimeError("need api that supports streaming")
             levelmeter = LevelMeter(rms_mode=False, lowest=-50)
-            output.register_notify_played(levelmeter.update)
+
+            def update_and_print_meter(sample):
+                levelmeter.update(sample)
+                levelmeter.print(bar_width=60)
+
+            output.register_notify_played(update_and_print_meter)
             for timestamp, sample in mixed_samples:
                 output.play_sample(sample)
-                levelmeter.print(bar_width=60)
-    print("done.")
+            output.wait_all_played()
+    print("\ndone.")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ notes = [
 
 def demo_tones():
     synth = WaveSynth()
-    with Output(nchannels=1) as out:
+    with Output(nchannels=1, mixing="sequential", queue_size=2) as out:
         for wave in [synth.square_h, synth.square, synth.sine, synth.triangle, synth.sawtooth, synth.sawtooth_h]:
             print(wave.__name__)
             for note, freq in list(notes[4].items())[6:]:
@@ -69,7 +69,7 @@ def demo_song(profiling=False):
     else:
         song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
             "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
-        with Output(synth.samplerate, synth.samplewidth, 1) as out:
+        with Output(synth.samplerate, synth.samplewidth, 1, mixing="sequential") as out:
             for note in song.split():
                 if note == ";":
                     print()
@@ -156,7 +156,7 @@ def fm():
     plot.xlabel("Time")
     plot.specgram(s1.get_frame_array(), Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
     plot.show()
-    with Output(nchannels=1, samplerate=22050) as out:
+    with Output(nchannels=1, samplerate=22050, mixing="sequential") as out:
         synth = WaveSynth(samplerate=22050)
         freq = 440
         lfo1 = Linear(5, samplerate=synth.samplerate)
@@ -462,7 +462,7 @@ def vibrato():
         s1.envelope(0.01, 0.1, 0.6, 2)
         return s1
 
-    with Output(synth.samplerate, nchannels=1) as out:
+    with Output(synth.samplerate, nchannels=1, mixing="sequential") as out:
         for f in [220, 330, 440]:
             sample = make_sample(f)
             out.play_sample(sample)
@@ -489,7 +489,7 @@ def harmonics():
 
 def chords():
     synth = WaveSynth()
-    with Output(nchannels=1) as out:
+    with Output(nchannels=1, mixing="sequential", queue_size=1) as out:
         for rootnote in octave_notes:
             chord_keys = major_chord_keys(rootnote, 4)
             print("chord", rootnote, ["{0} {1}".format(note, octave) for note, octave in chord_keys])

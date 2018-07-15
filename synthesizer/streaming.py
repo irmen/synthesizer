@@ -21,7 +21,7 @@ __all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFrames
 
 log = logging.getLogger("synthesizer.streaming")
 
-AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "fileformat", "duration"])
+AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "bitspersample", "fileformat", "duration"])
 
 
 class AudiofileToWavStream(io.RawIOBase):
@@ -41,10 +41,15 @@ class AudiofileToWavStream(io.RawIOBase):
     oggdec_executable = "oggdec"
 
     def __init__(self, filename, outputfilename=None, samplerate=0,
-                 channels=0, sampleformat="", hqresample=True, startfrom=0, duration=0):
+                 channels=0, sampleformat="", bitspersample=0, hqresample=True, startfrom=0, duration=0):
         samplerate = samplerate or params.norm_samplerate
         channels = channels or params.norm_nchannels
         sampleformat = sampleformat or str(8*params.norm_samplewidth)
+        if bitspersample == 0:
+            try:
+                bitspersample = int(sampleformat)
+            except ValueError:
+                pass
         self.filename = filename
         if not os.path.isfile(filename):
             raise FileNotFoundError(filename)
@@ -63,7 +68,8 @@ class AudiofileToWavStream(io.RawIOBase):
                 probe = self.probe_format(self.filename)
                 self.conversion_required = probe.rate != samplerate or probe.channels != channels \
                     or probe.sampformat != sampleformat or probe.fileformat != "wav" \
-                    or self._startfrom > 0 or self._duration > 0
+                    or self._startfrom > 0 or self._duration > 0 \
+                    or (bitspersample != 0 and probe.bitspersample != 0 and probe.bitspersample != bitspersample)
                 self.format_probe = probe
             except (subprocess.CalledProcessError, IOError, OSError):
                 pass
@@ -116,14 +122,24 @@ class AudiofileToWavStream(io.RawIOBase):
         nchannels = int(stream["channels"])
         sampleformat = {
             "u8": "8",
+            "u8p": "8",
             "s16": "16",
+            "s16p": "16",
             "s32": "32",
+            "s32p": "32",
             "fltp": "float",
+            "flt": "float",
             }.get(stream["sample_fmt"], "<unknown>")
+        bitspersample = stream["bits_per_sample"]
+        if bitspersample == 0:
+            try:
+                bitspersample = int(sampleformat)
+            except ValueError:
+                pass
         fileformat = probe["format"]["format_name"]
         duration = probe["format"].get("duration") or stream.get("duration")
         duration = float(duration) if duration else None
-        result = AudioFormatProbe(samplerate, nchannels, sampleformat, fileformat, duration)
+        result = AudioFormatProbe(samplerate, nchannels, sampleformat, bitspersample, fileformat, duration)
         log.debug("format probe of %s: %s", filename, result)
         return result
 
@@ -199,17 +215,27 @@ class AudiofileToWavStream(io.RawIOBase):
 
 class SampleStream:
     """
-    Turns a wav reader that produces frames, into a stream of Sample objects.
+    Turns a wav reader that produces frames, or a wav file stream,
+    into a stream of Sample objects.
     You can add filters to the stream that process the Sample objects coming trough.
     """
-    def __init__(self, wav_reader, buffer_size):
-        self.source = wav_reader
-        self.samplewidth = wav_reader.getsampwidth()
-        self.samplerate = wav_reader.getframerate()
-        self.nchannels = wav_reader.getnchannels()
+    def __init__(self, wav_reader_or_stream, buffer_size):
+        if isinstance(wav_reader_or_stream, io.RawIOBase):
+            self.source = wave.open(wav_reader_or_stream, "r")
+        else:
+            self.source = wav_reader_or_stream
+        self.samplewidth = self.source.getsampwidth()
+        self.samplerate = self.source.getframerate()
+        self.nchannels = self.source.getnchannels()
         self.buffer_size = buffer_size
         self.filters = []
         self.frames_filters = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def add_frames_filter(self, filter):
         filter.set_params(self.buffer_size, self.samplerate, self.samplewidth, self.nchannels)
@@ -227,7 +253,7 @@ class SampleStream:
         for filter in self.frames_filters:
             frames = filter(frames)
         if not frames:
-            return None
+            raise StopIteration
         sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
         for filter in self.filters:
             sample = filter(sample)
@@ -274,6 +300,7 @@ class StreamMixer:
         self.samplerate = samplerate or params.norm_samplerate
         self.nchannels = nchannels or params.norm_nchannels
         self.timestamp = 0.0
+        self.endless = endless
         self.sample_streams = []
         self.wrapped_streams = {}   # samplestream->(wrappedstream, end_callback) (to close stuff properly)
         for stream in streams:
@@ -322,7 +349,7 @@ class StreamMixer:
         """
         Yields tuple(timestamp, Sample) that represent the mixed audio streams.
         """
-        while True:
+        while self.endless or self.sample_streams:
             mixed_sample = Sample.from_raw_frames(b"", self.samplewidth, self.samplerate, self.nchannels)
             for sample_stream in self.sample_streams:
                 try:

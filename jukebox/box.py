@@ -20,8 +20,8 @@ import tkinter.messagebox
 import tkinter.filedialog
 from .backend import BACKEND_PORT
 from synthesizer.sample import Sample, LevelMeter
-from synthesizer.tools.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
-from synthesizer.tools.playback import Output
+from synthesizer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
+from synthesizer.playback import Output
 import appdirs
 import Pyro4
 import Pyro4.errors
@@ -50,7 +50,7 @@ class Player:
         self.app.after(self.update_rate, self.tick)
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
-        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels)
+        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, mixing="sequential", queue_size=2)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
         self.output.register_notify_played(self.levelmeter.update)

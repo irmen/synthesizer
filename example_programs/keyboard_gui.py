@@ -605,7 +605,8 @@ class SynthGUI(tk.Frame):
         self.synth = WaveSynth(samplewidth=2, samplerate=samplerate)
         if self.output is not None:
             self.output.close()
-        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1)
+        # XXX change sequential output into proper real-time mixing output
+        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, mixing="sequential", queue_size=2)
 
     def add_osc_to_gui(self):
         osc_nr = len(self.oscillators)
@@ -788,7 +789,7 @@ class SynthGUI(tk.Frame):
         for ev in self.envelope_filters:
             duration = max(duration, ev.duration)
         if duration == 0:
-            duration = max_duration
+            duration = 1
         duration = min(duration, max_duration)
         sample = self.generate_sample(oscillator, duration)
         if sample:
@@ -797,6 +798,7 @@ class SynthGUI(tk.Frame):
                 print("16 bit overflow!")  # XXX
                 sample.make_16bit()
             self.output.play_sample(sample)
+            self.output.wait_all_played()
 
     def stop_playing_note(self):
         self.playing_note = False
@@ -884,7 +886,7 @@ class SynthGUI(tk.Frame):
             self.after(int(rate*1000*0.95), lambda: self._pressed(freqs))
         else:
             # normal, single note
-            self.output.wipe_queue()
+            self.output.silence()
             if self.rendering_choice.get() == "render":
                 self.statusbar["text"] = "rendering note sample..."
                 self.after_idle(lambda: self.render_and_play_note(iter(mixed_osc)))

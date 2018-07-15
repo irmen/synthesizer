@@ -14,11 +14,15 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 import os
 import sys
 import wave
+import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthesizer.sample import Sample, LevelMeter
 from synthesizer.streaming import AudiofileToWavStream
 from synthesizer.playback import Output
+
+
+update_rate = 15  # lower this if you hear the sound crackle!
 
 
 def play_console(filename_or_stream):
@@ -27,23 +31,22 @@ def play_console(filename_or_stream):
         samplerate = wav.getframerate()
         nchannels = wav.getnchannels()
         bar_width = 60
-        update_rate = 20   # lower this if you hear the sound crackle!
         levelmeter = LevelMeter(rms_mode=False, lowest=-50.0)
         with Output(samplerate, samplewidth, nchannels, mixing="sequential") as out:
             print("Audio API used:", out.audio_api)
             if not out.supports_streaming:
                 raise RuntimeError("need api that supports streaming")
             out.register_notify_played(levelmeter.update)
-            x = 0
             while True:
                 frames = wav.readframes(samplerate//update_rate)
                 if not frames:
                     break
                 sample = Sample.from_raw_frames(frames, wav.getsampwidth(), wav.getframerate(), wav.getnchannels())
-                out.play_delayed(sample, x * 0.1)   # XXX
-                # out.play_sample(sample)
+                out.play_sample(sample)
                 levelmeter.print(bar_width)
-                x += 1  # XXX
+            while out.still_playing():
+                time.sleep(1/update_rate)
+                levelmeter.print(bar_width)
             out.wait_all_played()
     print("\nDone. Enter to exit:")
     input()
@@ -84,7 +87,6 @@ class LevelGUI(tk.Frame):
         frame.pack()
         self.info.pack(side=tk.TOP)
         self.pack()
-        self.update_rate = 15   # lower this if you hear the sound crackle!
         self.open_audio_file(audio_source)
         self.after_idle(self.update)
 
@@ -94,7 +96,7 @@ class LevelGUI(tk.Frame):
         self.samplerate = self.wave.getframerate()
         self.nchannels = self.wave.getnchannels()
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.lowest_level)
-        self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels)
+        self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels, mixing="sequential")
         print("Audio API used:", self.audio_out.audio_api)
         if not self.audio_out.supports_streaming:
             raise RuntimeError("need api that supports streaming")
@@ -105,12 +107,12 @@ class LevelGUI(tk.Frame):
         self.info.configure(text=info)
 
     def update(self, *args, **kwargs):
-        frames = self.wave.readframes(self.samplerate//self.update_rate)
-        if not frames:
+        if not self.audio_out.still_playing():
             self.pbvar_left.set(0)
             self.pbvar_right.set(0)
             print("done!")
             return
+        frames = self.wave.readframes(self.samplerate//update_rate)
         sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
         self.audio_out.play_sample(sample)
         left, peak_l = self.levelmeter.level_left, self.levelmeter.peak_left
@@ -129,7 +131,7 @@ class LevelGUI(tk.Frame):
             self.pb_right.configure(style="yellow.Vertical.TProgressbar")
         else:
             self.pb_right.configure(style="green.Vertical.TProgressbar")
-        self.after(self.update_rate, self.update)
+        self.after(1000//update_rate, self.update)
 
 
 def play_gui(file_or_stream):
@@ -148,7 +150,7 @@ if __name__ == "__main__":
             print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
         try:
             play_console(stream)
-            # XXX play_gui(stream)
+            # play_gui(stream)
         finally:
             try:
                 import tty

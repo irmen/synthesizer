@@ -30,12 +30,12 @@ class JukeboxBackendRemoting:
         track = self.mdb.get_track(hashcode, track_id)
         return self.track2dict(track)
 
-    @Pyro4.expose
+    @Pyro4.expose       # type: ignore
     @property
     def num_tracks(self):
         return self.mdb.num_tracks()
 
-    @Pyro4.expose
+    @Pyro4.expose       # type: ignore
     @property
     def total_playtime(self):
         return self.mdb.total_playtime()

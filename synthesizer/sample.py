@@ -228,7 +228,8 @@ class Sample:
 
     def copy_from(self, other):
         """Overwrite the current sample with a copy of the other."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         self.__frames = other.__frames
         self.__samplewidth = other.__samplewidth
         self.__samplerate = other.__samplerate
@@ -248,7 +249,8 @@ class Sample:
 
     def load_wav(self, file_or_stream):
         """Loads sample data from the wav file. You can use a filename or a stream object."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         with wave.open(file_or_stream) as w:
             if not 2 <= w.getsampwidth() <= 4:
                 raise IOError("only supports sample sizes of 2, 3 or 4 bytes")
@@ -308,7 +310,8 @@ class Sample:
         Normalize the sample, meaning: convert it to the default samplerate, sample width and number of channels.
         When mixing samples, they should all have the same properties, and this method is ideal to make sure of that.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         self.resample(params.norm_samplerate)
         if self.samplewidth != params.norm_samplewidth:
             # Convert to 16 bit sample size.
@@ -325,7 +328,8 @@ class Sample:
         Resamples to a different sample rate, without changing the pitch and duration of the sound.
         The algorithm used is simple, and it will cause a loss of sound quality.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         if samplerate == self.__samplerate:
             return self
         self.__frames = audioop.ratecv(self.__frames, self.samplewidth, self.nchannels, self.samplerate, samplerate, None)[0]
@@ -338,7 +342,8 @@ class Sample:
         This will change the pitch and duration of the sound accordingly.
         The algorithm used is simple, and it will cause a loss of sound quality.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert speed > 0
         if speed == 1.0:
             return self
@@ -354,7 +359,8 @@ class Sample:
         This is ideal to create sample value headroom to mix multiple samples together without clipping or overflow issues.
         Usually after mixing you will convert back to 16 bits using maximized amplitude to have no quality loss.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         self.__frames = self.get_32bit_frames(scale_amplitude)
         self.__samplewidth = 4
         return self
@@ -376,7 +382,8 @@ class Sample:
         scale into the full 16 bit range without clipping or overflow.
         This is used for example to downscale a 32 bits mixed sample back into 16 bit width.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert self.samplewidth >= 2
         if maximize_amplitude:
             self.amplify_max()
@@ -387,7 +394,8 @@ class Sample:
 
     def amplify_max(self):
         """Amplify the sample to maximum volume without clipping or overflow happening."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         max_amp = audioop.max(self.__frames, self.samplewidth)
         max_target = 2 ** (8 * self.samplewidth - 1) - 2
         if max_amp > 0:
@@ -397,7 +405,8 @@ class Sample:
 
     def amplify(self, factor):
         """Amplifies (multiplies) the sample by the given factor. May cause clipping/overflow if factor is too large."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         self.__frames = audioop.mul(self.__frames, self.samplewidth, factor)
         return self
 
@@ -414,7 +423,8 @@ class Sample:
 
     def clip(self, start_seconds, end_seconds):
         """Keep only a given clip from the sample."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert end_seconds > start_seconds
         start = self.frame_idx(start_seconds)
         end = self.frame_idx(end_seconds)
@@ -423,7 +433,8 @@ class Sample:
 
     def split(self, seconds):
         """Splits the sample in two parts, keep the first and return the chopped off bit at the end."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         end = self.frame_idx(seconds)
         if end != len(self.__frames):
             chopped = self.copy()
@@ -434,7 +445,8 @@ class Sample:
 
     def add_silence(self, seconds, at_start=False):
         """Add silence at the end (or at the start)"""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         required_extra = self.frame_idx(seconds)
         if at_start:
             self.__frames = b"\0"*required_extra + self.__frames
@@ -444,7 +456,8 @@ class Sample:
 
     def join(self, other):
         """Add another sample at the end of the current one. The other sample must have the same properties."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert self.samplewidth == other.samplewidth
         assert self.samplerate == other.samplerate
         assert self.nchannels == other.nchannels
@@ -453,7 +466,8 @@ class Sample:
 
     def fadeout(self, seconds, target_volume=0.0):
         """Fade the end of the sample out to the target volume (usually zero) in the given time."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         seconds = min(seconds, self.duration)
         i = self.frame_idx(self.duration-seconds)
         begin = self.__frames[:i]
@@ -471,7 +485,8 @@ class Sample:
 
     def fadein(self, seconds, start_volume=0.0):
         """Fade the start of the sample in from the starting volume (usually zero) in the given time."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         seconds = min(seconds, self.duration)
         i = self.frame_idx(seconds)
         begin = self.__frames[:i]  # we fade this chunk
@@ -495,7 +510,8 @@ class Sample:
         If you use a Sample (or array), it will be cycled if needed and its maximum amplitude
         is scaled to be 1.0, effectively using it as if it was an oscillator.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         frames = self.get_frame_array()
         if isinstance(modulator, (Sample, list, array.array)):
             # modulator is a waveform, turn that into an 'oscillator' ran
@@ -514,13 +530,15 @@ class Sample:
 
     def reverse(self):
         """Reverse the sound."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         self.__frames = audioop.reverse(self.__frames, self.__samplewidth)
         return self
 
     def invert(self):
         """Invert every sample value around 0."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         return self.amplify(-1)
 
     def delay(self, seconds, keep_length=False):
@@ -529,7 +547,8 @@ class Sample:
         If delay<0, instead, skip a bit from the start.
         This is a nice wrapper around the add_silence and clip functions.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         if seconds > 0:
             if keep_length:
                 num_frames = len(self.__frames)
@@ -551,13 +570,15 @@ class Sample:
 
     def bias(self, bias):
         """Add a bias constant to each sample value."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         self.__frames = audioop.bias(self.__frames, self.__samplewidth, bias)
         return self
 
     def mono(self, left_factor=1.0, right_factor=1.0):
         """Make the sample mono (1-channel) applying the given left/right channel factors when downmixing"""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         if self.__nchannels == 1:
             return self
         if self.__nchannels == 2:
@@ -568,13 +589,15 @@ class Sample:
 
     def left(self):
         """Only keeps left channel."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert self.__nchannels == 2
         return self.mono(1.0, 0)
 
     def right(self):
         """Only keeps right channel."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert self.__nchannels == 2
         return self.mono(0, 1.0)
 
@@ -585,7 +608,8 @@ class Sample:
         so you may suffer from phase cancellation when playing the resulting stereo sample.
         If the sample is already stereo, the left/right channel separation is changed instead.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         if self.__nchannels == 2:
             # first split the left and right channels and then remix them
             right = self.copy().right()
@@ -603,7 +627,8 @@ class Sample:
         The current sample will be the other channel.
         If the current sample already was stereo, the new mono channel is mixed with the existing left or right channel.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert other.__nchannels == 1
         assert other.__samplerate == self.__samplerate
         assert other.__samplewidth == self.__samplewidth
@@ -627,7 +652,8 @@ class Sample:
         Linear Stereo panning, -1 = full left, 1 = full right.
         If you provide a LFO that will be used for panning instead.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         if not lfo:
             return self.stereo((1-panning)/2, (1+panning)/2)
         lfo = iter(lfo)
@@ -659,7 +685,8 @@ class Sample:
         The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead).
         If you use a very short delay the echos blend into the sound and the effect is more like a reverb.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         if amount > 0:
             length = max(0, self.duration - length)
             echo = self.copy()
@@ -677,7 +704,8 @@ class Sample:
 
     def envelope(self, attack, decay, sustainlevel, release):
         """Apply an ADSR volume envelope. A,D,R are in seconds, Sustainlevel is a factor."""
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert attack >= 0 and decay >= 0 and release >= 0
         assert 0 <= sustainlevel <= 1
         D = self.split(attack)   # self = A
@@ -700,7 +728,8 @@ class Sample:
         You can limit the length taken from the other sample.
         When pad_shortest is False, no sample length adjustment is done.
         """
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert self.samplewidth == other.samplewidth
         assert self.samplerate == other.samplerate
         assert self.nchannels == other.nchannels
@@ -724,7 +753,8 @@ class Sample:
         """
         if seconds == 0.0:
             return self.mix(other, other_seconds)
-        assert not self.__locked
+        if self.__locked:
+            raise RuntimeError("cannot modify a locked sample")
         assert self.samplewidth == other.samplewidth
         assert self.samplerate == other.samplerate
         assert self.nchannels == other.nchannels

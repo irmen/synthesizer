@@ -1,11 +1,12 @@
 import time
 import itertools
+import platform
 from synthesizer import synth
 
 
 samplerate = 44100
 frequency = 880
-num_samples = samplerate*10
+num_samples = samplerate*20
 
 oscillators = [synth.Linear,        # baseline
                synth.FastSine,
@@ -29,6 +30,18 @@ oscillators = [synth.Linear,        # baseline
                synth.Pointy]
 
 
+if platform.python_implementation().lower() == "pypy":
+    print("PYPY WARMUP...")
+    for osctype in oscillators:
+        osc = osctype(frequency, samplerate=samplerate)
+        if hasattr(osc, "generator2"):
+            osc = osc.generator2()
+        else:
+            osc = osc.generator()
+        print(osctype.__name__)
+        dummy = list(itertools.islice(osc, num_samples))
+
+print("\nTESTING...")
 for osctype in oscillators:
     osc = osctype(frequency, samplerate=samplerate)
     if hasattr(osc, "generator2"):
