@@ -605,7 +605,7 @@ class SynthGUI(tk.Frame):
         self.synth = WaveSynth(samplewidth=2, samplerate=samplerate)
         if self.output is not None:
             self.output.close()
-        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, queuesize=2)
+        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1)
 
     def add_osc_to_gui(self):
         osc_nr = len(self.oscillators)

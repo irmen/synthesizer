@@ -43,7 +43,6 @@ class Player:
     update_rate = 50    # 50 ms = 20 updates/sec
     levelmeter_lowest = -40  # dB
     xfade_duration = 7
-    async_buffers = 4
 
     def __init__(self, app, trackframes):
         self.app = app
@@ -51,7 +50,7 @@ class Player:
         self.app.after(self.update_rate, self.tick)
         self.stopping = False
         self.mixer = StreamMixer([], endless=True)
-        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels, queuesize=self.async_buffers)
+        self.output = Output(self.mixer.samplerate, self.mixer.samplewidth, self.mixer.nchannels)
         self.mixed_samples = iter(self.mixer)
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.levelmeter_lowest)
         self.output.register_notify_played(self.levelmeter.update)

@@ -34,15 +34,19 @@ def play_console(filename_or_stream):
             if not out.supports_streaming:
                 raise RuntimeError("need api that supports streaming")
             out.register_notify_played(levelmeter.update)
+            x = 0
             while True:
                 frames = wav.readframes(samplerate//update_rate)
                 if not frames:
                     break
                 sample = Sample.from_raw_frames(frames, wav.getsampwidth(), wav.getframerate(), wav.getnchannels())
-                out.play_sample(sample)
+                out.play_delayed(sample, x * 0.1)   # XXX
+                # out.play_sample(sample)
                 levelmeter.print(bar_width)
-    print("\ndone")
-    input("Enter to exit:")
+                x += 1  # XXX
+            out.wait_all_played()
+    print("\nDone. Enter to exit:")
+    input()
 
 
 class LevelGUI(tk.Frame):
@@ -143,12 +147,11 @@ if __name__ == "__main__":
         if stream.conversion_required and not hqresample:
             print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
         try:
-            # play_console(stream)
-            play_gui(stream)
+            play_console(stream)
+            # XXX play_gui(stream)
         finally:
             try:
                 import tty
                 os.system("stty sane")   # sometimes needed because spawning ffmpeg sometimes breaks the terminal...
             except ImportError:
                 pass
-    print("Done.")

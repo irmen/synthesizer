@@ -484,7 +484,7 @@ def main(track_file, outputfile=None, interactive=False):
     else:
         song = Song()
         song.read(track_file, discard_unused_instruments=discard_unused)
-        with Output(queuesize=3) as out:
+        with Output() as out:
             if out.supports_streaming:
                 # mix and stream output in real time
                 print("Mixing and streaming to speakers...")

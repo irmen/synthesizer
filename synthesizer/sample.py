@@ -7,14 +7,14 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import sys
 import wave
-import audioop
+import audioop      # type: ignore
 import array
 import math
 import itertools
 from typing import Callable, Generator
 from . import params
 try:
-    import numpy
+    import numpy        # type: ignore
 except ImportError:
     numpy = None
 
