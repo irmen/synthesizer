@@ -29,7 +29,7 @@ def play_console(filename_or_stream):
         bar_width = 60
         update_rate = 20   # lower this if you hear the sound crackle!
         levelmeter = LevelMeter(rms_mode=False, lowest=-50.0)
-        with Output(samplerate, samplewidth, nchannels) as out:
+        with Output(samplerate, samplewidth, nchannels, mixing="sequential") as out:
             print("Audio API used:", out.audio_api)
             if not out.supports_streaming:
                 raise RuntimeError("need api that supports streaming")

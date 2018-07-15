@@ -32,18 +32,18 @@ pyaudio = None
 winsound = None
 
 
-def best_api(samplerate=0, samplewidth=0, nchannels=0, chunkduration=0):
+def best_api(samplerate=0, samplewidth=0, nchannels=0, chunkduration=0, mixing="mix"):
     try:
-        return Sounddevice(samplerate, samplewidth, nchannels, chunkduration)
+        return Sounddevice(samplerate, samplewidth, nchannels, chunkduration, mixing)
     except ImportError:
         try:
-            return SounddeviceThread(samplerate, samplewidth, nchannels, chunkduration)
+            return SounddeviceThread(samplerate, samplewidth, nchannels, chunkduration, mixing)
         except ImportError:
             try:
-                return PyAudio(samplerate, samplewidth, nchannels, chunkduration)
+                return PyAudio(samplerate, samplewidth, nchannels, chunkduration, mixing)
             except ImportError:
                 try:
-                    return Winsound(samplerate, samplewidth, nchannels, chunkduration)
+                    return Winsound(samplerate, samplewidth, nchannels, chunkduration, mixing)
                 except ImportError:
                     raise Exception("no supported audio output api available") from None
 
@@ -150,15 +150,17 @@ class SampleMixer:
 
 class AudioApi:
     """Base class for the various audio APIs."""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
+                 chunkduration: float=0.0, mixing: str="mix") -> None:
         self.samplerate = samplerate or params.norm_samplerate
         self.samplewidth = samplewidth or params.norm_samplewidth
         self.nchannels = nchannels or params.norm_nchannels
         self.chunkduration = chunkduration or params.norm_chunk_duration
-        self.samp_queue = queue.Queue(maxsize=100)      # type: queue.Queue[Dict[str, Any]]
+        self.command_queue = queue.Queue(maxsize=100)      # type: queue.Queue[Dict[str, Any]]
         self.supports_streaming = True
         self.all_played = threading.Event()
         self.played_callback = None
+        self.mixing = mixing
         self._job_id_seq = 1
         # the actual playback of the samples from the queue is done in the various subclasses
 
@@ -172,7 +174,7 @@ class AudioApi:
     def wipe_queue(self):
         try:
             while True:
-                self.samp_queue.get(block=False)
+                self.command_queue.get(block=False)
         except queue.Empty:
             self.all_played.set()
 
@@ -180,22 +182,24 @@ class AudioApi:
         return int(self.samplerate * self.samplewidth * self.nchannels * self.chunkduration)
 
     def play(self, sample: Sample, repeat: bool=False, chunks_delay: int=0) -> int:
+        if chunks_delay > 0 and self.mixing != "mix":
+            raise ValueError("can only use delay when using the mixing playback mode")
         job = {"action": "play", "sample": sample, "repeat": repeat, "delay": chunks_delay}
         job_id = self._job_id_seq
         self._job_id_seq += 1
         job["id"] = job_id
         self.all_played.clear()
-        self.samp_queue.put(job)
+        self.command_queue.put(job)
         return job_id
 
     def silence(self) -> None:
-        self.samp_queue.put({"action": "silence"})
+        self.command_queue.put({"action": "silence"})
 
     def close(self) -> None:
-        self.samp_queue.put({"action": "close"})
+        self.command_queue.put({"action": "close"})
 
     def stop(self, sid: int) -> None:
-        self.samp_queue.put({"action": "stop", "sid": sid})
+        self.command_queue.put({"action": "stop", "sid": sid})
 
     def query_api_version(self) -> str:
         return "unknown"
@@ -224,8 +228,9 @@ class AudioApi:
 
 class PyAudio(AudioApi):
     """Api to the somewhat older pyaudio library (that uses portaudio)"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
+                 chunkduration: float=0.0, mixing: str="mix") -> None:
+        super().__init__(samplerate, samplewidth, nchannels, chunkduration, mixing)
         global pyaudio
         import pyaudio      # type: ignore
         thread_ready = threading.Event()
@@ -240,7 +245,7 @@ class PyAudio(AudioApi):
                 try:
                     while True:
                         try:
-                            job = self.samp_queue.get_nowait()
+                            job = self.command_queue.get_nowait()
                             if job["action"] == "close":
                                 break
                             elif job["action"] == "silence":
@@ -299,8 +304,9 @@ class PyAudio(AudioApi):
 class SounddeviceThread(AudioApi):
     """Api to the more featureful sounddevice library (that uses portaudio) -
     using blocking streams with an audio output thread"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
+                 chunkduration: float=0.0, mixing: str="mix") -> None:
+        super().__init__(samplerate, samplewidth, nchannels, chunkduration, mixing)
         global sounddevice
         import sounddevice      # type: ignore
         if self.samplewidth == 1:
@@ -324,7 +330,7 @@ class SounddeviceThread(AudioApi):
                 try:
                     while True:
                         try:
-                            job = self.samp_queue.get_nowait()
+                            job = self.command_queue.get_nowait()
                             if job["action"] == "close":
                                 break
                             elif job["action"] == "silence":
@@ -372,9 +378,10 @@ class SounddeviceThread(AudioApi):
 class Sounddevice(AudioApi):
     """Api to the more featureful sounddevice library (that uses portaudio) -
     using callback stream, without a separate audio output thread"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration)
-        del self.samp_queue     # this one doesn't use a thread with a command queue
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
+                 chunkduration: float=0.0, mixing: str="mix") -> None:
+        super().__init__(samplerate, samplewidth, nchannels, chunkduration, mixing)
+        del self.command_queue     # this one doesn't use a thread with a command queue
         global sounddevice
         import sounddevice
         if self.samplewidth == 1:
@@ -388,6 +395,7 @@ class Sounddevice(AudioApi):
         else:
             raise ValueError("invalid sample width")
         self._empty_sound_data = b"\0" * self.chunksize()
+
         self.mixer = SampleMixer(chunksize=self.chunksize(), all_played_callback=self._all_played_callback)
         self.stream = sounddevice.RawOutputStream(self.samplerate, channels=self.nchannels, dtype=dtype,        # type: ignore
                                                   blocksize=self.chunksize() // self.nchannels // self.samplewidth,
@@ -408,6 +416,8 @@ class Sounddevice(AudioApi):
 
     def play(self, sample: Sample, repeat: bool=False, chunks_delay: int=0) -> int:
         self.all_played.clear()
+        if chunks_delay > 0 and self.mixing != "mix":
+            raise ValueError("can only use delay when using the mixing playback mode")
         return self.mixer.add_sample(sample, repeat, chunks_delay=chunks_delay) or 0
 
     def silence(self):
@@ -446,8 +456,11 @@ class Sounddevice(AudioApi):
 
 class Winsound(AudioApi):
     """Minimally featured api for the winsound library that comes with Python"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
+                 chunkduration: float=0.0, mixing="sequential") -> None:
+        super().__init__(samplerate, samplewidth, nchannels, chunkduration, mixing)
+        if self.mixing != "sequential":
+            raise ValueError("winsound api only supports sequential playback")
         self.supports_streaming = False
         import winsound as _winsound        # type: ignore
         global winsound
@@ -486,11 +499,12 @@ class Winsound(AudioApi):
 
 class Output:
     """Plays samples to audio output device or streams them to a file."""
-    def __init__(self, samplerate=0, samplewidth=0, nchannels=0, chunkduration=0):
+    def __init__(self, samplerate=0, samplewidth=0, nchannels=0, chunkduration=0, mixing="mix"):
         self.samplerate = self.samplewidth = self.nchannels = 0
         self.chunkduration = 0.0
         self.audio_api = None
-        self.reset_params(samplerate, samplewidth, nchannels, chunkduration)
+        self.mixing = ""
+        self.reset_params(samplerate, samplewidth, nchannels, chunkduration, mixing)
         self.supports_streaming = self.audio_api.supports_streaming
 
     def __repr__(self):
@@ -498,8 +512,8 @@ class Output:
             .format(id(self), self.nchannels, 8*self.samplewidth, self.samplerate)
 
     @classmethod
-    def for_sample(cls, sample):
-        return cls(sample.samplerate, sample.samplewidth, sample.nchannels)
+    def for_sample(cls, sample: Sample, chunkduration: int=0, mixing: str="mix") -> 'Output':
+        return cls(sample.samplerate, sample.samplewidth, sample.nchannels, chunkduration, mixing)
 
     def __enter__(self):
         return self
@@ -510,12 +524,16 @@ class Output:
     def close(self):
         self.audio_api.close()
 
-    def reset_params(self, samplerate: int, samplewidth: int, nchannels: int, chunkduration: float) -> None:
+    def reset_params(self, samplerate: int, samplewidth: int, nchannels: int,
+                     chunkduration: float, mixing: str) -> None:
+        if mixing not in ("mix", "sequential"):
+            raise ValueError("invalid mix mode, must be mix or sequential")
         if self.audio_api is not None:
-            if samplerate == self.samplerate and samplewidth == self.samplewidth and nchannels == self.nchannels:
+            if samplerate == self.samplerate and samplewidth == self.samplewidth \
+                    and nchannels == self.nchannels and mixing == self.mixing:
                 if chunkduration == self.chunkduration:
                     return   # nothing changed
-                raise NotImplementedError("chunkduration change")
+                raise NotImplementedError("chunkduration change")    # XXX
         if self.audio_api:
             self.audio_api.close()
             self.audio_api.wait_all_played()
@@ -523,7 +541,8 @@ class Output:
         self.samplewidth = samplewidth or params.norm_samplewidth
         self.nchannels = nchannels or params.norm_nchannels
         self.chunkduration = chunkduration or params.norm_chunk_duration
-        self.audio_api = best_api(self.samplerate, self.samplewidth, self.nchannels, self.chunkduration)
+        self.mixing = mixing
+        self.audio_api = best_api(self.samplerate, self.samplewidth, self.nchannels, self.chunkduration, self.mixing)
 
     def play_sample(self, sample, delay=0.0):
         """Play a single sample (asynchronously)."""
