@@ -13,11 +13,13 @@ import os
 import io
 import logging
 from collections import namedtuple
+from typing import Callable, Generator
 from .sample import Sample
 from . import params
 
 
-__all__ = ["AudiofileToWavStream", "StreamMixer", "VolumeFilter", "EndlessFramesFilter", "SampleStream"]
+__all__ = ["AudiofileToWavStream", "StreamMixer", "StreamingSample", "SampleStream",
+           "VolumeFilter", "EndlessFramesFilter"]
 
 log = logging.getLogger("synthesizer.streaming")
 
@@ -50,7 +52,7 @@ class AudiofileToWavStream(io.RawIOBase):
                 bitspersample = int(sampleformat)
             except ValueError:
                 pass
-        self.filename = filename
+        self.name = filename
         if not os.path.isfile(filename):
             raise FileNotFoundError(filename)
         self.outputfilename = outputfilename
@@ -65,7 +67,7 @@ class AudiofileToWavStream(io.RawIOBase):
         if self.ffprobe_executable:
             try:
                 # probe the existing file format, to see if we can avoid needless conversion
-                probe = self.probe_format(self.filename)
+                probe = self.probe_format(self.name)
                 self.conversion_required = probe.rate != samplerate or probe.channels != channels \
                     or probe.sampformat != sampleformat or probe.fileformat != "wav" \
                     or self._startfrom > 0 or self._duration > 0 \
@@ -146,19 +148,19 @@ class AudiofileToWavStream(io.RawIOBase):
     def start_stream(self):
         if not self.conversion_required:
             if self.outputfilename:
-                log.debug("direct copy from %s to %s", self.filename, self.outputfilename)
-                with open(self.filename, "rb") as source:
+                log.debug("direct copy from %s to %s", self.name, self.outputfilename)
+                with open(self.name, "rb") as source:
                     with open(self.outputfilename, "wb") as dest:
                         shutil.copyfileobj(source, dest)
                 return
-            log.debug("direct stream input from %s", self.filename)
-            self.stream = open(self.filename, "rb")
+            log.debug("direct stream input from %s", self.name)
+            self.stream = open(self.name, "rb")
         else:
             if self.ffmpeg_executable:
                 command = [self.ffmpeg_executable, "-v", "fatal", "-hide_banner", "-nostdin"]
                 if self._startfrom > 0:
                     command.extend(["-ss", str(self._startfrom)])    # seek start time in seconds
-                command.extend(["-i", self.filename])
+                command.extend(["-i", self.name])
                 if self._duration > 0:
                     command.extend(["-to", str(self._duration)])    # clip duration in seconds
                 command.extend(self.resample_options)
@@ -182,11 +184,11 @@ class AudiofileToWavStream(io.RawIOBase):
                 # ffmpeg not available, try oggdec instead (only works on ogg files, but hey we can try)
                 try:
                     if self.outputfilename:
-                        command = [self.oggdec_executable, "--quiet", "--output", self.outputfilename, self.filename]
+                        command = [self.oggdec_executable, "--quiet", "--output", self.outputfilename, self.name]
                         log.debug("oggdec file conversion: %s", " ".join(command))
                         subprocess.check_call(command)
                     else:
-                        command = [self.oggdec_executable, "--quiet", "--output", "-", self.filename]
+                        command = [self.oggdec_executable, "--quiet", "--output", "-", self.name]
                         converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
                         self.stream = converter.stdout
                         log.debug("oggdec streaming: %s", " ".join(command))
@@ -201,7 +203,7 @@ class AudiofileToWavStream(io.RawIOBase):
         return self.stream.read(bytes)
 
     def close(self):
-        log.debug("closing stream %s", self.filename)
+        log.debug("closing stream %s", self.name)
         if self.stream:
             self.stream.close()
 
@@ -211,6 +213,41 @@ class AudiofileToWavStream(io.RawIOBase):
             return self.stream.closed
         else:
             return True
+
+
+class StreamingSample(Sample):
+    """
+    A sound Sample that does NOT load the full source file/stream into memory,
+    but loads and produces chunks of it as they are needed.
+    Can be used for the realtime mixing output mode to allow
+    on demand decoding and streaming of large sound files.
+    """
+    def __init__(self, wave_file=None, name=""):
+        self.wave_stream = None
+        super().__init__(wave_file, name)
+
+    def load_wav(self, file_or_stream):
+        self.wave_stream = wave.open(file_or_stream, "rb")
+        if not 2 <= self.wave_stream.getsampwidth() <= 4:
+            raise IOError("only supports sample sizes of 2, 3 or 4 bytes")
+        if not 1 <= self.wave_stream.getnchannels() <= 2:
+            raise IOError("only supports mono or stereo channels")
+        filename = file_or_stream if isinstance(file_or_stream, str) else file_or_stream.name
+        samp = Sample.from_raw_frames(b"", self.wave_stream.getsampwidth(), self.wave_stream.getframerate(),
+                                      self.wave_stream.getnchannels(), filename)
+        self.copy_from(samp)
+        self.wave_stream.readframes(1)   # warm up the stream
+
+    def chunked_frame_data(self, chunksize: int, repeat: bool=False,
+                           stopcondition: Callable[[], bool]=lambda: False) -> Generator[memoryview, None, None]:
+        silence = b"\0" * chunksize
+        while True:
+            audiodata = self.wave_stream.readframes(chunksize // self.samplewidth // self.nchannels)
+            if not audiodata:
+                break   # source stream exhausted
+            if len(audiodata) < chunksize:
+                audiodata += silence[len(audiodata):]
+            yield memoryview(audiodata)
 
 
 class SampleStream:
@@ -230,6 +267,7 @@ class SampleStream:
         self.buffer_size = buffer_size
         self.filters = []
         self.frames_filters = []
+        self.source.readframes(1)  # warm up the stream
 
     def __enter__(self):
         return self

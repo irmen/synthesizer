@@ -32,7 +32,7 @@ pyaudio = None
 winsound = None
 
 
-def best_api(samplerate=0, samplewidth=0, nchannels=0, chunkduration=0, mixing="mix", queue_size=100):
+def best_api(samplerate=0, samplewidth=0, nchannels=0, frames_per_chunk=0, mixing="mix", queue_size=100):
     if mixing not in ("mix", "sequential"):
         raise ValueError("invalid mix mode, must be mix or sequential")
     if mixing == "mix":
@@ -42,9 +42,9 @@ def best_api(samplerate=0, samplewidth=0, nchannels=0, chunkduration=0, mixing="
     for candidate in candidates:
         try:
             if mixing == "mix":
-                return candidate(samplerate, samplewidth, nchannels, chunkduration)
+                return candidate(samplerate, samplewidth, nchannels, frames_per_chunk)
             else:
-                return candidate(samplerate, samplewidth, nchannels, chunkduration, queue_size)
+                return candidate(samplerate, samplewidth, nchannels, queue_size=queue_size)
         except ImportError:
             continue
     raise Exception("no supported audio output api available")
@@ -62,18 +62,18 @@ class RealTimeMixer:
         self.add_lock = threading.Lock()
         self.chunks_mixed = 0
         self._sid = 0
-        self.active_samples = {}   # type: Dict[int, Tuple[str, int, Generator[memoryview, None, None]]]
+        self.active_samples = {}   # type: Dict[int, Tuple[str, float, Generator[memoryview, None, None]]]
         self.sample_counts = defaultdict(int)  # type: Dict[str, int]
         self.sample_limits = defaultdict(lambda: 9999999)  # type: Dict[str, int]
 
-    def add_sample(self, sample: Sample, repeat: bool=False, sid: int=None, chunks_delay: int=0) -> Union[int, None]:
+    def add_sample(self, sample: Sample, repeat: bool=False, chunk_delay: int=0, sid: int=None) -> Union[int, None]:
         if not self.allow_sample(sample, repeat):
             return None
         with self.add_lock:
             sample_chunks = sample.chunked_frame_data(chunksize=self.chunksize, repeat=repeat)
             self._sid += 1
             sid = sid or self._sid
-            self.active_samples[sid] = (sample.name, self.chunks_mixed+chunks_delay, sample_chunks)
+            self.active_samples[sid] = (sample.name, self.chunks_mixed+chunk_delay, sample_chunks)
             self.sample_counts[sample.name] += 1
             return sid
 
@@ -87,8 +87,8 @@ class RealTimeMixer:
     def determine_samples_to_mix(self) -> List[Tuple[int, Tuple[str, Generator[memoryview, None, None]]]]:
         active = []
         with self.add_lock:
-            for sid, (name, mix_after_chunk, sample) in self.active_samples.items():
-                if mix_after_chunk <= self.chunks_mixed:
+            for sid, (name, play_at_chunk, sample) in self.active_samples.items():
+                if play_at_chunk <= self.chunks_mixed:
                     active.append((sid, (name, sample)))
         return active
 
@@ -121,7 +121,7 @@ class RealTimeMixer:
                         raise ValueError("chunk from sample is larger than chunksize from mixer")
                     if len(chunk) < self.chunksize:
                         # pad the chunk with some silence
-                        chunk = memoryview(chunk.tobytes() + silence[:self.chunksize - len(chunk)])
+                        chunk = memoryview(chunk.tobytes() + silence[len(chunk):])
                     chunks_to_mix.append(chunk)
                 except StopIteration:
                     self.remove_sample(i)
@@ -150,16 +150,16 @@ class RealTimeMixer:
 class AudioApi:
     """Base class for the various audio APIs."""
     def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
-                 chunkduration: float=0.0, queue_size: int=100) -> None:
+                 frames_per_chunk: int=0, queue_size: int=100) -> None:
         self.samplerate = samplerate or params.norm_samplerate
         self.samplewidth = samplewidth or params.norm_samplewidth
         self.nchannels = nchannels or params.norm_nchannels
-        self.chunkduration = chunkduration or params.norm_chunk_duration
+        self.frames_per_chunk = frames_per_chunk or params.norm_frames_per_chunk
         self.supports_streaming = True
         self.all_played = threading.Event()
         self.playing_callback = None
         self.queue_size = queue_size
-        self.mixer = RealTimeMixer(self.chunksize(), self._all_played_callback)
+        self.mixer = RealTimeMixer(self.chunksize, self._all_played_callback)
         # the actual playback of the samples from the queue is done in the various subclasses
 
     def __str__(self) -> str:
@@ -169,12 +169,14 @@ class AudioApi:
         else:
             return self.__class__.__name__
 
+    @property
     def chunksize(self) -> int:
-        return int(self.samplerate * self.samplewidth * self.nchannels * self.chunkduration)
+        return self.frames_per_chunk * self.samplewidth * self.nchannels
 
-    def play(self, sample: Sample, repeat: bool=False, chunks_delay: int=0) -> int:
+    def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
         self.all_played.clear()
-        return self.mixer.add_sample(sample, repeat, chunks_delay=chunks_delay) or 0
+        chunk_delay = int(self.samplerate * delay / self.frames_per_chunk)
+        return self.mixer.add_sample(sample, repeat, chunk_delay) or 0
 
     def silence(self) -> None:
         self.mixer.clear_sources()
@@ -217,8 +219,8 @@ class AudioApi:
 class Sounddevice_Mix(AudioApi):
     """Api to the more featureful sounddevice library (that uses portaudio) -
     using callback stream, without a separate audio output thread"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration, 0)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, frames_per_chunk: int=0) -> None:
+        super().__init__(samplerate, samplewidth, nchannels, frames_per_chunk, 0)
         global sounddevice
         import sounddevice
         if self.samplewidth == 1:
@@ -231,11 +233,10 @@ class Sounddevice_Mix(AudioApi):
             dtype = "int32"
         else:
             raise ValueError("invalid sample width")
-        self._empty_sound_data = b"\0" * self.chunksize()
+        self._empty_sound_data = b"\0" * self.chunksize
         self.mixed_chunks = self.mixer.chunks()
         self.stream = sounddevice.RawOutputStream(self.samplerate, channels=self.nchannels, dtype=dtype,        # type: ignore
-                                                  blocksize=self.chunksize() // self.nchannels // self.samplewidth,
-                                                  callback=self.streamcallback)
+                                                  blocksize=self.frames_per_chunk, callback=self.streamcallback)
         self.stream.start()
 
     def query_api_version(self):
@@ -277,8 +278,8 @@ class Sounddevice_Mix(AudioApi):
 class SounddeviceThread_Mix(AudioApi):
     """Api to the more featureful sounddevice library (that uses portaudio) -
     using blocking streams with an audio output thread"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration, 0)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, frames_per_chunk: int=0) -> None:
+        super().__init__(samplerate, samplewidth, nchannels, frames_per_chunk, 0)
         global sounddevice
         import sounddevice      # type: ignore
         if self.samplewidth == 1:
@@ -299,12 +300,12 @@ class SounddeviceThread_Mix(AudioApi):
             stream.start()
             thread_ready.set()
             try:
-                silence = b"\0" * self.chunksize()
+                silence = b"\0" * self.chunksize
                 while True:
                     data = next(mixed_chunks) or silence
                     stream.write(data)
-                    if len(data) < self.chunksize():
-                        stream.write(silence[:self.chunksize()-len(data)])
+                    if len(data) < self.chunksize:
+                        stream.write(silence[len(data):])
                     if self.playing_callback:
                         sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                         self.playing_callback(sample)
@@ -332,9 +333,8 @@ class SounddeviceThread_Mix(AudioApi):
 class SounddeviceThread_Seq(AudioApi):
     """Api to the more featureful sounddevice library (that uses portaudio) -
     using blocking streams with an audio output thread"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
-                 chunkduration: float=0.0, queue_size: int=100) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration, queue_size)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, queue_size: int=100) -> None:
+        super().__init__(samplerate, samplewidth, nchannels, queue_size=queue_size)
         global sounddevice
         import sounddevice      # type: ignore
         if self.samplewidth == 1:
@@ -381,7 +381,7 @@ class SounddeviceThread_Seq(AudioApi):
         self.output_thread.start()
         thread_ready.wait()
 
-    def play(self, sample: Sample, repeat: bool=False, chunks_delay: int=0) -> int:
+    def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
         self.all_played.clear()
         self.command_queue.put({"action": "play", "sample": sample})
         return 0
@@ -419,8 +419,8 @@ class SounddeviceThread_Seq(AudioApi):
 
 class PyAudio_Mix(AudioApi):
     """Api to the somewhat older pyaudio library (that uses portaudio)"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, chunkduration: float=0.0) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration, 0)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, frames_per_chunk: int=0) -> None:
+        super().__init__(samplerate, samplewidth, nchannels, frames_per_chunk, 0)
         global pyaudio
         import pyaudio      # type: ignore
         thread_ready = threading.Event()
@@ -433,14 +433,14 @@ class PyAudio_Mix(AudioApi):
                 stream = audio.open(format=audio_format, channels=self.nchannels, rate=self.samplerate, output=True)
                 thread_ready.set()
                 try:
-                    silence = b"\0" * self.chunksize()
+                    silence = b"\0" * self.chunksize
                     while True:
                         data = next(mixed_chunks) or silence
                         if isinstance(data, memoryview):
                             data = data.tobytes()   # PyAudio stream can't deal with memoryview
                         stream.write(data)
-                        if len(data) < self.chunksize():
-                            stream.write(silence[:self.chunksize()-len(data)])
+                        if len(data) < self.chunksize:
+                            stream.write(silence[len(data):])
                         if self.playing_callback:
                             sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                             self.playing_callback(sample)
@@ -477,9 +477,8 @@ class PyAudio_Mix(AudioApi):
 
 class PyAudio_Seq(AudioApi):
     """Api to the somewhat older pyaudio library (that uses portaudio)"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
-                 chunkduration: float=0.0, queue_size: int=100) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration, queue_size)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, queue_size: int=100) -> None:
+        super().__init__(samplerate, samplewidth, nchannels, queue_size=queue_size)
         global pyaudio
         import pyaudio      # type: ignore
         thread_ready = threading.Event()
@@ -521,7 +520,7 @@ class PyAudio_Seq(AudioApi):
         outputter.start()
         thread_ready.wait()
 
-    def play(self, sample: Sample, repeat: bool=False, chunks_delay: int=0) -> int:
+    def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
         self.all_played.clear()
         self.command_queue.put({"action": "play", "sample": sample})
         return 0
@@ -565,9 +564,8 @@ class PyAudio_Seq(AudioApi):
 
 class Winsound_Seq(AudioApi):
     """Minimally featured api for the winsound library that comes with Python"""
-    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0,
-                 chunkduration: float=0.0, queue_size: int=100) -> None:
-        super().__init__(samplerate, samplewidth, nchannels, chunkduration, 0)
+    def __init__(self, samplerate: int=0, samplewidth: int=0, nchannels: int=0, queue_size: int=100) -> None:
+        super().__init__(samplerate, samplewidth, nchannels, queue_size=queue_size)
         self.supports_streaming = False
         import winsound as _winsound        # type: ignore
         global winsound
@@ -575,12 +573,12 @@ class Winsound_Seq(AudioApi):
         self.threads = []       # type: List[threading.Thread]
         self.played_callback = None
 
-    def play(self, sample: Sample, repeat: bool=False, chunks_delay: int=0) -> int:
+    def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
         # plays the sample in a background thread so that we can continue while the sound plays.
         # we don't use SND_ASYNC because that complicates cleaning up the temp files a lot.
         if repeat:
             raise ValueError("winsound player doesn't support repeating samples")
-        if chunks_delay != 0:
+        if delay != 0.0:
             raise ValueError("winsound player doesn't support delayed playing")
         self.wait_all_played()
         t = threading.Thread(target=self._play, args=(sample,), daemon=True)
@@ -609,13 +607,13 @@ class Winsound_Seq(AudioApi):
 
 class Output:
     """Plays samples to audio output device or streams them to a file."""
-    def __init__(self, samplerate=0, samplewidth=0, nchannels=0, chunkduration=0, mixing="mix", queue_size=100):
+    def __init__(self, samplerate=0, samplewidth=0, nchannels=0, frames_per_chunk=0, mixing="mix", queue_size=100):
         self.samplerate = self.samplewidth = self.nchannels = 0
-        self.chunkduration = 0.0
+        self.frames_per_chunk = 0
         self.audio_api = None
         self.mixing = ""
         self.queue_size = -1
-        self.reset_params(samplerate, samplewidth, nchannels, chunkduration, mixing, queue_size)
+        self.reset_params(samplerate, samplewidth, nchannels, frames_per_chunk, mixing, queue_size)
         self.supports_streaming = self.audio_api.supports_streaming
 
     def __repr__(self):
@@ -623,8 +621,8 @@ class Output:
             .format(id(self), self.nchannels, 8*self.samplewidth, self.samplerate)
 
     @classmethod
-    def for_sample(cls, sample: Sample, chunkduration: int=0, mixing: str="mix") -> 'Output':
-        return cls(sample.samplerate, sample.samplewidth, sample.nchannels, chunkduration, mixing)
+    def for_sample(cls, sample: Sample, frames_per_chunk: int=0, mixing: str="mix") -> 'Output':
+        return cls(sample.samplerate, sample.samplewidth, sample.nchannels, frames_per_chunk, mixing)
 
     def __enter__(self):
         return self
@@ -636,12 +634,12 @@ class Output:
         self.audio_api.close()
 
     def reset_params(self, samplerate: int, samplewidth: int, nchannels: int,
-                     chunkduration: float, mixing: str, queue_size: int) -> None:
+                     frames_per_chunk: int, mixing: str, queue_size: int) -> None:
         if mixing not in ("mix", "sequential"):
             raise ValueError("invalid mix mode, must be mix or sequential")
         if self.audio_api is not None:
             if samplerate == self.samplerate and samplewidth == self.samplewidth and nchannels == self.nchannels \
-                    and chunkduration == self.chunkduration and mixing == self.mixing and queue_size == self.queue_size:
+                    and frames_per_chunk == self.frames_per_chunk and mixing == self.mixing and queue_size == self.queue_size:
                 return   # nothing changed
         if self.audio_api:
             self.audio_api.close()
@@ -649,18 +647,19 @@ class Output:
         self.samplerate = samplerate or params.norm_samplerate
         self.samplewidth = samplewidth or params.norm_samplewidth
         self.nchannels = nchannels or params.norm_nchannels
-        self.chunkduration = chunkduration or params.norm_chunk_duration
+        self.frames_per_chunk = frames_per_chunk or params.norm_frames_per_chunk
         self.mixing = mixing
         self.queue_size = queue_size
         self.audio_api = best_api(self.samplerate, self.samplewidth, self.nchannels,
-                                  self.chunkduration, self.mixing, self.queue_size)
+                                  self.frames_per_chunk, self.mixing, self.queue_size)
+        time.sleep(0.1)     # allow the mixer thread/stream to warm up (if any)
 
     def play_sample(self, sample, repeat: bool=False, delay=0.0) -> int:
         """Play a single sample (asynchronously)."""
         assert sample.samplewidth == self.samplewidth
         assert sample.samplerate == self.samplerate
         assert sample.nchannels == self.nchannels
-        return self.audio_api.play(sample, repeat, delay/self.chunkduration)
+        return self.audio_api.play(sample, repeat, delay)
 
     def stop_sample(self, sid_or_name: Union[int, str]) -> None:
         self.audio_api.stop(sid_or_name)

@@ -46,7 +46,10 @@ class Sample:
         self.__locked = False
         if wave_file:
             self.load_wav(wave_file)
-            self.__filename = wave_file
+            if isinstance(wave_file, str):
+                self.__filename = wave_file
+            else:
+                self.__filename = wave_file.name
             assert 1 <= self.__nchannels <= 2
             assert 2 <= self.__samplewidth <= 4
             assert self.__samplerate > 1
@@ -177,7 +180,7 @@ class Sample:
         return max(20.0*math.log(peak_left, 10), -60.0), max(20.0*math.log(peak_right, 10), -60.0)
 
     def __len__(self):
-        """returns the number of sample frames"""
+        """returns the number of sample frames (not the number of bytes!)"""
         return len(self.__frames) // self.__samplewidth // self.__nchannels
 
     def view_frame_data(self) -> memoryview:
@@ -190,6 +193,7 @@ class Sample:
         Generator that produces chunks of raw frame data bytes of the given length.
         Stops when the stopcondition function returns True or the sample runs out,
         unless repeat is set to True to let it loop endlessly.
+        This is used by the realtime mixing output mode, which processes sounds in small chunks.
         """
         if repeat:
             # continuously repeated
