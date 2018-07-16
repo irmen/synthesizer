@@ -1,12 +1,12 @@
 import time
 import itertools
 from collections import OrderedDict
-from synthesizer.sample import Sample
-from synthesizer.synth import WaveSynth, key_freq, octave_notes, major_chord_keys, note_freq, key_num
-from synthesizer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, SawtoothH, WhiteNoise, Linear, Harmonics
-from synthesizer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle
-from synthesizer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter, DelayFilter
-from synthesizer.playback import Output
+from synthplayer.sample import Sample
+from synthplayer.synth import WaveSynth, key_freq, octave_notes, major_chord_keys, note_freq, key_num
+from synthplayer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, SawtoothH, WhiteNoise, Linear, Harmonics
+from synthplayer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle
+from synthplayer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter, DelayFilter
+from synthplayer.playback import Output
 
 
 # some note frequencies for octaves 1 to 7

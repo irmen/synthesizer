@@ -11,8 +11,8 @@ import os
 import cmd
 import sys
 from configparser import ConfigParser
-from synthesizer.sample import Sample
-from synthesizer.playback import Output
+from synthplayer.sample import Sample
+from synthplayer.playback import Output
 
 
 class Mixer:

@@ -17,12 +17,12 @@ import wave
 import time
 import tkinter as tk
 import tkinter.ttk as ttk
-from synthesizer.sample import Sample, LevelMeter
-from synthesizer.streaming import AudiofileToWavStream
-from synthesizer.playback import Output
+from synthplayer.sample import Sample, LevelMeter
+from synthplayer.streaming import AudiofileToWavStream
+from synthplayer.playback import Output
 
 
-update_rate = 15  # lower this if you hear the sound crackle!
+update_rate = 30  # lower this if you hear the sound crackle!
 
 
 def play_console(filename_or_stream):
@@ -107,6 +107,7 @@ class LevelGUI(tk.Frame):
         self.info.configure(text=info)
 
     def update(self, *args, **kwargs):
+        # @todo read/stream the audio in the background, only update the levelmeters here
         if not self.audio_out.still_playing():
             self.pbvar_left.set(0)
             self.pbvar_right.set(0)
@@ -149,8 +150,8 @@ if __name__ == "__main__":
         if stream.conversion_required and not hqresample:
             print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
         try:
-            play_console(stream)
-            # play_gui(stream)
+            # play_console(stream)
+            play_gui(stream)
         finally:
             try:
                 import tty

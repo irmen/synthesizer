@@ -8,6 +8,8 @@ You can play simple notes, chords, or let an arpeggiator run the notes.
 Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
+# @todo fix colors of checkboxes and radiobuttons and file dialog on dark desktop theme
+
 import time
 import collections
 import itertools
@@ -15,11 +17,11 @@ import tkinter as tk
 from tkinter.filedialog import askopenfile, asksaveasfile
 from threading import Semaphore
 from configparser import ConfigParser
-from synthesizer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear, Semicircle, Pointy
-from synthesizer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
-from synthesizer.synth import major_chord_keys
-from synthesizer.sample import Sample
-from synthesizer.playback import Output
+from synthplayer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear, Semicircle, Pointy
+from synthplayer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
+from synthplayer.synth import major_chord_keys
+from synthplayer.sample import Sample
+from synthplayer.playback import Output
 try:
     import matplotlib
     matplotlib.use("tkagg")

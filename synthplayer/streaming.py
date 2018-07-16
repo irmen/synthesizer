@@ -21,7 +21,7 @@ from . import params
 __all__ = ["AudiofileToWavStream", "StreamMixer", "StreamingSample", "SampleStream",
            "VolumeFilter", "EndlessFramesFilter"]
 
-log = logging.getLogger("synthesizer.streaming")
+log = logging.getLogger("synthplayer.streaming")
 
 AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "bitspersample", "fileformat", "duration"])
 

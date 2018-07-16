@@ -19,9 +19,9 @@ import tkinter.font
 import tkinter.messagebox
 import tkinter.filedialog
 from .backend import BACKEND_PORT
-from synthesizer.sample import Sample, LevelMeter
-from synthesizer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
-from synthesizer.playback import Output
+from synthplayer.sample import Sample, LevelMeter
+from synthplayer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
+from synthplayer.playback import Output
 import appdirs
 import Pyro4
 import Pyro4.errors

@@ -1,7 +1,7 @@
 import time
 import itertools
 import platform
-from synthesizer import synth
+from synthplayer import synth
 
 
 samplerate = 44100

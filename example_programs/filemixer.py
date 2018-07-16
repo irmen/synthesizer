@@ -1,8 +1,8 @@
 import os
 import sys
-from synthesizer.sample import LevelMeter
-from synthesizer.streaming import AudiofileToWavStream, StreamMixer
-from synthesizer.playback import Output
+from synthplayer.sample import LevelMeter
+from synthplayer.streaming import AudiofileToWavStream, StreamMixer
+from synthplayer.playback import Output
 
 
 def main(args):

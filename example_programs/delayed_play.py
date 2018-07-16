@@ -5,8 +5,8 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 
 import os
 import time
-from synthesizer.sample import Sample
-from synthesizer.playback import Output
+from synthplayer.sample import Sample
+from synthplayer.playback import Output
 
 
 def play_console():

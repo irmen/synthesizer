@@ -1,30 +1,40 @@
 [![saythanks](https://img.shields.io/badge/say-thanks-ff69b4.svg)](https://saythanks.io/to/irmen)
 
-# synthesizer.mixer and synthesizer.sample
-
-Sample mixer and sequencer, think a simple [Roland TR-909](https://en.wikipedia.org/wiki/Roland_TR-909).
-It can mix the patterns into a single output file, but can also stream the mix.
-It provides a command line interface where you can edit the song and patterns,
-play samples and individual patterns, and mix or stream it by entering simple commands.
-
 Note: *requires Python 3.5 or newer*.
 
+# synthplayer.synth
 
-The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.
-These are written to an audio stream of one of the supported audio libraries.
-Libraries supported are: [``sounddevice``](http://python-sounddevice.readthedocs.io/),
-[``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) and ``winsound`` (in this order). 
-``winsound`` cannot stream audio however so not everything works with this one.
-
-# synthesizer.synth
-
-There's also a waveform synthesizer that can generate different wave form samples:
+A waveform synthesizer that can generate different wave form samples:
 sine, triangle, sawtooth, square, pulse wave, harmonics and white noise.
 It also supports Frequency Modulation, Pulse-width modulation, and ADSR envelopes using LFOs.
 
 ![Synth Waveforms overview](./waveforms.png?raw=true "Overview of the basic waveforms available in the synth")
 
 ![Synth GUI screenshot](./screenshot.png?raw=true "Screenshot of the Keyboard GUI")
+
+
+# synthplayer.playback
+
+Sound playback engine. Supports multiple sound APIs, 
+efficient sequential streaming or real-time mixing of shorter sound clips.
+The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.
+These are written to an audio stream of one of the supported audio libraries.
+Libraries supported are: [``sounddevice``](http://python-sounddevice.readthedocs.io/),
+[``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) and ``winsound`` (in this order). 
+``winsound`` has very limited capabilities so beware.
+
+# synthplayer.sample
+
+Contains the Sample class that represents a digitized sound clip.
+It provides a set of simple sound manipulation methods such as changing
+the amplitude, fading in/out, and format conversions.
+
+
+# synthplayer.streaming
+
+Provides various classes to stream audio data with.
+Uses ffmpeg or oggdec to read/stream many different sound formats.
+
 
 # jukebox.box
 
@@ -33,7 +43,7 @@ fade from a track to the next from the list, and insert random soundbytes for ad
 The songs are queried from a backend audio file database server program.
  
 
-## how the track mixer works
+## how the track mixer example program works
 
 You assemble rhythm samples into bars and patterns, which are then mixed.
 Samples have to be in .wav format but can be anything that the Python wave module understands. 
@@ -87,7 +97,7 @@ hihat4     = .... x...
 kick7      = .... x...
 ```
 
-## invoking the mixer
+### invoking the mixer
 
 To simply mix and stream your track file to your speakers use the following command:
 

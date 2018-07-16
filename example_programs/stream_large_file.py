@@ -5,9 +5,9 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
 """
 
 import os
-from synthesizer.playback import Output
-from synthesizer.streaming import AudiofileToWavStream, SampleStream, StreamingSample
-from synthesizer.sample import Sample
+from synthplayer.playback import Output
+from synthplayer.streaming import AudiofileToWavStream, SampleStream, StreamingSample
+from synthplayer.sample import Sample
 
 
 if __name__ == "__main__":
