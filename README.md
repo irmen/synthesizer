@@ -1,6 +1,8 @@
 [![saythanks](https://img.shields.io/badge/say-thanks-ff69b4.svg)](https://saythanks.io/to/irmen)
+[![Build Status](https://travis-ci.org/irmen/synthplayer.svg?branch=master)](https://travis-ci.org/irmen/synthplayer)
+[![Latest Version](https://img.shields.io/pypi/v/synthplayer.svg)](https://pypi.python.org/pypi/synthplayer/)
 
-Note: *requires Python 3.5 or newer*.
+*requires Python 3.5 or newer*.
 
 # synthplayer.synth
 
@@ -36,14 +38,14 @@ Provides various classes to stream audio data with.
 Uses ffmpeg or oggdec to read/stream many different sound formats.
 
 
-# jukebox.box
+# Example program: jukebox.box
 
 This is a jukebox like party sound player that allows to prepare a playlist,
 fade from a track to the next from the list, and insert random soundbytes for added fun.
 The songs are queried from a backend audio file database server program.
  
 
-## how the track mixer example program works
+# Example program: trackmixer
 
 You assemble rhythm samples into bars and patterns, which are then mixed.
 Samples have to be in .wav format but can be anything that the Python wave module understands. 
@@ -97,7 +99,7 @@ hihat4     = .... x...
 kick7      = .... x...
 ```
 
-### invoking the mixer
+## invoking the mixer
 
 To simply mix and stream your track file to your speakers use the following command:
 
