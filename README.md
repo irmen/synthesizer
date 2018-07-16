@@ -1,6 +1,9 @@
 [![saythanks](https://img.shields.io/badge/say-thanks-ff69b4.svg)](https://saythanks.io/to/irmen)
-[![Build Status](https://travis-ci.org/irmen/synthplayer.svg?branch=master)](https://travis-ci.org/irmen/synthplayer)
 [![Latest Version](https://img.shields.io/pypi/v/synthplayer.svg)](https://pypi.python.org/pypi/synthplayer/)
+
+**Sofware sound synthesizer (FM/PCM oscillators), sound file streaming and conversion, 
+and sound playback and mixing engine.**
+
 
 *requires Python 3.5 or newer*.
 

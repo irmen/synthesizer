@@ -7,4 +7,9 @@ __pycache__/
 *.wav
 *.mp3
 !samples/*.wav
-.mypy_cache
+.mypy_cache/
+.eggs/
+.pytest_cache/
+build
+dist
+*.egg-info/
