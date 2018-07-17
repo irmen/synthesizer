@@ -62,6 +62,7 @@ class RealTimeMixer:
         self.add_lock = threading.Lock()
         self.chunks_mixed = 0
         self._sid = 0
+        self._closed = False
         self.active_samples = {}   # type: Dict[int, Tuple[str, float, Generator[memoryview, None, None]]]
         self.sample_counts = defaultdict(int)  # type: Dict[str, int]
         self.sample_limits = defaultdict(lambda: 9999999)  # type: Dict[str, int]
@@ -111,7 +112,7 @@ class RealTimeMixer:
 
     def chunks(self) -> Generator[memoryview, None, None]:
         silence = b"\0" * self.chunksize
-        while True:
+        while not self._closed:
             chunks_to_mix = []
             active_samples = self.determine_samples_to_mix()
             for i, (name, s) in active_samples:
@@ -145,6 +146,10 @@ class RealTimeMixer:
 
     def set_limit(self, samplename: str, max_simultaneously: int) -> None:
         self.sample_limits[samplename] = max_simultaneously
+
+    def close(self):
+        self.clear_sources()
+        self._closed = True
 
 
 class AudioApi:
@@ -189,8 +194,8 @@ class AudioApi:
         self.mixer.set_limit(samplename, max_simultaneously)
 
     def close(self) -> None:
-        # @todo close audio library / mixer cleanly in all apis
         self.silence()
+        self.mixer.close()
 
     def query_api_version(self) -> str:
         return "unknown"
@@ -255,12 +260,15 @@ class Sounddevice_Mix(AudioApi):
     def close(self):
         super().close()
         self.stream.stop()
+        self.stream = None
 
     def streamcallback(self, outdata, frames, time, status):
-        data = next(self.mixed_chunks)
+        try:
+            data = next(self.mixed_chunks)
+        except StopIteration:
+            raise sounddevice.CallbackStop    # play remaining buffer and then stop the stream
         if not data:
             # no frames available, use silence
-            # raise sounddevice.CallbackAbort   this will abort the stream
             assert len(outdata) == len(self._empty_sound_data)
             outdata[:] = self._empty_sound_data
         elif len(data) < len(outdata):
@@ -268,7 +276,6 @@ class Sounddevice_Mix(AudioApi):
             # underflow, pad with silence
             outdata[:len(data)] = data
             outdata[len(data):] = b"\0" * (len(outdata) - len(data))
-            # raise sounddevice.CallbackStop    this will play the remaining samples and then stop the stream
         else:
             outdata[:] = data
         if self.playing_callback:
@@ -310,6 +317,8 @@ class SounddeviceThread_Mix(AudioApi):
                     if self.playing_callback:
                         sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                         self.playing_callback(sample)
+            except StopIteration:
+                pass
             finally:
                 stream.stop()
                 stream.close()
@@ -317,6 +326,10 @@ class SounddeviceThread_Mix(AudioApi):
         self.output_thread = threading.Thread(target=audio_thread, name="audio-sounddevice", daemon=True)
         self.output_thread.start()
         thread_ready.wait()
+
+    def close(self):
+        super().close()
+        self.output_thread.join()
 
     def query_api_version(self):
         return sounddevice.get_portaudio_version()[1]
@@ -404,6 +417,7 @@ class SounddeviceThread_Seq(AudioApi):
     def close(self) -> None:
         super().close()
         self.command_queue.put({"action": "stop"})
+        self.output_thread.join()
 
     def query_api_version(self):
         return sounddevice.get_portaudio_version()[1]
@@ -445,14 +459,20 @@ class PyAudio_Mix(AudioApi):
                         if self.playing_callback:
                             sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                             self.playing_callback(sample)
+                except StopIteration:
+                    pass
                 finally:
                     stream.close()
             finally:
                 audio.terminate()
 
-        outputter = threading.Thread(target=audio_thread, name="audio-pyaudio", daemon=True)
-        outputter.start()
+        self.output_thread = threading.Thread(target=audio_thread, name="audio-pyaudio", daemon=True)
+        self.output_thread.start()
         thread_ready.wait()
+
+    def close(self):
+        super().close()
+        self.output_thread.join()
 
     def query_api_version(self):
         return pyaudio.get_portaudio_version_text()
@@ -517,8 +537,8 @@ class PyAudio_Seq(AudioApi):
             finally:
                 audio.terminate()
 
-        outputter = threading.Thread(target=audio_thread, name="audio-pyaudio", daemon=True)
-        outputter.start()
+        self.output_thread = threading.Thread(target=audio_thread, name="audio-pyaudio", daemon=True)
+        self.output_thread.start()
         thread_ready.wait()
 
     def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
@@ -543,6 +563,7 @@ class PyAudio_Seq(AudioApi):
     def close(self) -> None:
         super().close()
         self.command_queue.put({"action": "stop"})
+        self.output_thread.join()
 
     def query_api_version(self):
         return pyaudio.get_portaudio_version_text()
