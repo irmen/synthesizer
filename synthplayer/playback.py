@@ -189,6 +189,7 @@ class AudioApi:
         self.mixer.set_limit(samplename, max_simultaneously)
 
     def close(self) -> None:
+        # @todo close audio library / mixer cleanly in all apis
         self.silence()
 
     def query_api_version(self) -> str:
@@ -397,12 +398,12 @@ class SounddeviceThread_Seq(AudioApi):
     def stop(self, sid_or_name: Union[int, str]) -> None:
         raise NotImplementedError("sequential play mode doesn't support stopping individual samples")
 
+    def set_sample_play_limit(self, samplename: str, max_simultaneously: int) -> None:
+        raise NotImplementedError("sequential play mode doesn't support setting sample limits")
+
     def close(self) -> None:
         super().close()
         self.command_queue.put({"action": "stop"})
-
-    def set_sample_play_limit(self, samplename: str, max_simultaneously: int) -> None:
-        raise NotImplementedError("sequential play mode doesn't support setting sample limits")
 
     def query_api_version(self):
         return sounddevice.get_portaudio_version()[1]
@@ -533,6 +534,9 @@ class PyAudio_Seq(AudioApi):
             pass
         self.all_played.set()
 
+    def set_sample_play_limit(self, samplename: str, max_simultaneously: int) -> None:
+        raise NotImplementedError("sequential play mode doesn't support setting sample limits")
+
     def stop(self, sid_or_name: Union[int, str]) -> None:
         raise NotImplementedError("sequential play mode doesn't support stopping individual samples")
 
@@ -595,6 +599,12 @@ class Winsound_Seq(AudioApi):
             if self.played_callback:
                 self.played_callback(sample)
         os.unlink(sample_file.name)
+
+    def stop(self, sid_or_name: Union[int, str]) -> None:
+        raise NotImplementedError("sequential play mode doesn't support stopping individual samples")
+
+    def set_sample_play_limit(self, samplename: str, max_simultaneously: int) -> None:
+        raise NotImplementedError("sequential play mode doesn't support setting sample limits")
 
     def wait_all_played(self):
         while self.threads:
@@ -700,3 +710,6 @@ class Output:
 
     def register_notify_played(self, callback):
         self.audio_api.register_notify_played(callback)
+
+    def set_sample_play_limit(self, samplename: str, max_simultaneously: int) -> None:
+        self.audio_api.set_sample_play_limit(samplename, max_simultaneously)
