@@ -195,7 +195,8 @@ class AudioApi:
 
     def close(self) -> None:
         self.silence()
-        self.mixer.close()
+        if self.mixer:
+            self.mixer.close()
 
     def query_api_version(self) -> str:
         return "unknown"
@@ -362,7 +363,7 @@ class SounddeviceThread_Seq(AudioApi):
         else:
             raise ValueError("invalid sample width")
         thread_ready = threading.Event()
-        del self.mixer
+        self.mixer = None
         self.command_queue = queue.Queue(maxsize=queue_size)        # type: queue.Queue[Dict[str, Any]]
 
         def audio_thread():
@@ -503,7 +504,7 @@ class PyAudio_Seq(AudioApi):
         global pyaudio
         import pyaudio      # type: ignore
         thread_ready = threading.Event()
-        del self.mixer
+        self.mixer = None
         self.command_queue = queue.Queue(maxsize=queue_size)        # type: queue.Queue[Dict[str, Any]]
 
         def audio_thread():
