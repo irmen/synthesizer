@@ -8,7 +8,7 @@ other audio formats it uses the ffmpeg tool to convert the file.
 By default a nice GUI with graphical level meters is shown but there's also
 example code that plays the file and shows the level meter on the console.
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 import os

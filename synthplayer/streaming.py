@@ -2,7 +2,7 @@
 Some audio stream related tools, such as decoding any audio file to a stream, and some
 simple stream manipulations such as volume (amplitude) control.
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 import subprocess

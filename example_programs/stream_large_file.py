@@ -1,7 +1,7 @@
 """
 Play a large file by using sequential play of small chunks,
 and as another solution, a single sample that streams chunks itself on demand.
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 import os

@@ -5,7 +5,7 @@ a set of ADSR envelope filters,
 and a few other output filters such as tremolo and echo.
 You can play simple notes, chords, or let an arpeggiator run the notes.
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 # @todo fix colors of checkboxes and radiobuttons and file dialog on dark desktop theme

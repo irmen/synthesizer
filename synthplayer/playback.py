@@ -8,7 +8,7 @@ Supported audio output libraries:
 It can play multiple samples at the same time via real-time mixing, and you can
 loop samples as well without noticable overhead (great for continous effects or music)
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 import audioop      # type: ignore

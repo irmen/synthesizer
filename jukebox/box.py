@@ -1,7 +1,7 @@
 """
 Jukebox Gui
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 import sys

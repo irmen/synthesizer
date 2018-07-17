@@ -4,7 +4,7 @@ Sample mix rate is configured at 44.1 khz. You may want to change this if most o
 the samples you're using are of a different sample rate (such as 48Khz), to avoid
 the slight loss of quality due to resampling.
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 import os

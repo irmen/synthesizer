@@ -2,7 +2,7 @@
 Jukebox audio file serving backend application
 Provides a CLI and a Pyro remote API.
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 import cmd
 import shlex

@@ -5,7 +5,7 @@ Won't detect new files unless you tell it to rescan a path.
 Is smart enough to recognise an iTunes music library and parses the iTunes
 database plist file instead of scanning the whole directory structure.
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 import datetime
 import plistlib

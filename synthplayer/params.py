@@ -1,7 +1,7 @@
 """
 Global parameters for the synthesizer, these are configurable.
 
-Written by Irmen de Jong (irmen@razorvine.net) - License: MIT open-source.
+Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 norm_samplerate = 44100
