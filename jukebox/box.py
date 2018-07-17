@@ -27,7 +27,7 @@ import Pyro4
 import Pyro4.errors
 import Pyro4.futures
 
-StreamMixer.buffer_size = 4096      # larger means less skips and less cpu usage but more latency and slower levelmeters
+StreamMixer.buffer_size = 44100//10   # larger means less skips and less cpu usage but more latency and slower levelmeters
 
 try:
     hqresample = AudiofileToWavStream.supports_hq_resample()
@@ -626,9 +626,9 @@ class JukeboxGui(tk.Tk):
         self.config_location = appdirs.user_data_dir("PythonJukebox", "Razorvine")
         os.makedirs(self.config_location, mode=0o700, exist_ok=True)
         default_font = tk.font.nametofont("TkDefaultFont")
-        default_font["size"] = abs(default_font["size"])+2
+        default_font["size"] = abs(default_font["size"])+1
         default_font = tk.font.nametofont("TkTextFont")
-        default_font["size"] = abs(default_font["size"])+2
+        default_font["size"] = abs(default_font["size"])+1
         self.title("Jukebox")
         f = ttk.Frame()
         f1 = ttk.Frame(f)

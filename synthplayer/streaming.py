@@ -13,7 +13,7 @@ import os
 import io
 import logging
 from collections import namedtuple
-from typing import Callable, Generator
+from typing import Callable, Generator, BinaryIO, Optional, Union, Iterable, Tuple, List, Dict
 from .sample import Sample
 from . import params
 
@@ -42,8 +42,9 @@ class AudiofileToWavStream(io.RawIOBase):
     ffprobe_executable = "ffprobe"
     oggdec_executable = "oggdec"
 
-    def __init__(self, filename, outputfilename=None, samplerate=0,
-                 channels=0, sampleformat="", bitspersample=0, hqresample=True, startfrom=0, duration=0):
+    def __init__(self, filename: str, outputfilename: str="", samplerate: int=0,
+                 channels: int=0, sampleformat: str="", bitspersample: int=0,
+                 hqresample: bool=True, startfrom: float=0.0, duration: float=0.0) -> None:
         samplerate = samplerate or params.norm_samplerate
         channels = channels or params.norm_nchannels
         sampleformat = sampleformat or str(8*params.norm_samplewidth)
@@ -56,10 +57,10 @@ class AudiofileToWavStream(io.RawIOBase):
         if not os.path.isfile(filename):
             raise FileNotFoundError(filename)
         self.outputfilename = outputfilename
-        self.stream = None
-        self.resample_options = []
-        self.downmix_options = []
-        self.sampleformat_options = []
+        self.stream = None              # type: Optional[BinaryIO]
+        self.resample_options = []      # type: List[str]
+        self.downmix_options = []       # type: List[str]
+        self.sampleformat_options = []  # type: List[str]
         self.conversion_required = True
         self.format_probe = None
         self._startfrom = startfrom
@@ -103,7 +104,7 @@ class AudiofileToWavStream(io.RawIOBase):
         self.start_stream()
 
     @classmethod
-    def supports_hq_resample(cls):
+    def supports_hq_resample(cls) -> bool:
         if cls.ffmpeg_executable:
             try:
                 buildconf = subprocess.check_output([cls.ffmpeg_executable, "-v", "error", "-buildconf"]).decode()
@@ -113,7 +114,7 @@ class AudiofileToWavStream(io.RawIOBase):
         return False
 
     @classmethod
-    def probe_format(cls, filename):
+    def probe_format(cls, filename: str) -> AudioFormatProbe:
         command = [cls.ffprobe_executable, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-i", filename]
         probe = subprocess.check_output(command)
         probe = json.loads(probe.decode())
@@ -145,14 +146,14 @@ class AudiofileToWavStream(io.RawIOBase):
         log.debug("format probe of %s: %s", filename, result)
         return result
 
-    def start_stream(self):
+    def start_stream(self) -> Optional[BinaryIO]:
         if not self.conversion_required:
             if self.outputfilename:
                 log.debug("direct copy from %s to %s", self.name, self.outputfilename)
                 with open(self.name, "rb") as source:
                     with open(self.outputfilename, "wb") as dest:
                         shutil.copyfileobj(source, dest)
-                return
+                return None
             log.debug("direct stream input from %s", self.name)
             self.stream = open(self.name, "rb")
         else:
@@ -170,13 +171,13 @@ class AudiofileToWavStream(io.RawIOBase):
                     command.extend(["-y", self.outputfilename])
                     log.debug("ffmpeg file conversion: %s", " ".join(command))
                     subprocess.check_call(command)
-                    return
+                    return None
                 command.extend(["-f", "wav", "-"])
                 log.debug("ffmpeg streaming: %s", " ".join(command))
                 try:
                     converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
-                    self.stream = converter.stdout
-                    return
+                    self.stream = converter.stdout      # type: ignore
+                    return None
                 except FileNotFoundError:
                     # somehow the ffmpeg decoder executable couldn't be launched
                     pass
@@ -190,25 +191,25 @@ class AudiofileToWavStream(io.RawIOBase):
                     else:
                         command = [self.oggdec_executable, "--quiet", "--output", "-", self.name]
                         converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
-                        self.stream = converter.stdout
+                        self.stream = converter.stdout      # type: ignore
                         log.debug("oggdec streaming: %s", " ".join(command))
-                    return
+                    return None
                 except FileNotFoundError:
                     # somehow the oggdec decoder executable couldn't be launched
                     pass
             raise RuntimeError("ffmpeg or oggdec (vorbis-tools) required for sound file decoding")
         return self.stream
 
-    def read(self, bytes):
-        return self.stream.read(bytes)
+    def read(self, size):
+        return self.stream.read(size)
 
-    def close(self):
+    def close(self) -> None:
         log.debug("closing stream %s", self.name)
         if self.stream:
             self.stream.close()
 
     @property
-    def closed(self):
+    def closed(self) -> bool:
         if self.stream:
             return self.stream.closed
         else:
@@ -222,11 +223,10 @@ class StreamingSample(Sample):
     Can be used for the realtime mixing output mode to allow
     on demand decoding and streaming of large sound files.
     """
-    def __init__(self, wave_file=None, name=""):
-        self.wave_stream = None
+    def __init__(self, wave_file: Union[str, BinaryIO]=None, name: str="") -> None:
         super().__init__(wave_file, name)
 
-    def load_wav(self, file_or_stream):
+    def load_wav(self, file_or_stream: Union[str, BinaryIO]) -> 'Sample':
         self.wave_stream = wave.open(file_or_stream, "rb")
         if not 2 <= self.wave_stream.getsampwidth() <= 4:
             raise IOError("only supports sample sizes of 2, 3 or 4 bytes")
@@ -237,6 +237,7 @@ class StreamingSample(Sample):
                                       self.wave_stream.getnchannels(), filename)
         self.copy_from(samp)
         self.wave_stream.readframes(1)   # warm up the stream
+        return self
 
     def chunked_frame_data(self, chunksize: int, repeat: bool=False,
                            stopcondition: Callable[[], bool]=lambda: False) -> Generator[memoryview, None, None]:
@@ -250,23 +251,59 @@ class StreamingSample(Sample):
             yield memoryview(audiodata)
 
 
+class FramesFilter:
+    def set_params(self, buffer_size: int, samplerate: int, samplewidth: int, nchannels: int) -> None:
+        raise NotImplementedError
+
+    def __call__(self, frames: bytes) -> bytes:
+        raise NotImplementedError
+
+
+class SampleFilter:
+    def __call__(self, sample: Sample) -> Sample:
+        raise NotImplementedError
+
+
+class EndlessFramesFilter(FramesFilter):
+    """
+    Turns a frame stream into an endless frame stream by adding silence frames at the end until closed.
+    """
+    def set_params(self, buffer_size: int, samplerate: int, samplewidth: int, nchannels: int) -> None:
+        self.silence_frame = b"\0" * nchannels * samplewidth * buffer_size
+
+    def __call__(self, frames: bytes) -> bytes:
+        return frames if frames else self.silence_frame
+
+
+class VolumeFilter(SampleFilter):
+    def __init__(self, volume: float=1.0) -> None:
+        self.volume = volume
+
+    def __call__(self, sample: Sample) -> Sample:
+        if sample:
+            sample.amplify(self.volume)
+        return sample
+
+
 class SampleStream:
     """
     Turns a wav reader that produces frames, or a wav file stream,
-    into a stream of Sample objects.
+    into an iterable producing a stream of Sample objects.
     You can add filters to the stream that process the Sample objects coming trough.
+    The buffer size is the number of audio _frames_ (not bytes)
     """
-    def __init__(self, wav_reader_or_stream, buffer_size):
+    def __init__(self, wav_reader_or_stream: Union[wave.Wave_read, BinaryIO], frames_per_sample: int) -> None:
         if isinstance(wav_reader_or_stream, io.RawIOBase):
-            self.source = wave.open(wav_reader_or_stream, "r")
+            self.source = wave.open(wav_reader_or_stream, "r")   # type: wave.Wave_read
         else:
+            assert isinstance(wav_reader_or_stream, wave.Wave_read)
             self.source = wav_reader_or_stream
         self.samplewidth = self.source.getsampwidth()
         self.samplerate = self.source.getframerate()
         self.nchannels = self.source.getnchannels()
-        self.buffer_size = buffer_size
-        self.filters = []
-        self.frames_filters = []
+        self.frames_per_sample = frames_per_sample
+        self.filters = []           # type: List[SampleFilter]
+        self.frames_filters = []    # type: List[FramesFilter]
         self.source.readframes(1)  # warm up the stream
 
     def __enter__(self):
@@ -275,54 +312,29 @@ class SampleStream:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def add_frames_filter(self, filter):
-        filter.set_params(self.buffer_size, self.samplerate, self.samplewidth, self.nchannels)
+    def add_frames_filter(self, filter: FramesFilter) -> None:
+        filter.set_params(self.frames_per_sample, self.samplerate, self.samplewidth, self.nchannels)
         self.frames_filters.append(filter)
 
-    def add_filter(self, filter):
-        filter.set_params(self.buffer_size, self.samplerate, self.samplewidth, self.nchannels)
+    def add_filter(self, filter: SampleFilter) -> None:
         self.filters.append(filter)
 
     def __iter__(self):
         return self
 
-    def __next__(self):
-        frames = self.source.readframes(self.buffer_size)
-        for filter in self.frames_filters:
-            frames = filter(frames)
+    def __next__(self) -> Sample:
+        frames = self.source.readframes(self.frames_per_sample)
+        for ff in self.frames_filters:
+            frames = ff(frames)
         if not frames:
             raise StopIteration
         sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
-        for filter in self.filters:
-            sample = filter(sample)
+        for sf in self.filters:
+            sample = sf(sample)
         return sample
 
-    def close(self):
+    def close(self) -> None:
         self.source.close()
-
-
-class EndlessFramesFilter:
-    """
-    Turns a frame stream into an endless frame stream by adding silence frames at the end until closed.
-    """
-    def set_params(self, buffer_size, samplerate, samplewidth, nchannels):
-        self.silence_frame = b"\0" * nchannels * samplewidth * buffer_size
-
-    def __call__(self, frames):
-        return frames if frames else self.silence_frame
-
-
-class VolumeFilter:
-    def __init__(self, volume=1.0):
-        self.volume = volume
-
-    def set_params(self, buffer_size, samplerate, samplewidth, nchannels):
-        pass
-
-    def __call__(self, sample):
-        if sample:
-            sample.amplify(self.volume)
-        return sample
 
 
 class StreamMixer:
@@ -332,19 +344,21 @@ class StreamMixer:
     """
     buffer_size = 4096   # number of frames in a buffer
 
-    def __init__(self, streams, endless=False, samplewidth=0, samplerate=0, nchannels=0):
+    def __init__(self, streams: Iterable[BinaryIO], endless: bool=False,
+                 samplewidth: int=0, samplerate: int=0, nchannels: int=0) -> None:
         # assume all wave streams are the same parameters
         self.samplewidth = samplewidth or params.norm_samplewidth
         self.samplerate = samplerate or params.norm_samplerate
         self.nchannels = nchannels or params.norm_nchannels
         self.timestamp = 0.0
         self.endless = endless
-        self.sample_streams = []
-        self.wrapped_streams = {}   # samplestream->(wrappedstream, end_callback) (to close stuff properly)
+        self.sample_streams = []    # type: List[SampleStream]
+        self.wrapped_streams = {}   # type: Dict[SampleStream, Tuple[BinaryIO, Optional[Callable[[], None]]]] # (to close stuff properly)
         for stream in streams:
             self.add_stream(stream, None, endless)
 
-    def add_stream(self, stream, filters=None, endless=False, end_callback=None):
+    def add_stream(self, stream: BinaryIO, filters: Iterable[SampleFilter]=None,
+                   endless: bool=False, end_callback: Callable[[], None]=None) -> None:
         ws = wave.open(stream, 'r')
         ss = SampleStream(ws, self.buffer_size)
         if endless:
@@ -354,7 +368,7 @@ class StreamMixer:
         self.sample_streams.append(ss)
         self.wrapped_streams[ss] = (stream, end_callback)
 
-    def remove_stream(self, stream):
+    def remove_stream(self, stream: SampleStream) -> None:
         stream.close()
         self.sample_streams.remove(stream)
         if stream in self.wrapped_streams:
@@ -363,7 +377,7 @@ class StreamMixer:
             if end_callback is not None:
                 end_callback()
 
-    def add_sample(self, sample, end_callback=None):
+    def add_sample(self, sample: Sample, end_callback: Callable[[], None]=None) -> None:
         assert sample.samplewidth == self.samplewidth
         assert sample.samplerate == self.samplerate
         assert sample.nchannels == self.nchannels
@@ -378,12 +392,12 @@ class StreamMixer:
     def __exit__(self, *args):
         self.close()
 
-    def close(self):
+    def close(self) -> None:
         for stream in self.sample_streams:
             stream.close()
         del self.sample_streams
 
-    def __iter__(self):
+    def __iter__(self) -> Generator[Tuple[float, Sample], None, None]:
         """
         Yields tuple(timestamp, Sample) that represent the mixed audio streams.
         """
@@ -391,7 +405,12 @@ class StreamMixer:
             mixed_sample = Sample.from_raw_frames(b"", self.samplewidth, self.samplerate, self.nchannels)
             for sample_stream in self.sample_streams:
                 try:
-                    sample = next(sample_stream)
+                    sample = next(sample_stream)        # type: ignore
+                except StopIteration:
+                    if self.endless:
+                        sample = None
+                    else:
+                        break
                 except (os.error, ValueError):
                     # Problem reading from stream. Assume stream closed.
                     sample = None

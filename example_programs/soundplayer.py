@@ -18,11 +18,11 @@ import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from synthplayer.sample import Sample, LevelMeter
-from synthplayer.streaming import AudiofileToWavStream
+from synthplayer.streaming import AudiofileToWavStream, SampleStream
 from synthplayer.playback import Output
 
 
-update_rate = 30  # lower this if you hear the sound crackle!
+update_rate = 30
 
 
 def play_console(filename_or_stream):
@@ -89,14 +89,16 @@ class LevelGUI(tk.Frame):
         self.pack()
         self.open_audio_file(audio_source)
         self.after_idle(self.update)
+        self.after_idle(self.stream_audio)
 
     def open_audio_file(self, filename_or_stream):
-        self.wave = wave.open(filename_or_stream, 'r')
-        self.samplewidth = self.wave.getsampwidth()
-        self.samplerate = self.wave.getframerate()
-        self.nchannels = self.wave.getnchannels()
+        wav = wave.open(filename_or_stream, 'r')
+        self.samplewidth = wav.getsampwidth()
+        self.samplerate = wav.getframerate()
+        self.nchannels = wav.getnchannels()
+        self.samplestream = iter(SampleStream(wav, self.samplerate // 10))
         self.levelmeter = LevelMeter(rms_mode=False, lowest=self.lowest_level)
-        self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels, mixing="sequential")
+        self.audio_out = Output(self.samplerate, self.samplewidth, self.nchannels, mixing="sequential", queue_size=3)
         print("Audio API used:", self.audio_out.audio_api)
         if not self.audio_out.supports_streaming:
             raise RuntimeError("need api that supports streaming")
@@ -106,16 +108,20 @@ class LevelGUI(tk.Frame):
             .format(filename, self.samplerate/1000, 8*self.samplewidth, self.nchannels)
         self.info.configure(text=info)
 
-    def update(self, *args, **kwargs):
-        # @todo read/stream the audio in the background, only update the levelmeters here
+    def stream_audio(self):
+        try:
+            sample = next(self.samplestream)
+            self.audio_out.play_sample(sample)
+            self.after(20, self.stream_audio)
+        except StopIteration:
+            self.audio_out.close()
+
+    def update(self):
         if not self.audio_out.still_playing():
             self.pbvar_left.set(0)
             self.pbvar_right.set(0)
             print("done!")
             return
-        frames = self.wave.readframes(self.samplerate//update_rate)
-        sample = Sample.from_raw_frames(frames, self.samplewidth, self.samplerate, self.nchannels)
-        self.audio_out.play_sample(sample)
         left, peak_l = self.levelmeter.level_left, self.levelmeter.peak_left
         right, peak_r = self.levelmeter.level_right, self.levelmeter.peak_right
         self.pbvar_left.set(left-self.lowest_level)
