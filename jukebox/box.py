@@ -376,7 +376,7 @@ class PlaylistFrame(ttk.LabelFrame):
         ttk.Button(bf, text="Remove", width=11, command=self.do_remove).pack()
         bf.pack(side=tk.LEFT, padx=4)
         sf = ttk.Frame(self)
-        cols = [("title", 300), ("artist", 180), ("album", 180), ("length", 60)]
+        cols = [("title", 300), ("artist", 180), ("album", 180), ("length", 80)]
         self.listTree = ttk.Treeview(sf, columns=[col for col, _ in cols], height=10, show="headings")
         vsb = ttk.Scrollbar(orient="vertical", command=self.listTree.yview)
         self.listTree.configure(yscrollcommand=vsb.set)
@@ -460,8 +460,8 @@ class SearchFrame(ttk.LabelFrame):
         ttk.Button(bf, text="Add all selected", command=self.do_add_selected).pack()
         bf.pack(side=tk.LEFT)
         sf = ttk.Frame(self)
-        cols = [("title", 320), ("artist", 200), ("album", 200), ("year", 50), ("genre", 120), ("length", 60)]
-        self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=11, show="headings")
+        cols = [("title", 320), ("artist", 200), ("album", 200), ("year", 60), ("genre", 160), ("length", 80)]
+        self.resultTreeView = ttk.Treeview(sf, columns=[col for col, _ in cols], height=16, show="headings")
         vsb = ttk.Scrollbar(orient="vertical", command=self.resultTreeView.yview)
         self.resultTreeView.configure(yscrollcommand=vsb.set)
         self.resultTreeView.grid(column=1, row=0, sticky=tk.NSEW, in_=sf)
@@ -625,10 +625,11 @@ class JukeboxGui(tk.Tk):
         super().__init__()
         self.config_location = appdirs.user_data_dir("PythonJukebox", "Razorvine")
         os.makedirs(self.config_location, mode=0o700, exist_ok=True)
-        default_font = tk.font.nametofont("TkDefaultFont")
-        default_font["size"] = abs(default_font["size"])+1
-        default_font = tk.font.nametofont("TkTextFont")
-        default_font["size"] = abs(default_font["size"])+1
+        for family in tk.font.names():
+            font = tk.font.nametofont(family)
+            font["size"] = abs(font["size"]) + 1
+            if family != "TkFixedFont":
+                font["family"] = "helvetica"
         self.title("Jukebox")
         f = ttk.Frame()
         f1 = ttk.Frame(f)

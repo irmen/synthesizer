@@ -8,8 +8,6 @@ You can play simple notes, chords, or let an arpeggiator run the notes.
 Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
-# @todo fix colors of checkboxes and radiobuttons and file dialog on dark desktop theme
-
 import time
 import collections
 import itertools
@@ -73,7 +71,8 @@ class OscillatorGUI(tk.LabelFrame):
         row += 1
         self.keys_label = tk.Label(f, text="from keys?")
         self.keys_label.grid(row=row, column=0, sticky=tk.E)
-        self.keys_checkbox = tk.Checkbutton(f, variable=self.input_freq_keys, command=self.from_keys_selected)
+        self.keys_checkbox = tk.Checkbutton(f, variable=self.input_freq_keys, command=self.from_keys_selected,
+                                            selectcolor=self.cget('bg'), fg=self.cget('fg'))
         self.keys_checkbox.grid(row=row, column=1)
         row += 1
         self.ratio_label = tk.Label(f, text="freq ratio")
@@ -339,7 +338,8 @@ class EchoFilterGUI(tk.LabelFrame):
         self.input_decay.set(0.7)
         row = 0
         tk.Label(self, text="enable?").grid(row=row, column=0)
-        tk.Checkbutton(self, variable=self.input_enabled).grid(row=row, column=1, sticky=tk.W)
+        tk.Checkbutton(self, variable=self.input_enabled, selectcolor=self.cget('bg'), fg=self.cget('fg'))\
+            .grid(row=row, column=1, sticky=tk.W)
         row += 1
         tk.Label(self, text="after").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_after, from_=0, to=2.0, resolution=.01,
@@ -424,20 +424,20 @@ class ArpeggioFilterGUI(tk.LabelFrame):
         row = 0
         tk.Label(self, text="Major Chords Arp").grid(row=row, column=0, columnspan=2)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="off", text="off", pady=0,
-                       command=self.mode_off_selected).grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="off", text="off", pady=0, command=self.mode_off_selected,
+                       fg=self.cget('fg'), selectcolor=self.cget('bg')).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="chords3", text="Chords Maj. 3", pady=0)\
-            .grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="chords3", text="Chords Maj. 3", pady=0,
+                       fg=self.cget('fg'), selectcolor=self.cget('bg')).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="chords4", text="Chords Maj. 7th", pady=0)\
-            .grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="chords4", text="Chords Maj. 7th", pady=0,
+                       fg=self.cget('fg'), selectcolor=self.cget('bg')).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio3", text="Arpeggio 3", pady=0)\
-            .grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio3", text="Arpeggio 3", pady=0,
+                       fg=self.cget('fg'), selectcolor=self.cget('bg')).grid(row=row, column=1, sticky=tk.W)
         row += 1
-        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio4", text="Arpeggio 7th", pady=0)\
-            .grid(row=row, column=1, sticky=tk.W)
+        tk.Radiobutton(self, variable=self.input_mode, value="arpeggio4", text="Arpeggio 7th", pady=0,
+                       fg=self.cget('fg'), selectcolor=self.cget('bg')).grid(row=row, column=1, sticky=tk.W)
         row += 1
         tk.Label(self, text="rate").grid(row=row, column=0, sticky=tk.E)
         tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_rate, from_=0.02, to=.5, resolution=.01,
@@ -540,16 +540,18 @@ class SynthGUI(tk.Frame):
         tk.Label(lf, text="Samplerate:").pack(anchor=tk.W)
         subf = tk.Frame(lf)
         tk.Radiobutton(subf, variable=self.samplerate_choice, value=44100, text="44.1 kHz",
-                       pady=0, command=self.create_synth).pack(side=tk.LEFT)
+                       fg=lf.cget('fg'), selectcolor=lf.cget('bg'), pady=0, command=self.create_synth).pack(side=tk.LEFT)
         tk.Radiobutton(subf, variable=self.samplerate_choice, value=22050, text="22 kHz",
-                       pady=0, command=self.create_synth).pack(side=tk.LEFT)
+                       fg=lf.cget('fg'), selectcolor=lf.cget('bg'), pady=0, command=self.create_synth).pack(side=tk.LEFT)
         subf.pack()
         tk.Label(lf, text="Piano key response:").pack(anchor=tk.W)
         subf = tk.Frame(lf)
         self.rendering_choice = tk.StringVar()
         self.rendering_choice.set("realtime")
-        tk.Radiobutton(subf, variable=self.rendering_choice, value="realtime", text="realtime", pady=0).pack(side=tk.LEFT)
-        tk.Radiobutton(subf, variable=self.rendering_choice, value="render", text="render", pady=0).pack(side=tk.LEFT)
+        tk.Radiobutton(subf, variable=self.rendering_choice, value="realtime", text="realtime", pady=0,
+                       fg=lf.cget('fg'), selectcolor=lf.cget('bg'),).pack(side=tk.LEFT)
+        tk.Radiobutton(subf, variable=self.rendering_choice, value="render", text="render", pady=0,
+                       fg=lf.cget('fg'), selectcolor=lf.cget('bg'),).pack(side=tk.LEFT)
         subf.pack()
         lf.pack(pady=(4, 0))
         f.pack(side=tk.LEFT, anchor=tk.N)
@@ -561,8 +563,8 @@ class SynthGUI(tk.Frame):
         lf = tk.LabelFrame(misc_frame, text="A4 tuning")
         self.a4_choice = tk.IntVar()
         self.a4_choice.set(440)
-        tk.Radiobutton(lf, variable=self.a4_choice, value=440, text="440 Hz", pady=0).pack()
-        tk.Radiobutton(lf, variable=self.a4_choice, value=432, text="432 Hz", pady=0).pack()
+        tk.Radiobutton(lf, variable=self.a4_choice, value=440, text="440 Hz", pady=0, fg=lf.cget('fg'), selectcolor=lf.cget('bg')).pack()
+        tk.Radiobutton(lf, variable=self.a4_choice, value=432, text="432 Hz", pady=0, fg=lf.cget('fg'), selectcolor=lf.cget('bg')).pack()
         lf.pack(pady=(4, 0))
         tk.Button(misc_frame, text="Load preset", command=self.load_preset).pack()
         tk.Button(misc_frame, text="Save preset", command=self.save_preset).pack()
