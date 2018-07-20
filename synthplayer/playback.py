@@ -374,12 +374,15 @@ class SounddeviceThread_Seq(AudioApi):
             try:
                 while True:
                     data = b""
+                    repeat = False
+                    command = None
                     try:
                         command = self.command_queue.get(timeout=0.2)
                         if command is None or command["action"] == "stop":
                             break
                         elif command["action"] == "play":
                             data = command["sample"].view_frame_data() or b""
+                            repeat = command["repeat"]
                     except queue.Empty:
                         self.all_played.set()
                         data = b""
@@ -388,6 +391,21 @@ class SounddeviceThread_Seq(AudioApi):
                         if self.playing_callback:
                             sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                             self.playing_callback(sample)
+                    if repeat:
+                        # remove all other samples from the queue and reschedule this one
+                        commands_to_keep = []
+                        while True:
+                            try:
+                                c2 = self.command_queue.get(block=False)
+                                if c2["action"] == "play":
+                                    continue
+                                commands_to_keep.append(c2)
+                            except queue.Empty:
+                                break
+                        for cmd in commands_to_keep:
+                            self.command_queue.put(cmd)
+                        if command:
+                            self.command_queue.put(command)
             finally:
                 self.all_played.set()
                 stream.stop()
@@ -399,7 +417,7 @@ class SounddeviceThread_Seq(AudioApi):
 
     def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
         self.all_played.clear()
-        self.command_queue.put({"action": "play", "sample": sample})
+        self.command_queue.put({"action": "play", "sample": sample, "repeat": repeat})
         return 0
 
     def silence(self) -> None:
@@ -516,12 +534,15 @@ class PyAudio_Seq(AudioApi):
                 try:
                     while True:
                         data = b""
+                        repeat = False
+                        command = None
                         try:
                             command = self.command_queue.get(timeout=0.2)
                             if command is None or command["action"] == "stop":
                                 break
                             elif command["action"] == "play":
                                 data = command["sample"].view_frame_data() or b""
+                                repeat = command["repeat"]
                         except queue.Empty:
                             self.all_played.set()
                             data = b""
@@ -532,6 +553,21 @@ class PyAudio_Seq(AudioApi):
                             if self.playing_callback:
                                 sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                                 self.playing_callback(sample)
+                        if repeat:
+                            # remove all other samples from the queue and reschedule this one
+                            commands_to_keep = []
+                            while True:
+                                try:
+                                    c2 = self.command_queue.get(block=False)
+                                    if c2["action"] == "play":
+                                        continue
+                                    commands_to_keep.append(c2)
+                                except queue.Empty:
+                                    break
+                            for cmd in commands_to_keep:
+                                self.command_queue.put(cmd)
+                            if command:
+                                self.command_queue.put(command)
                 finally:
                     self.all_played.set()
                     stream.close()
@@ -544,7 +580,7 @@ class PyAudio_Seq(AudioApi):
 
     def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
         self.all_played.clear()
-        self.command_queue.put({"action": "play", "sample": sample})
+        self.command_queue.put({"action": "play", "sample": sample, "repeat": repeat})
         return 0
 
     def silence(self) -> None:

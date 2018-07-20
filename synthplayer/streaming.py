@@ -226,6 +226,9 @@ class StreamingSample(Sample):
     def __init__(self, wave_file: Union[str, BinaryIO]=None, name: str="") -> None:
         super().__init__(wave_file, name)
 
+    def view_frame_data(self):
+        raise NotImplementedError("a streaming sample doesn't have a frame data buffer to view")
+
     def load_wav(self, file_or_stream: Union[str, BinaryIO]) -> 'Sample':
         self.wave_stream = wave.open(file_or_stream, "rb")
         if not 2 <= self.wave_stream.getsampwidth() <= 4:
@@ -245,7 +248,10 @@ class StreamingSample(Sample):
         while True:
             audiodata = self.wave_stream.readframes(chunksize // self.samplewidth // self.nchannels)
             if not audiodata:
-                break   # source stream exhausted
+                if repeat:
+                    self.wave_stream.rewind()
+                else:
+                    break   # non-repeating source stream exhausted
             if len(audiodata) < chunksize:
                 audiodata += silence[len(audiodata):]
             yield memoryview(audiodata)
