@@ -11,6 +11,7 @@ import json
 import wave
 import os
 import io
+import time
 import logging
 from collections import namedtuple
 from typing import Callable, Generator, BinaryIO, Optional, Union, Iterable, Tuple, List, Dict
@@ -206,7 +207,10 @@ class AudiofileToWavStream(io.RawIOBase):
     def close(self) -> None:
         log.debug("closing stream %s", self.name)
         if self.stream:
+            self.stream.read(100000)   # read possible surplus data to clean the pipe
             self.stream.close()
+            if os.name == "nt":
+                time.sleep(0.02)    # windows sometimes keeps the file locked for a bit
 
     @property
     def closed(self) -> bool:
