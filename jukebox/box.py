@@ -22,6 +22,7 @@ from .backend import BACKEND_PORT
 from synthplayer.sample import Sample, LevelMeter
 from synthplayer.streaming import AudiofileToWavStream, StreamMixer, VolumeFilter
 from synthplayer.playback import Output
+import synthplayer
 import appdirs
 import Pyro4
 import Pyro4.errors
@@ -630,7 +631,7 @@ class JukeboxGui(tk.Tk):
             font["size"] = abs(font["size"]) + 1
             if family != "TkFixedFont":
                 font["family"] = "helvetica"
-        self.title("Jukebox")
+        self.title("Jukebox   |   synthplayer lib v" + synthplayer.__version__)
         f = ttk.Frame()
         f1 = ttk.Frame(f)
         self.firstTrackFrame = TrackFrame(f1, "Track 1")
