@@ -17,7 +17,7 @@ s5 = Sample("samples/909_snare_drum.wav").normalize()
 s6 = Sample("samples/909_hihat_closed.wav").normalize()
 s6_soft = s6.copy().amplify(0.2)
 
-with Output(mixing="sequential", queue_size=5) as out:
+with Output(mixing="sequential", queue_size=3) as out:
     print("\nPlaying samples with sequential mixing mode.")
     print("This takes care of playing samples only if the previous one finished,")
     print("but you cannot mix any sounds. It's ideal for playback of a single sound source,")

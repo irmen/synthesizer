@@ -14,9 +14,9 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 import audioop      # type: ignore
 import queue
 import threading
-import tempfile
 import time
 import os
+import io
 from collections import defaultdict
 from typing import Generator, Union, Dict, Tuple, Any, Type, List, Callable, Iterable, Optional
 from .import params
@@ -632,8 +632,9 @@ class Winsound_Seq(AudioApi):
         import winsound as _winsound
         global winsound
         winsound = _winsound        # type: ignore
-        self.threads = []       # type: List[threading.Thread]
         self.played_callback = None
+        self.sample_queue = queue.Queue(maxsize=queue_size)
+        threading.Thread(target=self._play, daemon=True).start()
 
     def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:
         # plays the sample in a background thread so that we can continue while the sound plays.
@@ -642,35 +643,32 @@ class Winsound_Seq(AudioApi):
             raise ValueError("winsound player doesn't support repeating samples")
         if delay != 0.0:
             raise ValueError("winsound player doesn't support delayed playing")
-        self.wait_all_played()
-        t = threading.Thread(target=self._play, args=(sample,), daemon=True)
-        self.threads.append(t)
-        t.start()
-        time.sleep(0.0005)
+        self.sample_queue.put(sample)
         return 0
 
-    def _play(self, sample: Sample) -> None:
-        with tempfile.NamedTemporaryFile(delete=False, mode="wb") as sample_file:
-            sample.write_wav(sample_file)   # type: ignore
-            sample_file.flush()
-            winsound.PlaySound(sample_file.name, winsound.SND_FILENAME)     # type: ignore
-            if self.played_callback:
-                self.played_callback(sample)
-        os.unlink(sample_file.name)
+    def _play(self) -> None:
+        # this runs in a background thread so a sample playback doesn't block the program
+        # (can't use winsound async because we're playing from a memory buffer)
+        while True:
+            sample = self.sample_queue.get()
+            with io.BytesIO() as sample_data:
+                sample.write_wav(sample_data)   # type: ignore
+                winsound.PlaySound(sample_data.getbuffer(), winsound.SND_MEMORY)     # type: ignore
+                if self.played_callback:
+                    self.played_callback(sample)
 
     def stop(self, sid_or_name: Union[int, str]) -> None:
-        raise NotImplementedError("sequential play mode doesn't support stopping individual samples")
+        raise NotImplementedError("winsound sequential play mode doesn't support stopping individual samples")
 
     def set_sample_play_limit(self, samplename: str, max_simultaneously: int) -> None:
-        raise NotImplementedError("sequential play mode doesn't support setting sample limits")
+        raise NotImplementedError("winsound sequential play mode doesn't support setting sample limits")
 
     def wait_all_played(self) -> None:
-        while self.threads:
-            t = self.threads.pop()
-            t.join()
+        while not self.sample_queue.empty():
+            time.sleep(0.2)
 
     def still_playing(self) -> bool:
-        return bool(self.threads)
+        return not self.sample_queue.empty()
 
 
 class Output:
