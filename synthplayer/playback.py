@@ -15,7 +15,6 @@ import audioop      # type: ignore
 import queue
 import threading
 import time
-import os
 import io
 from collections import defaultdict
 from typing import Generator, Union, Dict, Tuple, Any, Type, List, Callable, Iterable, Optional
@@ -633,7 +632,7 @@ class Winsound_Seq(AudioApi):
         global winsound
         winsound = _winsound        # type: ignore
         self.played_callback = None
-        self.sample_queue = queue.Queue(maxsize=queue_size)
+        self.sample_queue = queue.Queue(maxsize=queue_size)     # type: queue.Queue[Sample]
         threading.Thread(target=self._play, daemon=True).start()
 
     def play(self, sample: Sample, repeat: bool=False, delay: float=0.0) -> int:

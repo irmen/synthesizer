@@ -13,19 +13,44 @@ import collections
 import itertools
 import tkinter as tk
 from tkinter.filedialog import askopenfile, asksaveasfile
-from threading import Semaphore
 from configparser import ConfigParser
 from synthplayer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear, Semicircle, Pointy
 from synthplayer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
 from synthplayer.synth import major_chord_keys
 from synthplayer.sample import Sample
 from synthplayer.playback import Output
+import synthplayer
 try:
     import matplotlib
     matplotlib.use("tkagg")
     import matplotlib.pyplot as plot
 except ImportError:
     plot = None
+
+
+class StreamingOscSample(Sample):
+    def __init__(self, oscillator):
+        super().__init__()
+        self.mono()
+        self.oscillator = iter(oscillator)
+
+    def view_frame_data(self):
+        raise NotImplementedError("a streaming sample doesn't have a frame data buffer to view")
+
+    def load_wav(self, file_or_stream):
+        raise NotImplementedError("use oscillators to generate the sound")
+
+    def chunked_frame_data(self, chunksize, repeat=False, stopcondition=lambda: False):
+        num_frames = chunksize // self.samplewidth // self.nchannels
+        scale = 2 ** (8 * self.samplewidth - 1)
+        while True:
+            try:
+                frames = [int(v * scale) for v in itertools.islice(self.oscillator, num_frames)]
+            except StopIteration:
+                break
+            else:
+                sample = Sample.from_array(frames, self.samplerate, 1)
+                yield sample.view_frame_data()
 
 
 class OscillatorGUI(tk.LabelFrame):
@@ -285,19 +310,19 @@ class PianoKeyboardGUI(tk.Frame):
         for key_nr, key in enumerate("CDEFGAB"*num_octaves):
             octave = first_octave+key_nr//7
 
-            def key_pressed(event, note=key, octave=octave):
+            def key_pressed_mouse(event, note=key, octave=octave):
                 force = min(white_key_height, event.y*1.08)/white_key_height   # @todo control output volume, unused for now...
-                gui.pressed(event, note, octave, False)
+                gui.pressed(note, octave, False)
 
-            def key_released(event, note=key, octave=octave):
-                gui.pressed(event, note, octave, True)
+            def key_released_mouse(event, note=key, octave=octave):
+                gui.pressed(note, octave, True)
 
             x = key_nr * white_key_width
             key_rect = canvas.create_rectangle(x+x_offset, y_offset,
                                                x+white_key_width+x_offset, white_key_height+y_offset,
                                                fill="white", outline="gray50", width=1, activewidth=2)
-            canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
-            canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
+            canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed_mouse)
+            canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released_mouse)
             canvas.create_text(x+white_key_width/2+2, 1, text=key, anchor=tk.N, fill="gray")
             if 10 <= key_nr <= 21:
                 keychar = "qwertyuiop[]"[key_nr-10]
@@ -308,19 +333,19 @@ class PianoKeyboardGUI(tk.Frame):
             if key:
                 octave = first_octave + key_nr // 7
 
-                def key_pressed(event, note=key, octave=octave):
+                def key_pressed_mouse(event, note=key, octave=octave):
                     force = min(black_key_height, event.y * 1.1) / black_key_height   # @todo control output volume, unused for now...
-                    gui.pressed(event, note, octave, False)
+                    gui.pressed(note, octave, False)
 
-                def key_released(event, note=key, octave=octave):
-                    gui.pressed(event, note, octave, True)
+                def key_released_mouse(event, note=key, octave=octave):
+                    gui.pressed(note, octave, True)
 
                 x = key_nr * white_key_width + white_key_width*0.75
                 key_rect = canvas.create_rectangle(x+x_offset, y_offset,
                                                    x+black_key_width+x_offset, black_key_height+y_offset,
                                                    fill="black", outline="gray50", width=1, activewidth=2)
-                canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed)
-                canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released)
+                canvas.tag_bind(key_rect, "<ButtonPress-1>", key_pressed_mouse)
+                canvas.tag_bind(key_rect, "<ButtonRelease-1>", key_released_mouse)
         canvas.pack()
 
 
@@ -512,26 +537,25 @@ class EnvelopeFilterGUI(tk.LabelFrame):
 class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
-        self.master.title("Synthesizer")
-        self.keypress_sema = Semaphore(1)    # XXX improve mechanism, see keyboard presses?
+        self.master.title("Software FM/PWM Synthesizer   |   synthplayer lib v" + synthplayer.__version__)
         self.osc_frame = tk.Frame(self)
         self.oscillators = []
         self.piano_frame = tk.Frame(self)
-        self.piano = PianoKeyboardGUI(self.piano_frame, self)
-        self.piano.pack(side=tk.BOTTOM)
+        self.pianokeys_gui = PianoKeyboardGUI(self.piano_frame, self)
+        self.pianokeys_gui.pack(side=tk.BOTTOM)
         filter_frame = tk.LabelFrame(self, text="Filters etc.", padx=10, pady=10)
-        self.envelope_filters = [
+        self.envelope_filter_guis = [
             EnvelopeFilterGUI(filter_frame, "1", self),
             EnvelopeFilterGUI(filter_frame, "2", self),
             EnvelopeFilterGUI(filter_frame, "3", self)]
-        self.echo_filter = EchoFilterGUI(filter_frame, self)
-        for ev in self.envelope_filters:
+        self.echo_filter_gui = EchoFilterGUI(filter_frame, self)
+        for ev in self.envelope_filter_guis:
             ev.pack(side=tk.LEFT, anchor=tk.N)
-        self.arp_filter = ArpeggioFilterGUI(filter_frame, self)
-        self.arp_filter.pack(side=tk.LEFT, anchor=tk.N)
+        self.arp_filter_gui = ArpeggioFilterGUI(filter_frame, self)
+        self.arp_filter_gui.pack(side=tk.LEFT, anchor=tk.N)
         f = tk.Frame(filter_frame)
-        self.tremolo_filter = TremoloFilterGUI(f, self)
-        self.tremolo_filter.pack(side=tk.TOP)
+        self.tremolo_filter_gui = TremoloFilterGUI(f, self)
+        self.tremolo_filter_gui.pack(side=tk.TOP)
         lf = tk.LabelFrame(f, text="A4 tuning")
         lf.pack(pady=(4, 0))
         lf = tk.LabelFrame(f, text="Performance")
@@ -555,7 +579,7 @@ class SynthGUI(tk.Frame):
         subf.pack()
         lf.pack(pady=(4, 0))
         f.pack(side=tk.LEFT, anchor=tk.N)
-        self.echo_filter.pack(side=tk.LEFT, anchor=tk.N)
+        self.echo_filter_gui.pack(side=tk.LEFT, anchor=tk.N)
         misc_frame = tk.Frame(filter_frame, padx=10)
         tk.Label(misc_frame, text="To Speaker:").pack(pady=(5, 0))
         self.to_speaker_lb = tk.Listbox(misc_frame, width=8, height=5, selectmode=tk.MULTIPLE, exportselection=0)
@@ -580,22 +604,15 @@ class SynthGUI(tk.Frame):
         self.pack()
         self.synth = self.output = None
         self.create_synth()
-        self.playing_note = False
-        self.current_note = None
         self.echos_ending_time = 0
         self.arpeggio_playing = False
-        self.pressed_keyboard_keys = set()
 
     def bind_keypress(self, key, note, octave):
-
         def kbpress(event):
-            if key not in self.pressed_keyboard_keys:
-                self.pressed(event, note, octave, False)
-            self.pressed_keyboard_keys.add(key)
+            self.pressed_keyboard(note, octave, False)
 
         def kbrelease(event):
-            self.pressed(event, note, octave, True)
-            self.pressed_keyboard_keys.remove(key)
+            self.pressed_keyboard(note, octave, True)
 
         self.master.bind(key, kbpress)
         if key == '[':
@@ -610,7 +627,7 @@ class SynthGUI(tk.Frame):
         if self.output is not None:
             self.output.close()
         # XXX change sequential output into proper real-time mixing output
-        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, mixing="sequential", queue_size=2)
+        self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, mixing="mix")
 
     def add_osc_to_gui(self):
         osc_nr = len(self.oscillators)
@@ -620,16 +637,16 @@ class SynthGUI(tk.Frame):
         self.oscillators.append(osc_pane)
         self.to_speaker_lb.insert(tk.END, "osc "+str(osc_nr+1))
 
-    def create_osc(self, from_gui, all_oscillators, is_audio=False):
+    def create_osc(self, note, octave, from_gui, all_oscillators, is_audio=False):
         def create_unfiltered_osc():
             def create_chord_osc(clazz, **arguments):
-                if is_audio and self.arp_filter.input_mode.get().startswith("chords"):
-                    chord_keys = major_chord_keys(self.current_note[0], self.current_note[1])
-                    if self.arp_filter.input_mode.get() == "chords3":
+                if is_audio and self.arp_filter_gui.input_mode.get().startswith("chords"):
+                    chord_keys = major_chord_keys(note, octave)
+                    if self.arp_filter_gui.input_mode.get() == "chords3":
                         chord_keys = list(chord_keys)[:-1]
                     a4freq = self.a4_choice.get()
-                    chord_freqs = [note_freq(note, octave, a4freq) for note, octave in chord_keys]
-                    self.statusbar["text"] = "major chord: "+" ".join(note for note, octave in chord_keys)
+                    chord_freqs = [note_freq(n, o, a4freq) for n, o in chord_keys]
+                    self.statusbar["text"] = "major chord: "+" ".join(n for n, o in chord_keys)
                     oscillators = []
                     arguments["amplitude"] /= len(chord_freqs)
                     for f in chord_freqs:
@@ -661,14 +678,14 @@ class SynthGUI(tk.Frame):
                     fm = None
                 elif fm_choice.startswith("osc"):
                     osc_num = int(fm_choice.split()[1])
-                    fm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+                    fm = self.create_osc(note, octave, all_oscillators[osc_num-1], all_oscillators)
                 else:
                     raise ValueError("invalid fm choice")
                 if pwm_choice in (None, "", "<none>"):
                     pwm = None
                 elif pwm_choice.startswith("osc"):
                     osc_num = int(pwm_choice.split()[1])
-                    pwm = self.create_osc(all_oscillators[osc_num-1], all_oscillators)
+                    pwm = self.create_osc(note, octave, all_oscillators[osc_num-1], all_oscillators)
                 else:
                     raise ValueError("invalid fm choice")
                 if waveform == "pulse":
@@ -703,7 +720,7 @@ class SynthGUI(tk.Frame):
             return osc
 
         osc = create_unfiltered_osc()
-        for ev in self.envelope_filters:
+        for ev in self.envelope_filter_guis:
             osc = envelope(osc, ev)
         return osc
 
@@ -728,15 +745,16 @@ class SynthGUI(tk.Frame):
         osc.set_title_status("TO SPEAKER")
         self.update()
         osc.after(int(duration*1000), lambda: osc.set_title_status(None))
-        o = self.create_osc(osc, all_oscillators=self.oscillators, is_audio=True)
+        o = self.create_osc(None, None, osc, all_oscillators=self.oscillators, is_audio=True)
         o = self.apply_filters(o)
         sample = self.generate_sample(iter(o), duration)
-        with Output(self.synth.samplerate, self.synth.samplewidth, nchannels=1) as out:
-            out.play_sample(sample)
-            out.wait_all_played()
+        if sample.samplewidth != self.synth.samplewidth:
+            print("16 bit overflow!")  # XXX
+            sample = sample.make_16bit()
+        self.output.play_sample(sample)
 
     def do_plot(self, osc):
-        o = self.create_osc(osc, all_oscillators=self.oscillators)
+        o = self.create_osc(None, None, osc, all_oscillators=self.oscillators)
         frames = list(itertools.islice(o, self.synth.samplerate))
         if not plot:
             self.statusbar["text"] = "Cannot plot! To plot things, you need to have matplotlib installed!"
@@ -760,37 +778,9 @@ class SynthGUI(tk.Frame):
                 sample.fadein(0.05).fadeout(0.1)
             return sample
 
-    def continue_play_note(self, oscillator, first=True):
-        if self.echos_ending_time and time.time() >= self.echos_ending_time:
-            self.stop_playing_note()
-            return
-        if not self.playing_note:
-            sample = self.generate_sample(oscillator, 0.1).fadeout(0.1)
-            if sample:
-                if sample.samplewidth != self.synth.samplewidth:
-                    print("16 bit overflow!")  # XXX
-                    sample.make_16bit()
-                self.output.play_sample(sample)
-            return
-        if first:
-            sample = self.generate_sample(oscillator, 0.1)
-            if sample:
-                sample.fadein(0.05)
-                if sample.samplewidth != self.synth.samplewidth:
-                    print("16 bit overflow!")  # XXX
-                    sample.make_16bit()
-                self.output.play_sample(sample)
-        sample = self.generate_sample(oscillator, 0.1)
-        if sample:
-            if sample.samplewidth != self.synth.samplewidth:
-                print("16 bit overflow!")  # XXX
-                sample.make_16bit()
-            self.output.play_sample(sample)
-            self.after_idle(lambda: self.continue_play_note(oscillator, False))
-
     def render_and_play_note(self, oscillator, max_duration=4):
         duration = 0
-        for ev in self.envelope_filters:
+        for ev in self.envelope_filter_guis:
             duration = max(duration, ev.duration)
         if duration == 0:
             duration = 1
@@ -802,47 +792,59 @@ class SynthGUI(tk.Frame):
                 print("16 bit overflow!")  # XXX
                 sample.make_16bit()
             self.output.play_sample(sample)
-            self.output.wait_all_played()
 
-    def stop_playing_note(self):
-        self.playing_note = False
-        to_speaker = [self.oscillators[i] for i in self.to_speaker_lb.curselection()]
-        for osc in to_speaker:
-            osc.set_title_status(None)
-        self.keypress_sema.release()
+    keypresses = collections.defaultdict(float)         # (note, octave) -> timestamp
+    keyrelease_counts = collections.defaultdict(int)    # (note, octave) -> int
 
-    def pressed(self, event, note, octave, released=False):
+    def _key_release(self, note, octave):
+        # mechanism to filter out key repeats
+        self.keyrelease_counts[(note, octave)] -= 1
+        if self.keyrelease_counts[(note, octave)] <= 0:
+            self.pressed(note, octave, True)
+
+    def pressed_keyboard(self, note, octave, released=False):
+        if released:
+            self.keyrelease_counts[(note, octave)] += 1
+            self.after(400, lambda n=note, o=octave: self._key_release(n, o))
+        else:
+            time_since_previous = time.time() - self.keypresses[(note, octave)]
+            self.keypresses[(note, octave)] = time.time()
+            if time_since_previous < 0.8:
+                # assume auto-repeat, and do nothing
+                return
+            self.pressed(note, octave)
+
+    def pressed(self, note, octave, released=False):
         if self.arpeggio_playing:
             if not released:
                 # arp still playing... stop it
                 self.arpeggio_playing = False
             return
-        a4freq = self.a4_choice.get()
-        if self.arp_filter.input_mode.get().startswith("arp"):
+        if self.arp_filter_gui.input_mode.get().startswith("arp"):
             if released:
-                self._pressed([0, 1, 2], released=True)
+                self.play_note([(note, octave, freq) for freq in [0, 1, 2]], released=True)
                 return
             chord_keys = major_chord_keys(note, octave)
-            if self.arp_filter.input_mode.get() == "arpeggio3":
+            if self.arp_filter_gui.input_mode.get() == "arpeggio3":
                 chord_keys = list(chord_keys)[:-1]
-            chord_freqs = [note_freq(note, octave, a4freq) for note, octave in chord_keys]
+            a4freq = self.a4_choice.get()
+            chord_notes = [(note, octave, note_freq(note, octave, a4freq)) for note, octave in chord_keys]
             self.statusbar["text"] = "arpeggio: "+" ".join(note for note, octave in chord_keys)
             self.arpeggio_playing = True
-            self._pressed(chord_freqs)
+            self.play_note(chord_notes)
         else:
             self.statusbar["text"] = "ok"
             a4freq = self.a4_choice.get()
             freq = note_freq(note, octave, a4freq)
-            self.current_note = (note, octave, freq)
-            self._pressed(freq, released)
+            self.play_note([(note, octave, freq)], released)
 
-    def _pressed(self, freqs, released=False):
-        # freqs can be a single frequency or a sequence of freqs (ARP)
-        if isinstance(freqs, (tuple, list)):
-            freq = freqs[0]
+    def play_note(self, list_of_notes, released=False):
+        # list of notes to play (length 1 = just one note, more elements = arpeggiator list)
+        note = octave = freq = None
+        if len(list_of_notes) > 1:
             arpeggio = True
         else:
-            freq = freqs
+            note, octave, freq = list_of_notes[0]
             arpeggio = False
         if arpeggio and not self.arpeggio_playing:
             # stop the running arp cycle
@@ -851,15 +853,10 @@ class SynthGUI(tk.Frame):
         if not to_speaker:
             self.statusbar["text"] = "No oscillators connected to speaker output!"
             return
-        if not arpeggio:
-            if released:
-                # only stop sound immediately if no echo filter is enabled
-                if not self.echos_ending_time:
-                    self.stop_playing_note()
-                return
-            if not self.keypress_sema.acquire(blocking=False):
-                self.statusbar["text"] = "can't play new note - previous one still playing (monophonic, sorry)"
-                return
+        if released and not arpeggio:
+            # stop the note
+            print("RELEASE", note, octave, freq)  # XXX
+            return
         for osc in self.oscillators:
             if osc.input_freq_keys.get():
                 osc.input_freq.set(freq*osc.input_freq_keys_ratio.get())
@@ -869,38 +866,38 @@ class SynthGUI(tk.Frame):
                 return
             else:
                 osc.set_title_status("TO SPEAKER")
-        oscs = [self.create_osc(osc, self.oscillators, is_audio=True) for osc in to_speaker]
+        oscs = [self.create_osc(note, octave, osc, self.oscillators, is_audio=True) for osc in to_speaker]
         mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
         if not arpeggio:
-            # at this time you can't use filters when using arpeggio
+            # you can't use filters when using arpeggio for now
             mixed_osc = self.apply_filters(mixed_osc)
         current_echos_duration = getattr(mixed_osc, "echo_duration", 0)
         if current_echos_duration > 0:
             self.echos_ending_time = time.time() + current_echos_duration
         else:
             self.echos_ending_time = 0
-        self.playing_note = True
         if arpeggio:
             # cycle the arp notes
-            freqs.append(freqs[0])
-            freqs = freqs[1:]
-            rate = self.arp_filter.input_rate.get()
-            duration = rate * self.arp_filter.input_ratio.get() / 100.0
-            self.after_idle(lambda: self.render_and_play_note(iter(mixed_osc), max_duration=duration))
-            self.after(int(rate*1000*0.95), lambda: self._pressed(freqs))
+            # XXX arp filter instead of via timer?
+            print("PLAY ARP", list_of_notes)    # XXX
+            rate = self.arp_filter_gui.input_rate.get()
+            duration = rate * self.arp_filter_gui.input_ratio.get() / 100.0
+            # XXX play something
         else:
             # normal, single note
             self.output.silence()
             if self.rendering_choice.get() == "render":
                 self.statusbar["text"] = "rendering note sample..."
                 self.after_idle(lambda: self.render_and_play_note(iter(mixed_osc)))
-                self.after_idle(lambda: self.stop_playing_note())
             else:
-                self.after_idle(lambda: self.continue_play_note(iter(mixed_osc)))
+                self.statusbar["text"] = "playing note {0} {1}".format(note, octave)
+                sample = StreamingOscSample(mixed_osc)
+                sid = self.output.play_sample(sample)
+                print("started playing sample", sid, note, octave)  # XXX
 
     def apply_filters(self, output_oscillator):
-        output_oscillator = self.tremolo_filter.filter(output_oscillator)
-        output_oscillator = self.echo_filter.filter(output_oscillator)
+        output_oscillator = self.tremolo_filter_gui.filter(output_oscillator)
+        output_oscillator = self.echo_filter_gui.filter(output_oscillator)
         return output_oscillator
 
     def load_preset(self):
@@ -926,18 +923,18 @@ class SynthGUI(tk.Frame):
                 osc.waveform_selected()
             elif section.startswith("envelope"):
                 num = int(section.split('_')[1])-1
-                env = self.envelope_filters[num]
+                env = self.envelope_filter_guis[num]
                 for name, value in cf[section].items():
                     getattr(env, name).set(value)
             elif section == "arpeggio":
                 for name, value in cf[section].items():
-                    getattr(self.arp_filter, name).set(value)
+                    getattr(self.arp_filter_gui, name).set(value)
             elif section == "tremolo":
                 for name, value in cf[section].items():
-                    getattr(self.tremolo_filter, name).set(value)
+                    getattr(self.tremolo_filter_gui, name).set(value)
             elif section == "echo":
                 for name, value in cf[section].items():
-                    getattr(self.echo_filter, name).set(value)
+                    getattr(self.echo_filter_gui, name).set(value)
         self.statusbar["text"] = "preset loaded."
 
     def save_preset(self):
@@ -957,7 +954,7 @@ class SynthGUI(tk.Frame):
                 if name.startswith("input_"):
                     cf[section][name] = str(var.get())
         # adsr envelopes
-        for num, filter in enumerate(self.envelope_filters, 1):
+        for num, filter in enumerate(self.envelope_filter_guis, 1):
             section = "envelope_"+str(num)
             cf.add_section(section)
             for name, var in vars(filter).items():
@@ -965,17 +962,17 @@ class SynthGUI(tk.Frame):
                     cf[section][name] = str(var.get())
         # echo
         cf.add_section("echo")
-        for name, var in vars(self.echo_filter).items():
+        for name, var in vars(self.echo_filter_gui).items():
             if name.startswith("input_"):
                 cf["echo"][name] = str(var.get())
         # tremolo
         cf.add_section("tremolo")
-        for name, var in vars(self.tremolo_filter).items():
+        for name, var in vars(self.tremolo_filter_gui).items():
             if name.startswith("input_"):
                 cf["tremolo"][name] = str(var.get())
         # arpeggio
         cf.add_section("arpeggio")
-        for name, var in vars(self.arp_filter).items():
+        for name, var in vars(self.arp_filter_gui).items():
             if name.startswith("input_"):
                 cf["arpeggio"][name] = str(var.get())
 
