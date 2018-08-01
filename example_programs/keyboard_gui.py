@@ -29,10 +29,16 @@ except ImportError:
 
 
 class StreamingOscSample(Sample):
-    def __init__(self, oscillator):
+    def __init__(self, oscillator, samplerate, duration=0.0):
         super().__init__()
         self.mono()
+        self.samplerate = samplerate
         self.oscillator = iter(oscillator)
+        self.max_play_duration = duration or 1000000
+
+    @property
+    def duration(self):
+        return self.max_play_duration
 
     def view_frame_data(self):
         raise NotImplementedError("a streaming sample doesn't have a frame data buffer to view")
@@ -41,9 +47,10 @@ class StreamingOscSample(Sample):
         raise NotImplementedError("use oscillators to generate the sound")
 
     def chunked_frame_data(self, chunksize, repeat=False, stopcondition=lambda: False):
+        played_duration = 0.0
         num_frames = chunksize // self.samplewidth // self.nchannels
         scale = 2 ** (8 * self.samplewidth - 1)
-        while True:
+        while played_duration < self.max_play_duration:
             try:
                 frames = [int(v * scale) for v in itertools.islice(self.oscillator, num_frames)]
             except StopIteration:
@@ -51,6 +58,7 @@ class StreamingOscSample(Sample):
             else:
                 sample = Sample.from_array(frames, self.samplerate, 1)
                 yield sample.view_frame_data()
+            played_duration += num_frames / self.samplerate
 
 
 class OscillatorGUI(tk.LabelFrame):
@@ -473,7 +481,6 @@ class ArpeggioFilterGUI(tk.LabelFrame):
                  width=10, length=100).grid(row=row, column=1)
 
     def mode_off_selected(self):
-        self.gui.arpeggio_playing = False   # stop any arpeggio that may be running
         self.gui.statusbar["text"] = "ok"
 
 
@@ -605,7 +612,8 @@ class SynthGUI(tk.Frame):
         self.synth = self.output = None
         self.create_synth()
         self.echos_ending_time = 0
-        self.arpeggio_playing = False
+        self.currently_playing = {}     # (note, octave) -> sid
+        self.arp_after_id = 0
 
     def bind_keypress(self, key, note, octave):
         def kbpress(event):
@@ -626,7 +634,6 @@ class SynthGUI(tk.Frame):
         self.synth = WaveSynth(samplewidth=2, samplerate=samplerate)
         if self.output is not None:
             self.output.close()
-        # XXX change sequential output into proper real-time mixing output
         self.output = Output(self.synth.samplerate, self.synth.samplewidth, 1, mixing="mix")
 
     def add_osc_to_gui(self):
@@ -637,7 +644,7 @@ class SynthGUI(tk.Frame):
         self.oscillators.append(osc_pane)
         self.to_speaker_lb.insert(tk.END, "osc "+str(osc_nr+1))
 
-    def create_osc(self, note, octave, from_gui, all_oscillators, is_audio=False):
+    def create_osc(self, note, octave, freq, from_gui, all_oscillators, is_audio=False):
         def create_unfiltered_osc():
             def create_chord_osc(clazz, **arguments):
                 if is_audio and self.arp_filter_gui.input_mode.get().startswith("chords"):
@@ -656,11 +663,11 @@ class SynthGUI(tk.Frame):
                 else:
                     # no chord (or an LFO instead of audio output oscillator), return one osc for only the given frequency
                     return clazz(**arguments)
+
             waveform = from_gui.input_waveformtype.get()
             amp = from_gui.input_amp.get()
             bias = from_gui.input_bias.get()
             if waveform == "noise":
-                freq = from_gui.input_freq.get()
                 return WhiteNoise(freq, amplitude=amp, bias=bias, samplerate=self.synth.samplerate)
             elif waveform == "linear":
                 startlevel = from_gui.input_lin_start.get()
@@ -669,7 +676,6 @@ class SynthGUI(tk.Frame):
                 maxvalue = from_gui.input_lin_max.get()
                 return Linear(startlevel, increment, minvalue, maxvalue)
             else:
-                freq = from_gui.input_freq.get()
                 phase = from_gui.input_phase.get()
                 pw = from_gui.input_pw.get()
                 fm_choice = from_gui.input_fm.get()
@@ -678,14 +684,16 @@ class SynthGUI(tk.Frame):
                     fm = None
                 elif fm_choice.startswith("osc"):
                     osc_num = int(fm_choice.split()[1])
-                    fm = self.create_osc(note, octave, all_oscillators[osc_num-1], all_oscillators)
+                    osc = all_oscillators[osc_num - 1]
+                    fm = self.create_osc(note, octave, osc.input_freq.get(), all_oscillators[osc_num-1], all_oscillators)
                 else:
                     raise ValueError("invalid fm choice")
                 if pwm_choice in (None, "", "<none>"):
                     pwm = None
                 elif pwm_choice.startswith("osc"):
                     osc_num = int(pwm_choice.split()[1])
-                    pwm = self.create_osc(note, octave, all_oscillators[osc_num-1], all_oscillators)
+                    osc = all_oscillators[osc_num-1]
+                    pwm = self.create_osc(note, octave, osc.input_freq.get(), osc, all_oscillators)
                 else:
                     raise ValueError("invalid fm choice")
                 if waveform == "pulse":
@@ -745,16 +753,17 @@ class SynthGUI(tk.Frame):
         osc.set_title_status("TO SPEAKER")
         self.update()
         osc.after(int(duration*1000), lambda: osc.set_title_status(None))
-        o = self.create_osc(None, None, osc, all_oscillators=self.oscillators, is_audio=True)
+        o = self.create_osc(None, None, osc.input_freq.get(), osc, all_oscillators=self.oscillators, is_audio=True)
         o = self.apply_filters(o)
         sample = self.generate_sample(iter(o), duration)
         if sample.samplewidth != self.synth.samplewidth:
             print("16 bit overflow!")  # XXX
             sample = sample.make_16bit()
         self.output.play_sample(sample)
+        self.after(1000, lambda: osc.set_title_status(""))
 
     def do_plot(self, osc):
-        o = self.create_osc(None, None, osc, all_oscillators=self.oscillators)
+        o = self.create_osc(None, None, osc.input_freq.get(), osc, all_oscillators=self.oscillators)
         frames = list(itertools.islice(o, self.synth.samplerate))
         if not plot:
             self.statusbar["text"] = "Cannot plot! To plot things, you need to have matplotlib installed!"
@@ -815,85 +824,86 @@ class SynthGUI(tk.Frame):
             self.pressed(note, octave)
 
     def pressed(self, note, octave, released=False):
-        if self.arpeggio_playing:
-            if not released:
-                # arp still playing... stop it
-                self.arpeggio_playing = False
-            return
         if self.arp_filter_gui.input_mode.get().startswith("arp"):
             if released:
-                self.play_note([(note, octave, freq) for freq in [0, 1, 2]], released=True)
+                if self.arp_after_id:
+                    self.after_cancel(self.arp_after_id)   # stop the arp cycle
+                    self.statusbar["text"] = "ok"
+                    self.arp_after_id = 0
                 return
             chord_keys = major_chord_keys(note, octave)
             if self.arp_filter_gui.input_mode.get() == "arpeggio3":
                 chord_keys = list(chord_keys)[:-1]
-            a4freq = self.a4_choice.get()
-            chord_notes = [(note, octave, note_freq(note, octave, a4freq)) for note, octave in chord_keys]
             self.statusbar["text"] = "arpeggio: "+" ".join(note for note, octave in chord_keys)
-            self.arpeggio_playing = True
-            self.play_note(chord_notes)
+            self.play_note(chord_keys)
         else:
             self.statusbar["text"] = "ok"
-            a4freq = self.a4_choice.get()
-            freq = note_freq(note, octave, a4freq)
-            self.play_note([(note, octave, freq)], released)
+            self.play_note([(note, octave)], released)
 
     def play_note(self, list_of_notes, released=False):
         # list of notes to play (length 1 = just one note, more elements = arpeggiator list)
-        note = octave = freq = None
-        if len(list_of_notes) > 1:
-            arpeggio = True
-        else:
-            note, octave, freq = list_of_notes[0]
-            arpeggio = False
-        if arpeggio and not self.arpeggio_playing:
-            # stop the running arp cycle
-            return
         to_speaker = [self.oscillators[i] for i in self.to_speaker_lb.curselection()]
         if not to_speaker:
             self.statusbar["text"] = "No oscillators connected to speaker output!"
             return
-        if released and not arpeggio:
-            # stop the note
-            print("RELEASE", note, octave, freq)  # XXX
+        if released:
+            for note, octave in list_of_notes:
+                if (note, octave) in self.currently_playing:
+                    # stop the note
+                    sid = self.currently_playing[(note, octave)]
+                    self.output.stop_sample(sid)
             return
+
+        first_note, first_octave = list_of_notes[0]
+        first_freq = note_freq(first_note, first_octave, self.a4_choice.get())
         for osc in self.oscillators:
             if osc.input_freq_keys.get():
-                osc.input_freq.set(freq*osc.input_freq_keys_ratio.get())
+                osc.input_freq.set(first_freq*osc.input_freq_keys_ratio.get())
         for osc in to_speaker:
             if osc.input_waveformtype.get() == "linear":
                 self.statusbar["text"] = "cannot output linear osc to speakers"
                 return
             else:
                 osc.set_title_status("TO SPEAKER")
-        oscs = [self.create_osc(note, octave, osc, self.oscillators, is_audio=True) for osc in to_speaker]
-        mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
-        if not arpeggio:
-            # you can't use filters when using arpeggio for now
-            mixed_osc = self.apply_filters(mixed_osc)
-        current_echos_duration = getattr(mixed_osc, "echo_duration", 0)
-        if current_echos_duration > 0:
-            self.echos_ending_time = time.time() + current_echos_duration
-        else:
+
+        oscs_to_play = []
+        for note, octave in list_of_notes:
+            freq = note_freq(note, octave, self.a4_choice.get())
+            oscs = [self.create_osc(note, octave, freq * osc.input_freq_keys_ratio.get(), osc, self.oscillators, is_audio=True) for osc in to_speaker]
+            mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
             self.echos_ending_time = 0
-        if arpeggio:
-            # cycle the arp notes
-            # XXX arp filter instead of via timer?
-            print("PLAY ARP", list_of_notes)    # XXX
+            if len(list_of_notes) <= 1:
+                # you can't use filters and echo when using arpeggio for now
+                mixed_osc = self.apply_filters(mixed_osc)
+                current_echos_duration = getattr(mixed_osc, "echo_duration", 0)
+                if current_echos_duration > 0:
+                    self.echos_ending_time = time.time() + current_echos_duration
+            oscs_to_play.append(mixed_osc)
+
+        if len(list_of_notes) > 1:
             rate = self.arp_filter_gui.input_rate.get()
             duration = rate * self.arp_filter_gui.input_ratio.get() / 100.0
-            # XXX play something
+            self.statusbar["text"] = "playing ARP ({0}) from note {1} {2}".format(len(oscs_to_play), first_note, first_octave)
+            for index, (note, octave) in enumerate(list_of_notes):
+                sample = StreamingOscSample(oscs_to_play[index], self.synth.samplerate, duration)
+                sid = self.output.play_sample(sample, delay=rate*index)
+                self.currently_playing[(note, octave)] = sid
+            self.arp_after_id = self.after(int(rate * len(list_of_notes) * 1000), lambda: self.play_note(list_of_notes))   # repeat arp!
         else:
             # normal, single note
-            self.output.silence()
             if self.rendering_choice.get() == "render":
                 self.statusbar["text"] = "rendering note sample..."
                 self.after_idle(lambda: self.render_and_play_note(iter(mixed_osc)))
             else:
-                self.statusbar["text"] = "playing note {0} {1}".format(note, octave)
-                sample = StreamingOscSample(mixed_osc)
+                self.statusbar["text"] = "playing note {0} {1}".format(first_note, first_octave)
+                sample = StreamingOscSample(oscs_to_play[0], self.synth.samplerate)
                 sid = self.output.play_sample(sample)
-                print("started playing sample", sid, note, octave)  # XXX
+                self.currently_playing[(first_note, first_octave)] = sid
+
+        def reset_osc_title_status():
+            for osc in to_speaker:
+                osc.set_title_status("")
+        self.after(1000, reset_osc_title_status)
 
     def apply_filters(self, output_oscillator):
         output_oscillator = self.tremolo_filter_gui.filter(output_oscillator)
