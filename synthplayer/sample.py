@@ -81,7 +81,7 @@ class Sample:
         assert 2 <= samplewidth <= 4
         assert samplerate > 1
         s = cls(name=name)
-        if isinstance(frames, list):
+        if isinstance(frames, (list, memoryview)):
             s.__frames = bytes(frames)
         else:
             s.__frames = frames

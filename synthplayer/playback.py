@@ -37,22 +37,50 @@ class RealTimeMixer:
     Simply adds a number of samples, clipping if values become too large.
     Produces (via a generator method) chunks of audio stream data to be fed to the sound output stream.
     """
-    def __init__(self, chunksize: int, all_played_callback: Callable=None) -> None:
+    def __init__(self, chunksize: int, all_played_callback: Callable=None, pop_prevention: Optional[bool]=None) -> None:
         self.chunksize = chunksize
         self.all_played_callback = all_played_callback or (lambda: None)
         self.add_lock = threading.Lock()
         self.chunks_mixed = 0
+        if pop_prevention is None:
+            self.pop_prevention = params.mixer_pop_prevention
+        else:
+            self.pop_prevention = pop_prevention
         self._sid = 0
         self._closed = False
         self.active_samples = {}   # type: Dict[int, Tuple[str, float, Generator[memoryview, None, None]]]
         self.sample_counts = defaultdict(int)  # type: Dict[str, int]
         self.sample_limits = defaultdict(lambda: 9999999)  # type: Dict[str, int]
 
+    @staticmethod
+    def antipop_fadein_fadeout(orig_generator):
+        # very quickly fades in the first chunk,and fades out the last chunk,
+        # to avoid clicks/pops when the sound suddenly starts playing or is stopped.
+        chunk = next(orig_generator)
+        sample = Sample.from_raw_frames(chunk,
+                                        params.norm_samplewidth,
+                                        params.norm_samplerate,
+                                        params.norm_nchannels)
+        sample.fadein(0.005)
+        fadeout = yield sample.view_frame_data()
+        while not fadeout:
+            fadeout = yield next(orig_generator)
+        chunk = next(orig_generator)
+        yield chunk  # to satisfy the result for the .send() on this generator
+        sample = Sample.from_raw_frames(chunk,
+                                        params.norm_samplewidth,
+                                        params.norm_samplerate,
+                                        params.norm_nchannels)
+        sample.fadeout(0.02)
+        yield sample.view_frame_data()  # the actual last chunk, faded out
+
     def add_sample(self, sample: Sample, repeat: bool=False, chunk_delay: int=0, sid: int=None) -> Union[int, None]:
         if not self.allow_sample(sample, repeat):
             return None
         with self.add_lock:
             sample_chunks = sample.chunked_frame_data(chunksize=self.chunksize, repeat=repeat)
+            if self.pop_prevention:
+                sample_chunks = self.antipop_fadein_fadeout(sample_chunks)
             self._sid += 1
             sid = sid or self._sid
             self.active_samples[sid] = (sample.name, self.chunks_mixed+chunk_delay, sample_chunks)
@@ -106,7 +134,7 @@ class RealTimeMixer:
                         chunk = memoryview(chunk.tobytes() + silence[len(chunk):])
                     chunks_to_mix.append(chunk)
                 except StopIteration:
-                    self.remove_sample(i)
+                    self.remove_sample(i, True)
             chunks_to_mix = chunks_to_mix or [silence]      # type: ignore
             assert all(len(c) == self.chunksize for c in chunks_to_mix)
             mixed = chunks_to_mix[0]
@@ -117,13 +145,22 @@ class RealTimeMixer:
             self.chunks_mixed += 1
             yield mixed
 
-    def remove_sample(self, sid: int) -> None:
+    def remove_sample(self, sid: int, sample_exhausted: bool=False) -> None:
         with self.add_lock:
-            name = self.active_samples[sid][0]
-            del self.active_samples[sid]
-            self.sample_counts[name] -= 1
-            if not self.active_samples:
-                self.all_played_callback()
+            if sid in self.active_samples:
+                name, play_at_chunk, generator = self.active_samples[sid]
+                if self.pop_prevention and not sample_exhausted:
+                    # first let the generator produce a fadeout
+                    try:
+                        generator.send("fadeout")       # type: ignore
+                    except ValueError:
+                        self.remove_sample(sid, True)
+                else:
+                    # remove a finished sample (or directly, if no pop prevention active)
+                    del self.active_samples[sid]
+                    self.sample_counts[name] -= 1
+                    if not self.active_samples:
+                        self.all_played_callback()
 
     def set_limit(self, samplename: str, max_simultaneously: int) -> None:
         self.sample_limits[samplename] = max_simultaneously
