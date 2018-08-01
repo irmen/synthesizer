@@ -406,8 +406,7 @@ class EnvelopeFilter(Oscillator):
             if not self._cycle:
                 break
         if not self._stop_at_end:
-            while True:
-                yield 0.0
+            yield from itertools.repeat(0.0)
 
 
 class MixingFilter(Oscillator):

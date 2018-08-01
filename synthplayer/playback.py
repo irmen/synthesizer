@@ -146,6 +146,11 @@ class RealTimeMixer:
             yield mixed
 
     def remove_sample(self, sid: int, sample_exhausted: bool=False) -> None:
+        def actually_remove(sid, name):
+            del self.active_samples[sid]
+            self.sample_counts[name] -= 1
+            if not self.active_samples:
+                self.all_played_callback()
         with self.add_lock:
             if sid in self.active_samples:
                 name, play_at_chunk, generator = self.active_samples[sid]
@@ -153,14 +158,12 @@ class RealTimeMixer:
                     # first let the generator produce a fadeout
                     try:
                         generator.send("fadeout")       # type: ignore
-                    except ValueError:
-                        self.remove_sample(sid, True)
+                    except (TypeError, ValueError, StopIteration):
+                        # generator couldn't process the fadeout, just remove the sample...
+                        actually_remove(sid, name)
                 else:
                     # remove a finished sample (or directly, if no pop prevention active)
-                    del self.active_samples[sid]
-                    self.sample_counts[name] -= 1
-                    if not self.active_samples:
-                        self.all_played_callback()
+                    actually_remove(sid, name)
 
     def set_limit(self, samplename: str, max_simultaneously: int) -> None:
         self.sample_limits[samplename] = max_simultaneously
