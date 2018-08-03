@@ -64,7 +64,10 @@ class RealTimeMixer:
         sample.fadein(0.005)
         fadeout = yield sample.view_frame_data()
         while not fadeout:
-            fadeout = yield next(orig_generator)
+            try:
+                fadeout = yield next(orig_generator)
+            except StopIteration:
+                return
         chunk = next(orig_generator)
         yield chunk  # to satisfy the result for the .send() on this generator
         sample = Sample.from_raw_frames(chunk,
