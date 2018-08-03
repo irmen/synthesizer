@@ -869,7 +869,8 @@ class SynthGUI(tk.Frame):
         oscs_to_play = []
         for note, octave in list_of_notes:
             freq = note_freq(note, octave, self.a4_choice.get())
-            oscs = [self.create_osc(note, octave, freq * osc.input_freq_keys_ratio.get(), osc, self.oscillators, is_audio=True) for osc in to_speaker]
+            oscs = [self.create_osc(note, octave, freq * osc.input_freq_keys_ratio.get(), osc,
+                                    self.oscillators, is_audio=True) for osc in to_speaker]
             mixed_osc = MixingFilter(*oscs) if len(oscs) > 1 else oscs[0]
             self.echos_ending_time = 0
             if len(list_of_notes) <= 1:
