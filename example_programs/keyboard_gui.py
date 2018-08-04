@@ -23,9 +23,10 @@ import synthplayer
 try:
     import matplotlib
     matplotlib.use("tkagg")
-    import matplotlib.pyplot as plot
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 except ImportError:
-    plot = None
+    matplotlib = Figure = None
 
 
 class StreamingOscSample(Sample):
@@ -545,6 +546,7 @@ class SynthGUI(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.master.title("Software FM/PWM Synthesizer   |   synthplayer lib v" + synthplayer.__version__)
+        self.waveform_area = tk.Frame(self)
         self.osc_frame = tk.Frame(self)
         self.oscillators = []
         self.piano_frame = tk.Frame(self)
@@ -602,6 +604,7 @@ class SynthGUI(tk.Frame):
         for _ in range(5):
             self.add_osc_to_gui()
         self.to_speaker_lb.select_set(4)
+        self.waveform_area.pack(side=tk.TOP)
         self.osc_frame.pack(side=tk.TOP, padx=10)
         filter_frame.pack(side=tk.TOP)
         misc_frame.pack(side=tk.RIGHT, anchor=tk.N)
@@ -762,18 +765,27 @@ class SynthGUI(tk.Frame):
         self.output.play_sample(sample)
         self.after(1000, lambda: osc.set_title_status(""))
 
+    def do_close_waveform(self):
+        for child in self.waveform_area.winfo_children():
+            child.destroy()
+
     def do_plot(self, osc):
-        o = self.create_osc(None, None, osc.input_freq.get(), osc, all_oscillators=self.oscillators)
-        frames = list(itertools.islice(o, self.synth.samplerate))
-        if not plot:
+        if not matplotlib:
             self.statusbar["text"] = "Cannot plot! To plot things, you need to have matplotlib installed!"
             return
-        plot.figure(figsize=(16, 4))
-        plot.title("Waveform")
-        plot.plot(frames)
-        plot.show()
-        # @todo properly integrate matplotlib in the tkinter gui because the above causes gui freeze problems
-        # see http://matplotlib.org/examples/user_interfaces/embedding_in_tk2.html
+        o = self.create_osc(None, None, osc.input_freq.get(), osc, all_oscillators=self.oscillators)
+        frames = list(itertools.islice(o, self.synth.samplerate))
+        # integrating matplotlib in tikinter, see http://matplotlib.org/examples/user_interfaces/embedding_in_tk2.html
+        fig = Figure(figsize=(8, 2), dpi=100)
+        axis = fig.add_subplot(111)
+        axis.plot(frames)
+        axis.set_title("Waveform")
+        self.do_close_waveform()
+        canvas = FigureCanvasTkAgg(fig, master=self.waveform_area)
+        canvas.get_tk_widget().pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+        canvas.draw()
+        close_waveform = tk.Button(self.waveform_area, text="Close waveform", command=self.do_close_waveform)
+        close_waveform.pack(side=tk.RIGHT)
 
     def generate_sample(self, oscillator, duration, use_fade=False):
         scale = 2**(8*self.synth.samplewidth-1)
