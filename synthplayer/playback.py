@@ -31,6 +31,10 @@ pyaudio = None
 winsound = None
 
 
+antipop_fadein = 0.005
+antipop_fadeout = 0.02
+
+
 class RealTimeMixer:
     """
     Real-time audio sample mixer. Samples are played as soon as they're added into the mix.
@@ -43,7 +47,7 @@ class RealTimeMixer:
         self.add_lock = threading.Lock()
         self.chunks_mixed = 0
         if pop_prevention is None:
-            self.pop_prevention = params.mixer_pop_prevention
+            self.pop_prevention = params.auto_sample_pop_prevention
         else:
             self.pop_prevention = pop_prevention
         self._sid = 0
@@ -61,7 +65,7 @@ class RealTimeMixer:
                                         params.norm_samplewidth,
                                         params.norm_samplerate,
                                         params.norm_nchannels)
-        sample.fadein(0.005)
+        sample.fadein(antipop_fadein)
         fadeout = yield sample.view_frame_data()
         while not fadeout:
             try:
@@ -74,7 +78,7 @@ class RealTimeMixer:
                                         params.norm_samplewidth,
                                         params.norm_samplerate,
                                         params.norm_nchannels)
-        sample.fadeout(0.02)
+        sample.fadeout(antipop_fadeout)
         yield sample.view_frame_data()  # the actual last chunk, faded out
 
     def add_sample(self, sample: Sample, repeat: bool=False, chunk_delay: int=0, sid: int=None) -> Union[int, None]:
@@ -423,7 +427,10 @@ class SounddeviceThread_Seq(AudioApi):
                         if command is None or command["action"] == "stop":
                             break
                         elif command["action"] == "play":
-                            data = command["sample"].view_frame_data() or b""
+                            sample = command["sample"]
+                            if params.auto_sample_pop_prevention:
+                                sample = sample.fadein(antipop_fadein).fadeout(antipop_fadeout)
+                            data = sample.view_frame_data() or b""
                             repeat = command["repeat"]
                     except queue.Empty:
                         self.all_played.set()
@@ -583,7 +590,10 @@ class PyAudio_Seq(AudioApi):
                             if command is None or command["action"] == "stop":
                                 break
                             elif command["action"] == "play":
-                                data = command["sample"].view_frame_data() or b""
+                                sample = command["sample"]
+                                if params.auto_sample_pop_prevention:
+                                    sample = sample.fadein(antipop_fadein).fadeout(antipop_fadeout)
+                                data = sample.view_frame_data() or b""
                                 repeat = command["repeat"]
                         except queue.Empty:
                             self.all_played.set()
@@ -693,6 +703,8 @@ class Winsound_Seq(AudioApi):
         # (can't use winsound async because we're playing from a memory buffer)
         while True:
             sample = self.sample_queue.get()
+            if params.auto_sample_pop_prevention:
+                sample = sample.fadein(antipop_fadein).fadeout(antipop_fadeout)
             with io.BytesIO() as sample_data:
                 sample.write_wav(sample_data)   # type: ignore
                 winsound.PlaySound(sample_data.getbuffer(), winsound.SND_MEMORY)     # type: ignore
