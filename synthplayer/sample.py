@@ -475,6 +475,8 @@ class Sample:
         """Fade the end of the sample out to the target volume (usually zero) in the given time."""
         if self.__locked:
             raise RuntimeError("cannot modify a locked sample")
+        if not self.__frames:
+            return self
         seconds = min(seconds, self.duration)
         i = self.frame_idx(self.duration-seconds)
         begin = self.__frames[:i]
@@ -494,6 +496,8 @@ class Sample:
         """Fade the start of the sample in from the starting volume (usually zero) in the given time."""
         if self.__locked:
             raise RuntimeError("cannot modify a locked sample")
+        if not self.__frames:
+            return self
         seconds = min(seconds, self.duration)
         i = self.frame_idx(seconds)
         begin = self.__frames[:i]  # we fade this chunk

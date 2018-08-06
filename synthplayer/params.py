@@ -15,4 +15,4 @@ norm_frames_per_chunk = norm_samplerate // 30
 
 # should the output sound mixer fade samples to prevent click/pop noise?
 # (it wil incur a slight performance hit)
-auto_sample_pop_prevention = True
+auto_sample_pop_prevention = False
