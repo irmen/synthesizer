@@ -1124,7 +1124,7 @@ def check_waveforms():
 
 
 def plot_waveforms():
-    import matplotlib.pyplot as plot        # type: ignore
+    import matplotlib.pyplot as plot
     ws = WaveSynth(samplerate=80, samplewidth=2)
     ws2 = WaveSynth(samplerate=1000, samplewidth=2)
     ncols = 4

@@ -7,14 +7,14 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 
 import sys
 import wave
-import audioop      # type: ignore
+import audioop
 import array
 import math
 import itertools
 from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO
 from . import params
 try:
-    import numpy        # type: ignore
+    import numpy
 except ImportError:
     numpy = None
 
@@ -856,15 +856,28 @@ class LevelMeter:
         self._time = time
         return left, self.peak_left, right, self.peak_right
 
-    def print(self, bar_width: int=60) -> None:
+    def print(self, bar_width: int=60, stereo: bool=False) -> None:
         """
-        Prints the current level meter to the console.
-        Left and right levels are joined into one master level.
+        Prints the current level meter as one ascii art line to standard output.
+        Left and right levels are joined into one master level,
+        unless you set stereo to True which will print L+R.
         """
-        db_mixed = (self.level_left+self.level_right)/2
-        peak_mixed = (self.peak_left+self.peak_right)/2
-        db_level = int(bar_width-bar_width*db_mixed/self._lowest)
-        peak_indicator = int(bar_width-bar_width*peak_mixed/self._lowest)
-        db_meter = ("#"*db_level).ljust(bar_width)
-        db_meter = db_meter[:peak_indicator]+':'+db_meter[peak_indicator:]
-        print(" {:d} dB |{:s}| 0 dB".format(int(self._lowest), db_meter), end="\r")
+        if stereo:
+            bar_width //= 2
+            db_level_left = int(bar_width - bar_width * self.level_left / self._lowest)
+            db_level_right = int(bar_width - bar_width * self.level_right / self._lowest)
+            peak_indicator_left = int(bar_width * self.peak_left / self._lowest)
+            peak_indicator_right = int(bar_width - bar_width * self.peak_right / self._lowest)
+            bar_left = ("#" * db_level_left).rjust(bar_width)
+            bar_right = ("#" * db_level_right).ljust(bar_width)
+            bar_left = bar_left[:peak_indicator_left] + ':' + bar_left[peak_indicator_left:]
+            bar_right = bar_right[:peak_indicator_right] + ':' + bar_right[peak_indicator_right:]
+            print(" |", bar_left, "| L-R |", bar_right, "|", end="\r")
+        else:
+            db_mixed = (self.level_left + self.level_right) / 2
+            peak_mixed = (self.peak_left + self.peak_right) / 2
+            db_level = int(bar_width - bar_width * db_mixed / self._lowest)
+            peak_indicator = int(bar_width - bar_width * peak_mixed / self._lowest)
+            db_meter = ("#" * db_level).ljust(bar_width)
+            db_meter = db_meter[:peak_indicator] + ':' + db_meter[peak_indicator:]
+            print(" {:d} dB |{:s}| 0 dB".format(int(self._lowest), db_meter), end="\r")

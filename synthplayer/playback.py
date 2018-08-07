@@ -11,7 +11,7 @@ loop samples as well without noticable overhead (great for continous effects or 
 Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
-import audioop      # type: ignore
+import audioop
 import queue
 import threading
 import time
