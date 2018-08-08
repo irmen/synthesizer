@@ -7,6 +7,10 @@ and sound playback and mixing engine.**
 
 *requires Python 3.5 or newer*.
 
+The synthplayer library itself is available as
+[synthplayer](https://pypi.org/project/synthplayer/) on Pypi.
+
+
 # synthplayer.synth
 
 A waveform synthesizer that can generate different wave form samples:
