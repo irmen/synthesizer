@@ -24,6 +24,11 @@ class IceCastClient:
         self.station_genre = "???"
         self.station_name = "???"
         self.block_size = block_size
+        self._stop_stream = False
+
+    def stop_streaming(self):
+        print("ICY STOP!")      # XXX
+        self._stop_stream = True
 
     def stream(self):
         with requests.get(self. url, stream=True, headers={"icy-metadata": "1"}) as result:
@@ -37,6 +42,9 @@ class IceCastClient:
             if meta_interval:
                 audiodata = b""
                 for chunk in result.iter_content(self.block_size):
+                    if self._stop_stream:
+                        print("icy: stop stream.")  # XXX
+                        return
                     audiodata += chunk
                     if len(audiodata) < meta_interval + 1:
                         continue
@@ -48,8 +56,15 @@ class IceCastClient:
                         self.stream_title = re.search("StreamTitle='(.*?)'", metadata).group(1)
                     yield audiodata[:meta_interval]
                     audiodata = audiodata[meta_interval + 1 + meta_size:]
+                    if self._stop_stream:
+                        print("icy: stop stream.  (2)")  # XXX
+                        return
             else:
-                yield from result.iter_content(self.block_size)
+                for chunk in result.iter_content(self.block_size):
+                    if self._stop_stream:
+                        print("icy: stop stream. (3)")  # XXX
+                        break
+                    yield chunk
 
 
 class AudioDecoder:
@@ -70,6 +85,8 @@ class AudioDecoder:
 
     def stop_playback(self):
         if self.ffmpeg_process:
+            self.ffmpeg_process.stdin.close()
+            self.ffmpeg_process.stdout.close()
             self.ffmpeg_process.kill()
             self.ffmpeg_process = None
 
@@ -93,12 +110,15 @@ class AudioDecoder:
         with Output(mixing="sequential", frames_per_chunk=44100//4) as output:
             output.register_notify_played(played)
             while True:
-                audio = ffmpeg_stream.read(44100 * 2 * 2 // 10)
-                if audio:
+                try:
+                    audio = ffmpeg_stream.read(44100 * 2 * 2 // 10)
+                    if not audio:
+                        break
+                except (IOError, ValueError):
+                    break
+                else:
                     sample = Sample.from_raw_frames(audio, 2, 44100, 2)
                     output.play_sample(sample)
-                else:
-                    break
 
     def stream_radio(self):
         stream = self.client.stream()
@@ -122,6 +142,7 @@ class AudioDecoder:
 
         try:
             for chunk in stream:
+                print("got chunk") # XXX
                 if self.ffmpeg_process:
                     self.ffmpeg_process.stdin.write(chunk)
                 else:
@@ -131,7 +152,10 @@ class AudioDecoder:
         except KeyboardInterrupt:
             pass
         finally:
+            print("playback stop! join audio thread!")  # XXX
+            self.stop_playback()
             audio_playback_thread.join()
+            print("audio thread joined!")  # XXX
             if not self.song_title_callback:
                 print("\n")
 
@@ -197,7 +221,8 @@ class Internetradio(tkinter.Tk):
         self.station_buttons[self.stations.index(station)].configure(background="lime green")
         if self.play_thread:
             self.set_song_title("(switching streams...)")
-            self.decoder.stop_playback()
+            self.icyclient.stop_streaming()
+            #self.decoder.stop_playback()        # @todo this doesn't work properly on Windows, it hangs.
             self.decoder = None
             self.play_thread.join()
         self.stream_name_label.configure(text="{} | {}".format(station.station_name, station.stream_name))
