@@ -93,7 +93,7 @@ class AudioDecoder:
         with Output(mixing="sequential", frames_per_chunk=44100//4) as output:
             output.register_notify_played(played)
             while True:
-                audio = ffmpeg_stream.read(44100 * 2 * 2 // 20)
+                audio = ffmpeg_stream.read(44100 * 2 * 2 // 10)
                 if audio:
                     sample = Sample.from_raw_frames(audio, 2, 44100, 2)
                     output.play_sample(sample)
