@@ -27,7 +27,6 @@ class IceCastClient:
         self._stop_stream = False
 
     def stop_streaming(self):
-        print("ICY STOP!")      # XXX
         self._stop_stream = True
 
     def stream(self):
@@ -43,7 +42,6 @@ class IceCastClient:
                 audiodata = b""
                 for chunk in result.iter_content(self.block_size):
                     if self._stop_stream:
-                        print("icy: stop stream.")  # XXX
                         return
                     audiodata += chunk
                     if len(audiodata) < meta_interval + 1:
@@ -57,12 +55,10 @@ class IceCastClient:
                     yield audiodata[:meta_interval]
                     audiodata = audiodata[meta_interval + 1 + meta_size:]
                     if self._stop_stream:
-                        print("icy: stop stream.  (2)")  # XXX
                         return
             else:
                 for chunk in result.iter_content(self.block_size):
                     if self._stop_stream:
-                        print("icy: stop stream. (3)")  # XXX
                         break
                     yield chunk
 
@@ -142,7 +138,6 @@ class AudioDecoder:
 
         try:
             for chunk in stream:
-                print("got chunk") # XXX
                 if self.ffmpeg_process:
                     self.ffmpeg_process.stdin.write(chunk)
                 else:
@@ -152,10 +147,8 @@ class AudioDecoder:
         except KeyboardInterrupt:
             pass
         finally:
-            print("playback stop! join audio thread!")  # XXX
             self.stop_playback()
             audio_playback_thread.join()
-            print("audio thread joined!")  # XXX
             if not self.song_title_callback:
                 print("\n")
 
@@ -221,6 +214,7 @@ class Internetradio(tkinter.Tk):
         self.station_buttons[self.stations.index(station)].configure(background="lime green")
         if self.play_thread:
             self.set_song_title("(switching streams...)")
+            self.update()
             self.icyclient.stop_streaming()
             #self.decoder.stop_playback()        # @todo this doesn't work properly on Windows, it hangs.
             self.decoder = None
@@ -228,6 +222,7 @@ class Internetradio(tkinter.Tk):
         self.stream_name_label.configure(text="{} | {}".format(station.station_name, station.stream_name))
         self.icyclient = IceCastClient(station.stream_url, 8192)
         self.decoder = AudioDecoder(self.icyclient, self.set_song_title, self.update_levelmeter)
+        self.set_song_title("...")
         self.play_thread = threading.Thread(target=self.decoder.stream_radio, daemon=True)
         self.play_thread.start()
 
