@@ -216,7 +216,7 @@ class Internetradio(tkinter.Tk):
             self.set_song_title("(switching streams...)")
             self.update()
             self.icyclient.stop_streaming()
-            #self.decoder.stop_playback()        # @todo this doesn't work properly on Windows, it hangs.
+            #self.decoder.stop_playback()   # this doesn't work properly on Windows, it hangs. Therefore we close the http stream.
             self.decoder = None
             self.play_thread.join()
         self.stream_name_label.configure(text="{} | {}".format(station.station_name, station.stream_name))
