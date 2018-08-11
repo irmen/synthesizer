@@ -110,10 +110,9 @@ class AudioDecoder:
             format = "aac"
         if not self.song_title_callback:
             print("\nStreaming Radio Station: ", self.client.station_name)
-        cmd = ["ffmpeg"]
+        cmd = ["ffmpeg", "-v", "fatal", "-nostdin", "-i", "-"]
         if format:
             cmd.extend(["-f", format])
-        cmd.extend(["-i", "-", "-v", "fatal"])
         # cmd.extend(["-af", "aresample=resampler=soxr"])     # enable this if your ffmpeg has sox hq resample
         cmd.extend(["-ar", "44100", "-ac", "2", "-acodec", "pcm_s16le", "-f", "s16le", "-"])
         self.ffmpeg_process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
