@@ -751,11 +751,11 @@ class Output:
                  frames_per_chunk: int=0, mixing: str="mix", queue_size: int=100) -> None:
         self.samplerate = self.samplewidth = self.nchannels = 0
         self.frames_per_chunk = 0
-        self.audio_api = None
+        self.audio_api = AudioApi()
+        self.supports_streaming = True
         self.mixing = ""
         self.queue_size = -1
         self.reset_params(samplerate, samplewidth, nchannels, frames_per_chunk, mixing, queue_size)
-        self.supports_streaming = self.audio_api.supports_streaming
 
     def __repr__(self):
         return "<Output at 0x{0:x}, {1:d} channels, {2:d} bits, rate {3:d}>"\
@@ -793,6 +793,7 @@ class Output:
         self.queue_size = queue_size
         self.audio_api = best_api(self.samplerate, self.samplewidth, self.nchannels,
                                   self.frames_per_chunk, self.mixing, self.queue_size)
+        self.supports_streaming = self.audio_api.supports_streaming
         time.sleep(0.1)     # allow the mixer thread/stream to warm up (if any)
 
     def play_sample(self, sample: Sample, repeat: bool=False, delay=0.0) -> int:

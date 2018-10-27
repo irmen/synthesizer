@@ -83,7 +83,7 @@ def key_num(note, octave):
         "G#": 12,
         "A":  13,
         "A#": 14,
-        "B":  15,
+        "B":  15
     }
     return (octave-1)*12 + notes[note.upper()]
 
@@ -418,11 +418,11 @@ class MixingFilter(Oscillator):
     def generator(self):
         sources = [iter(src) for src in self._sources]
         source_values = itertools.zip_longest(*sources, fillvalue=0.0)
-        while True:
-            try:
+        try:
+            while True:
                 yield sum(next(source_values))
-            except StopIteration:
-                break
+        except StopIteration:
+            return
 
 
 class AmpModulationFilter(Oscillator):
@@ -433,8 +433,11 @@ class AmpModulationFilter(Oscillator):
 
     def generator(self):
         modulator = iter(self.modulator)
-        for v in self._source:
-            yield v*next(modulator)
+        try:
+            for v in self._source:
+                yield v*next(modulator)
+        except StopIteration:
+            return
 
 
 class DelayFilter(Oscillator):
@@ -489,8 +492,11 @@ class EchoFilter(Oscillator):
             echo_delay += self._delay
             amp *= self._decay
         echos = [iter(echo) for echo in echos]
-        while True:
-            yield sum([next(echo) for echo in echos])
+        try:
+            while True:
+                yield sum([next(echo) for echo in echos])
+        except StopIteration:
+            return
 
 
 class ClipFilter(Oscillator):
@@ -502,8 +508,11 @@ class ClipFilter(Oscillator):
 
     def generator(self):
         vmax, vmin = self.max, self.min     # optimization
-        for v in self._source:
-            yield max(min(v, vmax), vmin)
+        try:
+            for v in self._source:
+                yield max(min(v, vmax), vmin)
+        except StopIteration:
+            return
 
 
 class AbsFilter(Oscillator):
@@ -513,8 +522,11 @@ class AbsFilter(Oscillator):
 
     def generator(self):
         fabs = math.fabs  # optimization
-        for v in self._source:
-            yield fabs(v)
+        try:
+            for v in self._source:
+                yield fabs(v)
+        except StopIteration:
+            return
 
 
 class NullFilter(Oscillator):
@@ -758,8 +770,11 @@ class SawtoothH(Harmonics):
         super().__init__(frequency, harmonics, amplitude, phase+0.5, bias, fm_lfo=fm_lfo, samplerate=samplerate or params.norm_samplerate)
 
     def generator(self):
-        for y in super().generator():
-            yield self.bias*2.0-y
+        try:
+            for y in super().generator():
+                yield self.bias*2.0-y
+        except StopIteration:
+            return
 
 
 class WhiteNoise(Oscillator):

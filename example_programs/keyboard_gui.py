@@ -718,7 +718,7 @@ class SynthGUI(tk.Frame):
                         "square_h": SquareH,
                         "semicircle": Semicircle,
                         "pointy": Pointy,
-                        }[waveform]
+                    }[waveform]
                     return create_chord_osc(o, frequency=freq, amplitude=amp, phase=phase,
                                             bias=bias, fm_lfo=fm, samplerate=self.synth.samplerate)
 
@@ -977,10 +977,10 @@ class SynthGUI(tk.Frame):
                 if name.startswith("input_"):
                     cf[section][name] = str(var.get())
         # adsr envelopes
-        for num, filter in enumerate(self.envelope_filter_guis, 1):
+        for num, flter in enumerate(self.envelope_filter_guis, 1):
             section = "envelope_"+str(num)
             cf.add_section(section)
-            for name, var in vars(filter).items():
+            for name, var in vars(flter).items():
                 if name.startswith("input_"):
                     cf[section][name] = str(var.get())
         # echo

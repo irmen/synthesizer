@@ -119,16 +119,16 @@ class AudioDecoder:
     def stream_radio(self):
         stream = self.client.stream()
         first_chunk = next(stream)
-        format = ""
+        fmt = ""
         if self.client.stream_format == "audio/mpeg":
-            format = "mp3"
+            fmt = "mp3"
         elif self.client.stream_format.startswith("audio/aac"):
-            format = "aac"
+            fmt = "aac"
         if not self.song_title_callback:
             print("\nStreaming Radio Station: ", self.client.station_name)
         cmd = ["ffmpeg", "-v", "fatal", "-nostdin", "-i", "-"]
-        if format:
-            cmd.extend(["-f", format])
+        if fmt:
+            cmd.extend(["-f", fmt])
         # cmd.extend(["-af", "aresample=resampler=soxr"])     # enable this if your ffmpeg has sox hq resample
         cmd.extend(["-ar", "44100", "-ac", "2", "-acodec", "pcm_s16le", "-f", "s16le", "-"])
         self.ffmpeg_process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -221,7 +221,7 @@ class Internetradio(tkinter.Tk):
             self.set_song_title("(switching streams...)")
             self.update()
             self.icyclient.stop_streaming()
-            #self.decoder.stop_playback()   # this doesn't work properly on Windows, it hangs. Therefore we close the http stream.
+            # self.decoder.stop_playback()   # this doesn't work properly on Windows, it hangs. Therefore we close the http stream.
             self.decoder = None
             self.play_thread.join()
         self.stream_name_label.configure(text="{} | {}".format(station.station_name, station.stream_name))

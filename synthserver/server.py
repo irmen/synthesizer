@@ -1,5 +1,4 @@
 import itertools
-from typing import Sequence
 from synthplayer import synth, sample
 import Pyro4
 from Pyro4.util import SerializerBase

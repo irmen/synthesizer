@@ -24,6 +24,7 @@ from tqdm import tqdm
 __all__ = ["MusicFileDatabase", "Track"]
 
 
+# noinspection SqlNoDataSourceInspection
 class MusicFileDatabase:
     def __init__(self, dbfile=None, scan_changes=True, silent=False):
         if not dbfile:
@@ -155,9 +156,7 @@ class MusicFileDatabase:
             music_folder = os.path.split(music_folder)[0] + os.path.sep
         tracks = (Track.from_itunes(t, music_folder, path)
                   for t in tracks.values()
-                  if t["Track Type"] == "File" and not t.get("Podcast") and
-                  t.get("Genre", "").lower() not in ("audio book", "audiobook") and
-                  "document" not in t.get("Kind", ""))
+                  if t["Track Type"] == "File" and not t.get("Podcast") and t.get("Genre", "").lower() not in ("audio book", "audiobook") and "document" not in t.get("Kind", ""))
         amount_new = self.add_tracks(tracks)
         print("Added {:d} new tracks.".format(amount_new))
 

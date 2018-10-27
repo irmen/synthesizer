@@ -2,7 +2,7 @@ import time
 import itertools
 from collections import OrderedDict
 from synthplayer.sample import Sample
-from synthplayer.synth import WaveSynth, key_freq, octave_notes, major_chord_keys, note_freq, key_num
+from synthplayer.synth import WaveSynth, key_freq, octave_notes, major_chord_keys
 from synthplayer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, SawtoothH, WhiteNoise, Linear, Harmonics
 from synthplayer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle
 from synthplayer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter, DelayFilter
@@ -156,8 +156,8 @@ def fm():
     plot.xlabel("Time")
     plot.specgram(s1.get_frame_array(), Fs=synth.samplerate, noverlap=90, cmap=plot.cm.gist_heat)
     plot.show()
-    with Output(nchannels=1, samplerate=22050, mixing="sequential") as out:
-        synth = WaveSynth(samplerate=22050)
+    with Output(nchannels=1, mixing="sequential") as out:
+        synth = WaveSynth()
         freq = 440
         lfo1 = Linear(5, samplerate=synth.samplerate)
         lfo1 = EnvelopeFilter(lfo1, 1, 0.5, 0.5, 0.5, 1)
@@ -228,16 +228,15 @@ def oscillator():
 def bias():
     from matplotlib import pyplot as plot
     synth = WaveSynth(samplerate=1000)
-    waves = []
-    waves.append(synth.sine(2, 4, 0.02, bias=0.1))
-    waves.append(synth.triangle(2, 4, 0.02, bias=0.2))
-    waves.append(synth.pulse(2, 4, 0.02, bias=0.3, pulsewidth=0.45))
-    waves.append(synth.harmonics(2, 4, [(n, 1/n) for n in range(1, 8)], 0.02, bias=0.4))
-    waves.append(synth.sawtooth(2, 4, 0.02, bias=0.5))
-    waves.append(synth.sawtooth_h(2, 4, 7, 0.02, bias=0.6))
-    waves.append(synth.square(2, 4, 0.02, bias=0.7))
-    waves.append(synth.square_h(2, 4, 7, 0.02, bias=0.8))
-    waves.append(synth.white_noise(frequency=100, duration=4, amplitude=0.02, bias=0.9))
+    waves = [synth.sine(2, 4, 0.02, bias=0.1),
+             synth.triangle(2, 4, 0.02, bias=0.2),
+             synth.pulse(2, 4, 0.02, bias=0.3, pulsewidth=0.45),
+             synth.harmonics(2, 4, [(n, 1 / n) for n in range(1, 8)], 0.02, bias=0.4),
+             synth.sawtooth(2, 4, 0.02, bias=0.5),
+             synth.sawtooth_h(2, 4, 7, 0.02, bias=0.6),
+             synth.square(2, 4, 0.02, bias=0.7),
+             synth.square_h(2, 4, 7, 0.02, bias=0.8),
+             synth.white_noise(frequency=100, duration=4, amplitude=0.02, bias=0.9)]
     for wave in waves:
         plot.plot(wave.get_frame_array())
     plot.title("All waveforms biased to levels above zero")
@@ -263,7 +262,7 @@ def a440():
 
 
 def echo_sample():
-    synth = WaveSynth(samplerate=22050)
+    synth = WaveSynth(samplerate=44100)
     lfo = Linear(1, -0.0001, min_value=-99999)
     s = synth.pulse(220, .5, fm_lfo=lfo).fadeout(.2)
     with Output(s.samplerate, s.samplewidth, s.nchannels) as out:
@@ -275,7 +274,7 @@ def echo_sample():
 
 
 def echo_lfo():
-    synth = WaveSynth(22050)
+    synth = WaveSynth()
     s = Sine(440, amplitude=25000, samplerate=synth.samplerate)
     s = EnvelopeFilter(s, .2, .2, 0, 0, 1.5, stop_at_end=True)
     s = EchoFilter(s, .15, 5, 0.3, 0.6)

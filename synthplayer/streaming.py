@@ -93,14 +93,14 @@ class AudiofileToWavStream(io.RawIOBase):
                 self.downmix_options = ["-ac", str(channels)]
             if sampleformat:
                 codec = {
-                        "8": "pcm_u8",
-                        "16": "pcm_s16le",
-                        "24": "pcm_s24le",
-                        "32": "pcm_s32le",
-                        "float": "pcm_f32le",
-                        "alaw": "pcm_alaw",
-                        "ulaw": "pcm_mulaw"
-                    }[sampleformat]
+                    "8": "pcm_u8",
+                    "16": "pcm_s16le",
+                    "24": "pcm_s24le",
+                    "32": "pcm_s32le",
+                    "float": "pcm_f32le",
+                    "alaw": "pcm_alaw",
+                    "ulaw": "pcm_mulaw"
+                }[sampleformat]
                 self.sampleformat_options = ["-acodec", codec]
         self.start_stream()
 
@@ -133,7 +133,7 @@ class AudiofileToWavStream(io.RawIOBase):
             "s32p": "32",
             "fltp": "float",
             "flt": "float",
-            }.get(stream["sample_fmt"], "<unknown>")
+        }.get(stream["sample_fmt"], "<unknown>")
         bitspersample = stream["bits_per_sample"]
         if bitspersample == 0:
             try:
@@ -322,12 +322,12 @@ class SampleStream:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def add_frames_filter(self, filter: FramesFilter) -> None:
-        filter.set_params(self.frames_per_sample, self.samplerate, self.samplewidth, self.nchannels)
-        self.frames_filters.append(filter)
+    def add_frames_filter(self, flter: FramesFilter) -> None:
+        flter.set_params(self.frames_per_sample, self.samplerate, self.samplewidth, self.nchannels)
+        self.frames_filters.append(flter)
 
-    def add_filter(self, filter: SampleFilter) -> None:
-        self.filters.append(filter)
+    def add_filter(self, flter: SampleFilter) -> None:
+        self.filters.append(flter)
 
     def __iter__(self):
         return self
