@@ -166,7 +166,7 @@ class Internetradio(tkinter.Tk):
                    "https://upload.wikimedia.org/wikipedia/en/thumb/0/0e/CJSW-FM.svg/220px-CJSW-FM.svg.png",
                    "http://stream.cjsw.com:80/cjsw.ogg"),
         StationDef("Playtrance.com", "Trance",
-                   "http://facilmediamundial.com/wp-content/uploads/2017/09/trance-200.png",
+                   "https://thumbnailer.mixcloud.com/unsafe/300x300/extaudio/1/f/3/5/ad3e-81bb-434a-9549-cd72097c75dd",
                    "http://live.playtrance.com:8000/playtrance-livetech.aac")
     ]
 
@@ -201,12 +201,17 @@ class Internetradio(tkinter.Tk):
     def load_button_icons(self):
         with requests.session() as session:
             for index, station in enumerate(self.stations):
-                image = Image.open(session.get(station.icon_url, stream=True).raw)
-                image.thumbnail((128, 128))
-                tkimage = ImageTk.PhotoImage(image)
-                button = self.station_buttons[index]
-                button.configure(image=tkimage, command=lambda s=station: self.station_select(s), width=160, height=140)
-                button._tkimage = tkimage
+                try:
+                    image = Image.open(session.get(station.icon_url, stream=True).raw)
+                except OSError:
+                    button = self.station_buttons[index]
+                    button.configure(command=lambda s=station: self.station_select(s))
+                else:
+                    image.thumbnail((128, 128))
+                    tkimage = ImageTk.PhotoImage(image)
+                    button = self.station_buttons[index]
+                    button.configure(image=tkimage, command=lambda s=station: self.station_select(s), width=160, height=140)
+                    button._tkimage = tkimage
 
     def station_select(self, station):
         for button in self.station_buttons:

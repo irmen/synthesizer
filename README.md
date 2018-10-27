@@ -11,6 +11,20 @@ The synthplayer library itself is available as
 [synthplayer](https://pypi.org/project/synthplayer/) on Pypi.
 
 
+## No sound? Configure the correct output audio device
+On some systems, the portaudio system audio library seems to report a wrong 
+default output audio device. In this case, you may get an ``IOError``
+(describing the problem). You can also get another error (or no sound output at all,
+without any errors at all...) If this happens, you can configure the output audio device
+that should be used:
+
+Either set the ``PY_SYNTHPLAYER_AUDIO_DEVICE`` environment variable to the correct device number,
+or set the ``synthplayer.playback.default_audio_device`` parameter at the start of your code.
+(The environment variable has priority over the code parameter)
+
+To find the correct device number you can use the ``query_devices`` method or type ``python -m sounddevice``.
+
+
 # synthplayer.synth
 
 A waveform synthesizer that can generate different wave form samples:
