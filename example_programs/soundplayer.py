@@ -152,7 +152,7 @@ if __name__ == "__main__":
         raise SystemExit("give audio file to play as an argument.")
     hqresample = AudiofileToWavStream.supports_hq_resample()
     with AudiofileToWavStream(sys.argv[1], hqresample=hqresample) as stream:
-        print(stream.format_probe)
+        print("Format probed: ", stream.format_probe)
         if stream.conversion_required and not hqresample:
             print("WARNING: ffmpeg isn't compiled with libsoxr, so hq resampling is not supported.")
         try:

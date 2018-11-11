@@ -116,6 +116,14 @@ class AudiofileToWavStream(io.RawIOBase):
 
     @classmethod
     def probe_format(cls, filename: str) -> AudioFormatProbe:
+        try:
+            # first check if it's a .wav we can open ourselves
+            with wave.open(filename, "rb") as wf:
+                duration = wf.getnframes() / wf.getframerate()
+                return AudioFormatProbe(wf.getframerate(), wf.getnchannels(), str(wf.getsampwidth()*8), wf.getsampwidth()*8, "wav", duration)
+        except wave.Error:
+            pass
+        # no wav, try the probe tool
         command = [cls.ffprobe_executable, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-i", filename]
         probe = subprocess.check_output(command)
         probe = json.loads(probe.decode())
@@ -198,7 +206,7 @@ class AudiofileToWavStream(io.RawIOBase):
                 except FileNotFoundError:
                     # somehow the oggdec decoder executable couldn't be launched
                     pass
-            raise RuntimeError("ffmpeg or oggdec (vorbis-tools) required for sound file decoding")
+            raise RuntimeError("ffmpeg or oggdec (vorbis-tools) required for sound file decoding/conversion")
         return self.stream
 
     def read(self, size):

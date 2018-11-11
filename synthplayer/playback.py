@@ -17,6 +17,7 @@ import threading
 import time
 import io
 import os
+import warnings
 from collections import defaultdict
 from typing import Generator, Union, Dict, Tuple, Any, Type, List, Callable, Iterable, Optional
 from .import params
@@ -301,14 +302,40 @@ class SounddeviceUtils:
             sounddevice.default.device["input"] = default_audio_device
         default_input = sounddevice.default.device["input"]
         default_output = sounddevice.default.device["output"]
-        if default_input != default_output:
-            msg = """
-Default input and output audio devices differ: input={input} output={output}
-This is likely a misconfiguration. Please specify the proper output device number
-(using the PY_SYNTHPLAYER_AUDIO_DEVICE environment variable, or by setting the
+        if default_input != default_output or default_output == 0:
+            warnings.warn("Trying to determine suitable audio output device. If you don't hear sound, or see "
+                          "errors related to audio output, you'll have to specify the correct device manually.",
+                          category=ResourceWarning)
+            default_audio_device = self.find_default_output_device()
+            if default_audio_device >= 0:
+                sounddevice.default.device["output"] = default_audio_device
+            else:
+                msg = """
+Cannot determine suitable audio output device. Portaudio devices: input={input} output={output}
+Please specify the desired output device number using the 
+PY_SYNTHPLAYER_AUDIO_DEVICE environment variable, or by setting the
 default_output_device parameter to a value >= 0 in your code).
 """.format(input=default_input, output=default_output)
-            raise IOError(msg.strip())
+                raise IOError(msg.strip())
+
+    def find_default_output_device(self):
+        global sounddevice
+        devices = sounddevice.query_devices()
+        apis = sounddevice.query_hostapis()
+        best_device = -1
+        for did, d in reversed(list(enumerate(devices))):
+            if d["max_output_channels"] < 2:
+                continue
+            api = apis[d["hostapi"]]
+            if api["default_output_device"] < 0:
+                continue
+            dname = d["name"].lower()
+            if dname in ("sysdefault", "default") or "built-in" in dname:
+                best_device = did
+                break
+            elif "generic" in dname or "speakers" in dname or "mme" in dname:     # windows
+                best_device = did
+        return best_device
 
 
 class Sounddevice_Mix(AudioApi, SounddeviceUtils):
@@ -529,15 +556,39 @@ class PyAudioUtils:
         if default_audio_device < 0:
             default_input = self.audio.get_default_input_device_info()
             default_output = self.audio.get_default_output_device_info()
-            if default_input != default_output:
-                msg = """
-Default input and output audio devices differ: input={input} output={output}
-This is likely a misconfiguration. Please specify the proper output device number
-(using the PY_SYNTHPLAYER_AUDIO_DEVICE environment variable, or by setting the
+            if default_input != default_output or default_output == 0:
+                warnings.warn("Trying to determine suitable audio output device. If you don't hear sound, or see "
+                              "errors related to audio output, you'll have to specify the correct device manually.",
+                              category=ResourceWarning)
+                default_audio_device = self.find_default_output_device()
+                if default_audio_device < 0:
+                    msg = """
+Cannot determine suitable audio output device. Portaudio devices: input={input} output={output}
+Please specify the desired output device number using the 
+PY_SYNTHPLAYER_AUDIO_DEVICE environment variable, or by setting the
 default_output_device parameter to a value >= 0 in your code).
 """.format(input=default_input["index"], output=default_output["index"])
-                raise IOError(msg.strip())
+                    raise IOError(msg.strip())
 
+    def find_default_output_device(self):
+        num_apis = self.audio.get_host_api_count()
+        apis = [self.audio.get_host_api_info_by_index(i) for i in range(num_apis)]
+        num_devices = self.audio.get_device_count()
+        devices = [self.audio.get_device_info_by_index(i) for i in range(num_devices)]
+        best_device = -1
+        for d in reversed(devices):
+            if d["maxOutputChannels"] < 2:
+                continue
+            api = apis[d["hostApi"]]
+            if api["defaultOutputDevice"] < 0:
+                continue
+            dname = d["name"].lower()
+            if dname in ("sysdefault", "default") or "built-in" in dname:
+                best_device = d["index"]
+                break
+            elif "generic" in dname or "speakers" in dname or "mme" in dname:     # windows
+                best_device = d["index"]
+        return best_device
 
 class PyAudio_Mix(AudioApi, PyAudioUtils):
     """Api to the somewhat older pyaudio library (that uses portaudio)"""

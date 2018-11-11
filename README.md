@@ -15,7 +15,7 @@ The synthplayer library itself is available as
 On some systems, the portaudio system audio library seems to report a wrong 
 default output audio device. In this case, you may get an ``IOError``
 (describing the problem). You can also get another error (or no sound output at all,
-without any errors at all...) If this happens, you can configure the output audio device
+without any errors at all...) If this happens, you can manually configure the output audio device
 that should be used:
 
 Either set the ``PY_SYNTHPLAYER_AUDIO_DEVICE`` environment variable to the correct device number,
