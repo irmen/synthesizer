@@ -330,11 +330,13 @@ default_output_device parameter to a value >= 0 in your code).
             if api["default_output_device"] < 0:
                 continue
             dname = d["name"].lower()
-            if dname in ("sysdefault", "default") or "built-in" in dname:
+            if dname in ("sysdefault", "default", "front") or "built-in" in dname:
                 best_device = did
                 break
             elif "generic" in dname or "speakers" in dname or "mme" in dname:     # windows
                 best_device = did
+        if best_device >= 0:
+            warnings.warn("chosen output device: "+str(best_device), category=ResourceWarning)
         return best_device
 
 
@@ -583,11 +585,13 @@ default_output_device parameter to a value >= 0 in your code).
             if api["defaultOutputDevice"] < 0:
                 continue
             dname = d["name"].lower()
-            if dname in ("sysdefault", "default") or "built-in" in dname:
+            if dname in ("sysdefault", "default", "front") or "built-in" in dname:
                 best_device = d["index"]
                 break
             elif "generic" in dname or "speakers" in dname or "mme" in dname:     # windows
                 best_device = d["index"]
+        if best_device >= 0:
+            warnings.warn("chosen output device: "+str(best_device), category=ResourceWarning)
         return best_device
 
 class PyAudio_Mix(AudioApi, PyAudioUtils):
