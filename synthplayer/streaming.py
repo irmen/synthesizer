@@ -120,7 +120,8 @@ class AudiofileToWavStream(io.RawIOBase):
             # first check if it's a .wav we can open ourselves
             with wave.open(filename, "rb") as wf:
                 duration = wf.getnframes() / wf.getframerate()
-                return AudioFormatProbe(wf.getframerate(), wf.getnchannels(), str(wf.getsampwidth()*8), wf.getsampwidth()*8, "wav", duration)
+                return AudioFormatProbe(wf.getframerate(), wf.getnchannels(),
+                                        str(wf.getsampwidth()*8), wf.getsampwidth()*8, "wav", duration)
         except wave.Error:
             pass
         # no wav, try the probe tool

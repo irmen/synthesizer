@@ -312,7 +312,7 @@ class SounddeviceUtils:
             else:
                 msg = """
 Cannot determine suitable audio output device. Portaudio devices: input={input} output={output}
-Please specify the desired output device number using the 
+Please specify the desired output device number using the
 PY_SYNTHPLAYER_AUDIO_DEVICE environment variable, or by setting the
 default_output_device parameter to a value >= 0 in your code).
 """.format(input=default_input, output=default_output)
@@ -566,7 +566,7 @@ class PyAudioUtils:
                 if default_audio_device < 0:
                     msg = """
 Cannot determine suitable audio output device. Portaudio devices: input={input} output={output}
-Please specify the desired output device number using the 
+Please specify the desired output device number using the
 PY_SYNTHPLAYER_AUDIO_DEVICE environment variable, or by setting the
 default_output_device parameter to a value >= 0 in your code).
 """.format(input=default_input["index"], output=default_output["index"])
@@ -593,6 +593,7 @@ default_output_device parameter to a value >= 0 in your code).
         if best_device >= 0:
             warnings.warn("chosen output device: "+str(best_device), category=ResourceWarning)
         return best_device
+
 
 class PyAudio_Mix(AudioApi, PyAudioUtils):
     """Api to the somewhat older pyaudio library (that uses portaudio)"""
