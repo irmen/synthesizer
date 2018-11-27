@@ -302,7 +302,7 @@ class SounddeviceUtils:
             sounddevice.default.device["input"] = default_audio_device
         default_input = sounddevice.default.device["input"]
         default_output = sounddevice.default.device["output"]
-        if default_input != default_output or default_output == 0:
+        if default_input != default_output and default_audio_device < 0:
             warnings.warn("Trying to determine suitable audio output device. If you don't hear sound, or see "
                           "errors related to audio output, you'll have to specify the correct device manually.",
                           category=ResourceWarning)
@@ -322,7 +322,7 @@ default_output_device parameter to a value >= 0 in your code).
         global sounddevice
         devices = sounddevice.query_devices()
         apis = sounddevice.query_hostapis()
-        best_device = -1
+        candidates = []
         for did, d in reversed(list(enumerate(devices))):
             if d["max_output_channels"] < 2:
                 continue
@@ -331,13 +331,13 @@ default_output_device parameter to a value >= 0 in your code).
                 continue
             dname = d["name"].lower()
             if dname in ("sysdefault", "default", "front") or "built-in" in dname:
-                best_device = did
-                break
-            elif "generic" in dname or "speakers" in dname or "mme" in dname:     # windows
-                best_device = did
-        if best_device >= 0:
-            warnings.warn("chosen output device: "+str(best_device), category=ResourceWarning)
-        return best_device
+                candidates.append(did)
+            elif "generic" in dname or "speakers" in dname or "mme" in dname:
+                candidates.append(did)
+        if candidates:
+            warnings.warn("chosen output device: "+str(candidates[-1]), category=ResourceWarning)
+            return candidates[-1]
+        return -1
 
 
 class Sounddevice_Mix(AudioApi, SounddeviceUtils):
@@ -558,7 +558,7 @@ class PyAudioUtils:
         if default_audio_device < 0:
             default_input = self.audio.get_default_input_device_info()
             default_output = self.audio.get_default_output_device_info()
-            if default_input != default_output or default_output == 0:
+            if default_input != default_output and default_audio_device < 0:
                 warnings.warn("Trying to determine suitable audio output device. If you don't hear sound, or see "
                               "errors related to audio output, you'll have to specify the correct device manually.",
                               category=ResourceWarning)
@@ -577,7 +577,7 @@ default_output_device parameter to a value >= 0 in your code).
         apis = [self.audio.get_host_api_info_by_index(i) for i in range(num_apis)]
         num_devices = self.audio.get_device_count()
         devices = [self.audio.get_device_info_by_index(i) for i in range(num_devices)]
-        best_device = -1
+        candidates = []
         for d in reversed(devices):
             if d["maxOutputChannels"] < 2:
                 continue
@@ -586,13 +586,13 @@ default_output_device parameter to a value >= 0 in your code).
                 continue
             dname = d["name"].lower()
             if dname in ("sysdefault", "default", "front") or "built-in" in dname:
-                best_device = d["index"]
-                break
+                candidates.append(d["index"])
             elif "generic" in dname or "speakers" in dname or "mme" in dname:     # windows
-                best_device = d["index"]
-        if best_device >= 0:
-            warnings.warn("chosen output device: "+str(best_device), category=ResourceWarning)
-        return best_device
+                candidates.append(d["index"])
+        if candidates:
+            warnings.warn("chosen output device: "+str(candidates[-1]), category=ResourceWarning)
+            return candidates[-1]
+        return -1
 
 
 class PyAudio_Mix(AudioApi, PyAudioUtils):
