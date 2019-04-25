@@ -167,7 +167,7 @@ class Internetradio(tkinter.Tk):
                    "http://stream.cjsw.com:80/cjsw.ogg"),
         StationDef("Playtrance.com", "Trance",
                    "https://thumbnailer.mixcloud.com/unsafe/300x300/extaudio/1/f/3/5/ad3e-81bb-434a-9549-cd72097c75dd",
-                   "http://live.playtrance.com:8000/playtrance-livetech.aac")
+                   "http://live.playtrance.com:8000/playtrance-main.aac")
     ]
 
     def __init__(self):
