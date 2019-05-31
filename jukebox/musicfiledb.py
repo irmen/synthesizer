@@ -154,9 +154,16 @@ class MusicFileDatabase:
             if music_folder.endswith(('/', '\\')):
                 music_folder = music_folder[:-1]
             music_folder = os.path.split(music_folder)[0] + os.path.sep
+
+        def isMusicTrack(t):
+            if t["Track Type"] != "File":
+                return False
+            return not t.get("Podcast") and t.get("Genre", "").lower() \
+                not in ("audio book", "audiobook") and "document" not in t.get("Kind", "")
+
         tracks = (Track.from_itunes(t, music_folder, path)
                   for t in tracks.values()
-                  if t["Track Type"] == "File" and not t.get("Podcast") and t.get("Genre", "").lower() not in ("audio book", "audiobook") and "document" not in t.get("Kind", ""))
+                  if isMusicTrack(t))
         amount_new = self.add_tracks(tracks)
         print("Added {:d} new tracks.".format(amount_new))
 
