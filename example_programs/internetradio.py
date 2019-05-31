@@ -166,7 +166,7 @@ class Internetradio(tkinter.Tk):
                    "https://upload.wikimedia.org/wikipedia/en/thumb/0/0e/CJSW-FM.svg/220px-CJSW-FM.svg.png",
                    "http://stream.cjsw.com:80/cjsw.ogg"),
         StationDef("Playtrance.com", "Trance",
-                   "https://thumbnailer.mixcloud.com/unsafe/300x300/extaudio/1/f/3/5/ad3e-81bb-434a-9549-cd72097c75dd",
+                   "https://www.playtrance.com/static/playtrancev20thumb.jpg",
                    "http://live.playtrance.com:8000/playtrance-main.aac")
     ]
 
