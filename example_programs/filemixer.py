@@ -24,7 +24,7 @@ def main(args):
                 levelmeter.print(bar_width=60)
 
             output.register_notify_played(update_and_print_meter)
-            for timestamp, sample in mixed_samples:
+            for timestamp, sample in mixed_samples:         # TODO fix: should end when all samples are done playing?
                 output.play_sample(sample)
             output.wait_all_played()
     print("\ndone.")

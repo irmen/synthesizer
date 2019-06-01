@@ -357,6 +357,7 @@ class WaveSynth:
         sample = next(samples)
         for s2 in samples:
             sample.join(s2)
+        # TODO cut off last block to match exact desired duration
         return sample
 
 
@@ -369,7 +370,7 @@ def check_waveforms():
     wn = WhiteNoise(1001, samplerate=1000)
     try:
         list(itertools.islice(wn.blocks(), 10))
-        raise SystemExit("invalid whitenoise freq should raise exception")
+        raise SystemExit("invalid white noise freq should raise exception")
     except ValueError:
         pass
 

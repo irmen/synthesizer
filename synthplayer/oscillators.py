@@ -110,12 +110,12 @@ class MixingFilter(Filter):
         super().__init__(sources)
 
     def blocks(self) -> Generator[List[float], None, None]:
-        # TODO FIX mixingfilter
-        sources = [iter(src) for src in self._sources]
-        source_values = itertools.zip_longest(*sources, fillvalue=0.0)
+        sources = [src.blocks() for src in self._sources]
+        source_blocks = itertools.zip_longest(*sources, fillvalue=[0.0]*params.norm_osc_blocksize)
         try:
             while True:
-                yield sum(next(source_values))
+                blocks = next(source_blocks)
+                yield [sum(v) for v in zip(*blocks)]
         except StopIteration:
             return
 
