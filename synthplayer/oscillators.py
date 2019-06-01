@@ -7,7 +7,7 @@ Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
 import itertools
-import math
+from math import pi, sin, cos, log, fabs, floor, sqrt
 import sys
 import random
 from typing import Generator, List, Sequence, Optional, Tuple
@@ -169,7 +169,7 @@ class EchoFilter(Filter):
         super().__init__([source])
         if decay < 1:
             # avoid computing echos that have virtually zero amplitude:
-            amount = int(min(amount, math.log(0.000001, decay)))
+            amount = int(min(amount, log(0.000001, decay)))
         self._after = after
         self._amount = amount
         self._delay = delay
@@ -225,7 +225,7 @@ class AbsFilter(Filter):
     def blocks(self) -> Generator[List[float], None, None]:
         try:
             for block in self._sources[0].blocks():
-                yield [math.fabs(v) for v in block]
+                yield [fabs(v) for v in block]
         except StopIteration:
             return
 
@@ -256,18 +256,22 @@ class Sine(Oscillator):
         self._phase = phase
 
     def blocks(self) -> Generator[List[float], None, None]:
-        phase_correction = self._phase*2*math.pi
+        phase_correction = self._phase*2*pi
         freq_previous = self.frequency
-        increment = 2.0*math.pi/self._samplerate
+        increment = 2.0*pi/self._samplerate
         t = 0.0
+        # optimizations:
+        frequency = self.frequency
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             fm_block = next(self.fm)
             for i in range(params.norm_osc_blocksize):
-                freq = self.frequency*(1.0+fm_block[i])
+                freq = frequency*(1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
-                block.append(math.sin(t*freq+phase_correction)*self.amplitude+self.bias)
+                block.append(sin(t*freq+phase_correction)*amplitude+bias)
                 t += increment
             yield block
 
@@ -288,15 +292,19 @@ class Triangle(Oscillator):
         freq_previous = self.frequency
         increment = 1.0/self._samplerate
         t = 0.0
+        # optimizations:
+        frequency = self.frequency
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             fm_block = next(self.fm)
             for i in range(params.norm_osc_blocksize):
-                freq = self.frequency * (1.0+fm_block[i])
+                freq = frequency * (1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
                 tt = t*freq+phase_correction
-                block.append(4.0*self.amplitude*(math.fabs((tt+0.75) % 1.0 - 0.5)-0.25)+self.bias)
+                block.append(4.0*amplitude*(fabs((tt+0.75) % 1.0 - 0.5)-0.25)+bias)
                 t += increment
             yield block
 
@@ -317,15 +325,19 @@ class Square(Oscillator):
         freq_previous = self.frequency
         increment = 1.0/self._samplerate
         t = 0.0
+        # optimizations:
+        frequency = self.frequency
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             fm_block = next(self.fm)
             for i in range(params.norm_osc_blocksize):
-                freq = self.frequency*(1.0+fm_block[i])
+                freq = frequency*(1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
                 tt = t*freq + phase_correction
-                block.append((-self.amplitude if int(tt*2) % 2 else self.amplitude)+self.bias)
+                block.append((-amplitude if int(tt*2) % 2 else amplitude)+bias)
                 t += increment
             yield block
 
@@ -346,15 +358,19 @@ class Sawtooth(Oscillator):
         freq_previous = self.frequency
         phase_correction = self._phase
         t = 0.0
+        # optimizations:
+        frequency = self.frequency
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             fm_block = next(self.fm)
             for i in range(params.norm_osc_blocksize):
-                freq = self.frequency*(1.0+fm_block[i])
+                freq = frequency*(1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
                 tt = t*freq + phase_correction
-                block.append(self.bias+self.amplitude*2.0*(tt - math.floor(0.5+tt)))
+                block.append(bias+amplitude*2.0*(tt - floor(0.5+tt)))
                 t += increment
             yield block
 
@@ -382,16 +398,20 @@ class Pulse(Oscillator):
         freq_previous = self.frequency
         phase_correction = self._phase
         t = 0.0
+        # optimizations:
+        frequency = self.frequency
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             fm_block = next(self.fm)
             pwm_block = next_pwm_block(self.pwm)
             for i in range(params.norm_osc_blocksize):
-                freq = self.frequency*(1.0+fm_block[i])
+                freq = frequency*(1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
                 tt = t*freq+phase_correction
-                block.append((self.amplitude if tt % 1.0 < pwm_block[i] else -self.amplitude)+self.bias)
+                block.append((amplitude if tt % 1.0 < pwm_block[i] else -amplitude)+bias)
                 t += increment
             yield block
 
@@ -412,24 +432,28 @@ class Harmonics(Oscillator):
         self.harmonics = harmonics
 
     def blocks(self) -> Generator[List[float], None, None]:
-        increment = 2.0*math.pi/self._samplerate
-        phase_correction = self._phase*2.0*math.pi
+        increment = 2.0*pi/self._samplerate
+        phase_correction = self._phase*2.0*pi
         freq_previous = self.frequency
         t = 0.0
         # only keep harmonics below the Nyquist frequency
         harmonics = list(filter(lambda h: h[0]*self.frequency <= self._samplerate/2, self.harmonics))
+        # optimizations:
+        frequency = self.frequency
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             fm_block = next(self.fm)
             for i in range(params.norm_osc_blocksize):
                 h = 0.0
-                freq = self.frequency*(1.0+fm_block[i])
+                freq = frequency*(1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
                 q = t*freq + phase_correction
                 for k, amp in harmonics:
-                    h += math.sin(q*k)*amp
-                block.append(h*self.amplitude+self.bias)
+                    h += sin(q*k)*amp
+                block.append(h*amplitude+bias)
                 t += increment
             yield block
 
@@ -477,8 +501,11 @@ class WhiteNoise(Oscillator):
         cycles = int(self._samplerate / self.frequency)
         if cycles < 1:
             raise ValueError("whitenoise frequency cannot be bigger than the sample rate")
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
-            value = random.uniform(-self.amplitude, self.amplitude) + self.bias
+            value = random.uniform(-amplitude, amplitude) + bias
             yield from [value] * cycles
 
     def blocks(self) -> Generator[List[float], None, None]:
@@ -487,7 +514,7 @@ class WhiteNoise(Oscillator):
             raise ValueError("whitenoise frequency cannot be bigger than the sample rate")
         values = self.random_values()
         while True:
-            yield [next(values) for _ in range(params.norm_osc_blocksize)]
+            yield list(itertools.islice(values, params.norm_osc_blocksize))
 
 
 class Linear(Oscillator):
@@ -501,13 +528,22 @@ class Linear(Oscillator):
         self.max_value = max_value
 
     def blocks(self) -> Generator[List[float], None, None]:
-        while True:
-            block = []  # type: List[float]
-            for _ in range(params.norm_osc_blocksize):
-                block.append(self.value)
-                if self.increment:
-                    self.value = min(self.max_value, max(self.min_value, self.value+self.increment))
-            yield block
+        # optimizations
+        value = self.value
+        incr = self.increment
+        maxv = self.max_value
+        minv = self.min_value
+        if incr:
+            while True:
+                block = []  # type: List[float]
+                for _ in range(params.norm_osc_blocksize):
+                    block.append(value)
+                    value = min(maxv, max(minv, value+incr))
+                yield block
+        else:
+            block = [value] * params.norm_osc_blocksize
+            while True:
+                yield list(block)
 
 
 class Semicircle(Oscillator):
@@ -526,16 +562,20 @@ class Semicircle(Oscillator):
         freq_previous = self.frequency
         increment = 2.0/self._samplerate
         t = -1.0
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
+        frequency = self.frequency
         while True:
             block = []  # type: List[float]
             fm_block = next(self.fm)
             for i in range(params.norm_osc_blocksize):
-                freq = self.frequency*(1.0+fm_block[i])
+                freq = frequency*(1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
                 ft = t*freq + phase_correction
                 ft = (ft % 2.0) - 1.0
-                block.append(math.sqrt(1.0 - ft*ft) * self.amplitude + self.bias)
+                block.append(sqrt(1.0 - ft*ft) * amplitude + bias)
                 t += increment
             yield block
 
@@ -552,24 +592,28 @@ class Pointy(Oscillator):
         self._phase = phase
 
     def blocks(self) -> Generator[List[float], None, None]:
-        two_pi = 2*math.pi
+        two_pi = 2*pi
         phase_correction = self._phase*two_pi
         freq_previous = self.frequency
         increment = two_pi/self._samplerate
         t = 0.0
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
+        frequency = self.frequency
         while True:
             block = []
             fm_block = next(self.fm)
             for i in range(params.norm_osc_blocksize):
-                freq = self.frequency*(1.0+fm_block[i])
+                freq = frequency*(1.0+fm_block[i])
                 phase_correction += (freq_previous-freq)*t
                 freq_previous = freq
                 tt = t*freq + phase_correction
-                vv = 1.0-abs(math.cos(tt))
-                if tt % two_pi > math.pi:
-                    block.append(-vv*vv*self.amplitude+self.bias)
+                vv = 1.0-abs(cos(tt))
+                if tt % two_pi > pi:
+                    block.append(-vv*vv*amplitude+bias)
                 else:
-                    block.append(vv*vv*self.amplitude+self.bias)
+                    block.append(vv*vv*amplitude+bias)
                 t += increment
             yield block
 
@@ -586,12 +630,15 @@ class FastSine(Oscillator):
 
     def blocks(self) -> Generator[List[float], None, None]:
         rate = self._samplerate/self._frequency
-        increment = 2.0*math.pi/rate
-        t = self._phase*2.0*math.pi
+        increment = 2.0*pi/rate
+        t = self._phase*2.0*pi
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []
             for _ in range(params.norm_osc_blocksize):
-                block.append(math.sin(t)*self.amplitude+self.bias)
+                block.append(sin(t)*amplitude+bias)
                 t += increment
             yield block
 
@@ -610,10 +657,13 @@ class FastTriangle(Oscillator):
         freq = self._frequency
         t = self._phase/freq
         increment = 1.0/self._samplerate
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []
             for _ in range(params.norm_osc_blocksize):
-                block.append(4.0*self.amplitude*(math.fabs((t*freq+0.75) % 1.0 - 0.5)-0.25)+self.bias)
+                block.append(4.0*amplitude*(fabs((t*freq+0.75) % 1.0 - 0.5)-0.25)+bias)
                 t += increment
             yield block
 
@@ -632,10 +682,13 @@ class FastSquare(Oscillator):
         freq = self._frequency
         t = self._phase/freq
         increment = 1.0/self._samplerate
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             for _ in range(params.norm_osc_blocksize):
-                block.append((-self.amplitude if int(t*freq*2) % 2 else self.amplitude)+self.bias)
+                block.append((-amplitude if int(t*freq*2) % 2 else amplitude)+bias)
                 t += increment
             yield block
 
@@ -654,11 +707,14 @@ class FastSawtooth(Oscillator):
         freq = self._frequency
         t = self._phase/freq
         increment = 1.0/self._samplerate
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             for _ in range(params.norm_osc_blocksize):
                 tt = t*freq
-                block.append(self.bias+2.0*self.amplitude*(tt - math.floor(0.5+tt)))
+                block.append(bias+2.0*amplitude*(tt - floor(0.5+tt)))
                 t += increment
             yield block
 
@@ -683,9 +739,12 @@ class FastPulse(Oscillator):
         self.bias = bias
 
     def blocks(self) -> Generator[List[float], None, None]:
+        # optimizations:
+        amplitude = self.amplitude
+        frequency = self._frequency
+        bias = self.bias
         if self._pwm:
             # loop without FM, but with PWM
-            epsilon = sys.float_info.epsilon
             pwm = self._pwm.blocks()
             t = self._phase/self._frequency
             increment = 1.0/self._samplerate
@@ -693,17 +752,18 @@ class FastPulse(Oscillator):
                 block = []  # type: List[float]
                 pwm_block = next_pwm_block(pwm)
                 for i in range(params.norm_osc_blocksize):
-                    block.append((self.amplitude if t*self._frequency % 1.0 < pwm_block[i] else -self.amplitude)+self.bias)
+                    block.append((amplitude if t*frequency % 1.0 < pwm_block[i] else -amplitude)+bias)
                     t += increment
                 yield block
         else:
             # no FM, no PWM
+            pulsewidth = self._pulsewidth
             t = self._phase/self._frequency
             increment = 1.0/self._samplerate
             while True:
                 block = []
                 for _ in range(params.norm_osc_blocksize):
-                    block.append((self.amplitude if t*self._frequency % 1.0 < self._pulsewidth else -self.amplitude)+self.bias)
+                    block.append((amplitude if t*frequency % 1.0 < pulsewidth else -amplitude)+bias)
                     t += increment
                 yield block
 
@@ -728,10 +788,13 @@ class FastSemicircle(Oscillator):
         rate = self._samplerate/self._frequency
         increment = 2.0/rate
         t = -1.0 + self._phase * 2
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             for _ in range(params.norm_osc_blocksize):
-                block.append(math.sqrt(1.0 - t*t) * self.amplitude + self.bias)
+                block.append(sqrt(1.0 - t*t) * amplitude + bias)
                 t += increment
                 if t >= 1.0:
                     t -= 2.0
@@ -750,18 +813,21 @@ class FastPointy(Oscillator):
 
     def blocks(self) -> Generator[List[float], None, None]:
         rate = self._samplerate/self._frequency
-        two_pi = 2.0*math.pi
+        two_pi = 2.0*pi
         increment = two_pi/rate
         t = self._phase*two_pi
+        # optimizations:
+        amplitude = self.amplitude
+        bias = self.bias
         while True:
             block = []  # type: List[float]
             for _ in range(params.norm_osc_blocksize):
                 t %= two_pi
-                vv = 1.0-abs(math.cos(t))
-                if t > math.pi:
-                    block.append(-vv*vv*self.amplitude+self.bias)
+                vv = 1.0-abs(cos(t))
+                if t > pi:
+                    block.append(-vv*vv*amplitude+bias)
                 else:
-                    block.append(vv*vv*self.amplitude+self.bias)
+                    block.append(vv*vv*amplitude+bias)
                 t += increment
             yield block
 

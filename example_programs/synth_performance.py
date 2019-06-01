@@ -6,9 +6,10 @@ from synthplayer import synth, params
 
 samplerate = 44100
 frequency = 880
-num_blocks = samplerate*20//params.norm_osc_blocksize
+num_blocks = samplerate*40//params.norm_osc_blocksize
 
-oscillators = [synth.Linear,        # baseline
+oscillators = [
+               synth.Linear,        # baseline
                synth.FastSine,
                synth.FastPulse,
                synth.FastSawtooth,
@@ -16,7 +17,6 @@ oscillators = [synth.Linear,        # baseline
                synth.FastTriangle,
                synth.FastSemicircle,
                synth.FastPointy,
-
                synth.Sine,
                synth.Triangle,
                synth.Square,
@@ -27,7 +27,8 @@ oscillators = [synth.Linear,        # baseline
                # synth.Harmonics,   # used by sawtoothH and squareH already
                synth.WhiteNoise,
                synth.Semicircle,
-               synth.Pointy]
+               synth.Pointy
+               ]
 
 
 if platform.python_implementation().lower() == "pypy":
