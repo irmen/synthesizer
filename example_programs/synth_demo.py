@@ -1,5 +1,6 @@
 import time
 import itertools
+import math
 from collections import OrderedDict
 from synthplayer.sample import Sample
 from synthplayer.synth import WaveSynth, key_freq, octave_notes, major_chord_keys
@@ -7,6 +8,7 @@ from synthplayer.synth import Sine, Triangle, Pulse, Square, SquareH, Sawtooth, 
 from synthplayer.synth import FastSine, FastPulse, FastSawtooth, FastSquare, FastTriangle
 from synthplayer.synth import EchoFilter, EnvelopeFilter, AbsFilter, ClipFilter, DelayFilter
 from synthplayer.playback import Output
+from synthplayer import params
 
 
 # some note frequencies for octaves 1 to 7
@@ -295,11 +297,11 @@ def lfo_func():
     s = AbsFilter(s)
     s = ClipFilter(s, minimum=20, maximum=80)
     s = DelayFilter(s, 0.5)
-    s = list(itertools.islice(s, rate*2))
+    s = list(itertools.islice(s.blocks(), math.ceil(rate*2/params.norm_osc_blocksize)))
     import matplotlib.pyplot as plot
     a = plot.subplot(111)
     a.set_ylim([-50, 100])
-    a.plot(s)
+    a.plot(sum(s, []))
     plot.show()
 
 
@@ -356,7 +358,7 @@ def osc_bench():
     duration = 2.0
 
     def get_values(osc):
-        values = list(itertools.islice(osc, int(rate*duration)))
+        values = list(itertools.islice(osc.blocks(), int(rate*duration/params.norm_osc_blocksize)))
 
     fm = FastSine(220)
     print("GENERATING {:g} SECONDS SAMPLE DATA {:d} HZ USING LFO.".format(duration, rate))
@@ -502,11 +504,11 @@ def chords():
 
 
 if __name__ == "__main__":
-    harmonics()
-    osc_bench()
+    # harmonics()
+    # osc_bench()
     lfo_func()
-    bells()
-    echo_sample()
+    #bells()
+    #echo_sample()
     echo_lfo()
     demo_plot()
     a440()
