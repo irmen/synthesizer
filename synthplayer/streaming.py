@@ -432,13 +432,11 @@ class StreamMixer:
                     if self.endless:
                         sample = None
                     else:
-                        break
+                        self.remove_stream(sample_stream)
                 except (os.error, ValueError):
                     # Problem reading from stream. Assume stream closed.
                     sample = None
                 if sample:
                     mixed_sample.mix(sample)
-                else:
-                    self.remove_stream(sample_stream)
             yield self.timestamp, mixed_sample
             self.timestamp += mixed_sample.duration

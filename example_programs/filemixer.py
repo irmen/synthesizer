@@ -14,7 +14,7 @@ def main(args):
     wav_streams = [AudiofileToWavStream(filename, hqresample=False) for filename in args]
     with StreamMixer(wav_streams, endless=False) as mixer:
         mixed_samples = iter(mixer)
-        with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels, mixing="sequential") as output:
+        with Output(mixer.samplerate, mixer.samplewidth, mixer.nchannels, mixing="sequential", queue_size=50) as output:
             if not output.supports_streaming:
                 raise RuntimeError("need api that supports streaming")
             levelmeter = LevelMeter(rms_mode=False, lowest=-50)
@@ -24,7 +24,7 @@ def main(args):
                 levelmeter.print(bar_width=60)
 
             output.register_notify_played(update_and_print_meter)
-            for timestamp, sample in mixed_samples:         # TODO fix: should end when all samples are done playing?
+            for timestamp, sample in mixed_samples:
                 output.play_sample(sample)
             output.wait_all_played()
     print("\ndone.")
