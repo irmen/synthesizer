@@ -126,14 +126,15 @@ class AmpModulationFilter(Filter):
     def __init__(self, source: Oscillator, modulator: Oscillator) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
-        self.modulator = modulator
+        self.modulator = modulator.blocks()
 
     def blocks(self) -> Generator[List[float], None, None]:
-        # TODO FIX ampmod filter
-        modulator = iter(self.modulator)
+        source_blocks = self._sources[0].blocks()
         try:
-            for v in self._source:
-                yield v*next(modulator)
+            while True:
+                block = next(source_blocks)
+                amp = next(self.modulator)
+                yield [v*a for (v, a) in zip(block, amp)]
         except StopIteration:
             return
 
@@ -150,31 +151,51 @@ class DelayFilter(Filter):
         self._seconds = seconds
 
     def blocks(self) -> Generator[List[float], None, None]:
-        # TODO FIX delayfilter
-        if self._seconds < 0.0:
-            amount = int(-self._samplerate*self._seconds)
-            next(itertools.islice(self._source, amount, amount), None)   # consume
+        blocks = self._sources[0].blocks()
+        if self._seconds == 0.0:
+            yield from blocks
+            return
+        elif self._seconds > 0.0:
+            amount = int(self._samplerate*self._seconds)
+            while amount >= params.norm_osc_blocksize:
+                yield [0.0] * params.norm_osc_blocksize
+                amount -= params.norm_osc_blocksize
+            if amount == 0:
+                yield from blocks
+            residue = [0.0] * amount
         else:
-            yield from itertools.repeat(0.0, int(self._samplerate*self._seconds))
-        yield from self._source
+            amount = -int(self._samplerate*self._seconds)
+            while amount >= params.norm_osc_blocksize:
+                next(blocks)
+                amount -= params.norm_osc_blocksize
+            if amount == 0:
+                yield from blocks
+            residue = next(blocks)[:amount]
+        try:
+            while True:
+                sample_block = next(blocks)
+                yield residue + sample_block[:params.norm_osc_blocksize-len(residue)]
+                residue = sample_block[len(residue):]
+        except StopIteration:
+            yield residue + [0.0] * (params.norm_osc_blocksize-len(residue))
 
 
 class EchoFilter(Filter):
     """
     Mix given number of echos of the oscillator into itself.
-    The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead).
+    The amp_factor is the factor with which each echo changes in volume (<1 for decay, >1 to get louder).
     If you use a very short delay the echos blend into the sound and the effect is more like a reverb.
     """
-    def __init__(self, source: Oscillator, after: float, amount: float, delay: float, decay: float) -> None:
+    def __init__(self, source: Oscillator, after: float, amount: float, delay: float, amp_factor: float) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
-        if decay < 1:
+        if amp_factor < 1:
             # avoid computing echos that have virtually zero amplitude:
-            amount = int(min(amount, log(0.000001, decay)))
+            amount = int(min(amount, log(0.000001, amp_factor)))
         self._after = after
         self._amount = amount
         self._delay = delay
-        self._decay = decay
+        self._decay = amp_factor
         self.echo_duration = self._after + self._amount*self._delay
 
     def blocks(self) -> Generator[List[float], None, None]:
@@ -183,8 +204,7 @@ class EchoFilter(Filter):
         yield from itertools.islice(self._source, int(self._samplerate*self._after))
         # now start mixing the echos
         amp = self._decay
-        echo_oscs = [Oscillator(src, samplerate=self._samplerate)
-                     for src in itertools.tee(self._source, self._amount+1)]   # @TODO use NullFilter instead of Oscillator?
+        echo_oscs = [NullFilter(src) for src in itertools.tee(self._source, self._amount+1)]
         echos = [echo_oscs[0]]
         echo_delay = self._delay
         for echo in echo_oscs[1:]:
