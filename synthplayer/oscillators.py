@@ -174,8 +174,8 @@ class DelayFilter(Filter):
         try:
             while True:
                 sample_block = next(blocks)
-                yield residue + sample_block[:params.norm_osc_blocksize-len(residue)]
-                residue = sample_block[len(residue):]
+                yield residue + sample_block[:-len(residue)]
+                residue = sample_block[-len(residue):]
         except StopIteration:
             yield residue + [0.0] * (params.norm_osc_blocksize-len(residue))
 

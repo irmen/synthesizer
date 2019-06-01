@@ -50,43 +50,35 @@ def demo_tones():
         out.wait_all_played()
 
 
-def demo_song(profiling=False):
+def demo_song():
     synth = WaveSynth()
     notes = {note: key_freq(49+i) for i, note in enumerate(['A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'])}
     tempo = 0.3
 
-    def instrument(freq, duration):
+    def synth_sample(freq, duration):
         harmonics = [(1, 1), (2, 1/2), (4, 1/4), (6, 1/6)]
         a = synth.harmonics(freq, duration, harmonics)
         return a.envelope(0.05, 0.2, 0.8, 0.5)
 
-    print("Synthesizing tones...")
-    perf_c = time.perf_counter()
-    quarter_notes = {note: instrument(notes[note], tempo) for note in notes}
-    half_notes = {note: instrument(notes[note], tempo*2) for note in notes}
-    full_notes = {note: instrument(notes[note], tempo*4) for note in notes}
     silence = Sample.from_array([0]*int(synth.samplerate*tempo*2), synth.samplerate, numchannels=1)
-    if profiling:
-        print(time.perf_counter()-perf_c)
-    else:
-        song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
-            "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
-        with Output(synth.samplerate, synth.samplewidth, 1, mixing="sequential") as out:
-            for note in song.split():
-                if note == ";":
-                    print()
-                    out.play_sample(silence)
-                    continue
-                print(note, end="  ", flush=True)
-                if note.endswith(".."):
-                    sample = full_notes[note[:-2]]
-                elif note.endswith("."):
-                    sample = half_notes[note[:-1]]
-                else:
-                    sample = quarter_notes[note]
-                out.play_sample(sample)
-            print()
-            out.wait_all_played()
+    song = "A A B. A D. C#.. ;  A A B. A E. D.. ;  A A A. F#.. D C#.. B ;  G G F#.. D E D ; ; "\
+        "A A B. A D C#.. ; A A B. A E D. ; A A A. F#.. D C#.. B ; G G F#.. D E D ; ; "
+    with Output(synth.samplerate, synth.samplewidth, 1, mixing="sequential", queue_size=50) as out:
+        for note in song.split():
+            if note == ";":
+                print()
+                out.play_sample(silence)
+                continue
+            print(note, end="  ", flush=True)
+            if note.endswith(".."):
+                sample = synth_sample(notes[note[:-2]], tempo*4)
+            elif note.endswith("."):
+                sample = synth_sample(notes[note[:-1]], tempo*2)
+            else:
+                sample = synth_sample(notes[note], tempo)
+            out.play_sample(sample)
+        print()
+        out.wait_all_played()
 
 
 def demo_plot():
@@ -212,17 +204,19 @@ def pwm():
 
 def oscillator():
     from matplotlib import pyplot as plot
-    l2 = SquareH(4, samplerate=1000)
+    l2 = SquareH(4, samplerate=1000).blocks()
     plot.subplot(2, 1, 1)
     plot.title("Square from harmonics")
-    values = list(itertools.islice(l2, 1000))
+    blocks = list(itertools.islice(l2, 2))
+    values = sum(blocks, [])
     plot.plot(values)
     harmonics = [(1, 1)]
     harmonics.extend([(n, 1/n) for n in range(2, 8*2, 2)])
-    l3 = Harmonics(4, harmonics, samplerate=1000)
+    l3 = Harmonics(4, harmonics, samplerate=1000).blocks()
     plot.subplot(2, 1, 2)
     plot.title("Even harmonics")
-    values = list(itertools.islice(l3, 1000))
+    blocks = list(itertools.islice(l3, 2))
+    values = sum(blocks, [])
     plot.plot(values)
     plot.show()
 
@@ -248,16 +242,17 @@ def bias():
 def lfo_envelope():
     synth = WaveSynth(samplerate=100)
     lfo = Linear(1000, samplerate=synth.samplerate)
-    lfo = EnvelopeFilter(lfo, 2, 1, 4, 0.3, 2, stop_at_end=True)
+    lfo = EnvelopeFilter(lfo, 2, 1, 4, 0.3, 2, stop_at_end=True).blocks()
+    samples = sum(list(lfo), [])
     from matplotlib import pyplot as plot
     plot.title("LFO Envelope")
-    plot.plot(list(lfo))
+    plot.plot(samples)
     plot.show()
 
 
 def a440():
     synth = WaveSynth(samplerate=44100, samplewidth=4)
-    a440 = synth.sine(440, duration=3)
+    a440 = synth.sine(440, duration=2)
     with Output.for_sample(a440) as out:
         out.play_sample(a440)
         out.wait_all_played()
@@ -281,7 +276,8 @@ def echo_lfo():
     s = EnvelopeFilter(s, .2, .2, 0, 0, 1.5, stop_at_end=True)
     s = EchoFilter(s, .15, 5, 0.3, 0.6)
     s = ClipFilter(s, -32000, 32000)
-    frames = [int(v) for v in s]
+    blocks = list(s.blocks())
+    frames = sum(blocks, [])
     import matplotlib.pyplot as plot
     plot.plot(frames)
     plot.show()
@@ -504,16 +500,16 @@ def chords():
 
 
 if __name__ == "__main__":
-    # harmonics()
-    # osc_bench()
+    harmonics()
+    osc_bench()
     lfo_func()
-    #bells()
-    #echo_sample()
+    bells()
+    echo_sample()
     echo_lfo()
     demo_plot()
     a440()
     demo_tones()
-    demo_song(profiling=False)
+    demo_song()
     modulate_amp()
     envelope()
     lfo_envelope()

@@ -11,8 +11,9 @@ import audioop
 import array
 import math
 import itertools
-from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence
+from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence, Iterator, List
 from . import params
+from .oscillators import Oscillator
 try:
     import numpy
 except ImportError:
@@ -515,7 +516,7 @@ class Sample:
         self.__frames = begin + end
         return self
 
-    def modulate_amp(self, modulator: Any) -> 'Sample':
+    def modulate_amp(self, modulation_source: Union[Oscillator, Sequence[float], 'Sample', Iterator[float]]) -> 'Sample':
         """
         Perform amplitude modulation by another waveform or oscillator.
         You can use a Sample (or array of sample values) or an oscillator as modulator.
@@ -525,16 +526,18 @@ class Sample:
         if self.__locked:
             raise RuntimeError("cannot modify a locked sample")
         frames = self.get_frame_array()
-        if isinstance(modulator, (Sample, list, array.array)):
+        if isinstance(modulation_source, (Sample, list, array.array)):
             # modulator is a waveform, turn that into an 'oscillator' ran
-            if isinstance(modulator, Sample):
-                modulator = modulator.get_frame_array()
-            biggest = max(max(modulator), abs(min(modulator)))
-            modulator = (v/biggest for v in itertools.cycle(modulator))
+            if isinstance(modulation_source, Sample):
+                modulation_source = modulation_source.get_frame_array()
+            biggest = max(max(modulation_source), abs(min(modulation_source)))
+            actual_modulator = (v/biggest for v in itertools.cycle(modulation_source))   # type: ignore
+        elif isinstance(modulation_source, Oscillator):
+            actual_modulator = itertools.chain.from_iterable(modulation_source.blocks())    # type: ignore
         else:
-            modulator = iter(modulator)
+            actual_modulator = iter(modulation_source)  # type: ignore
         for i in range(len(frames)):
-            frames[i] = int(frames[i] * next(modulator))
+            frames[i] = int(frames[i] * next(actual_modulator))
         self.__frames = frames.tobytes()
         if sys.byteorder == "big":
             self.__frames = audioop.byteswap(self.__frames, self.__samplewidth)
@@ -660,7 +663,7 @@ class Sample:
             other = other.stereo(left_factor=0, right_factor=other_mix_factor)
         return self.mix_at(mix_at, other, other_seconds)
 
-    def pan(self, panning: float = 0.0, lfo: Optional[Iterable[float]] = None) -> 'Sample':
+    def pan(self, panning: float = 0.0, lfo: Optional[Union[Iterable[float], Oscillator]] = None) -> 'Sample':
         """
         Linear Stereo panning, -1 = full left, 1 = full right.
         If you provide a LFO that will be used for panning instead.
@@ -669,7 +672,10 @@ class Sample:
             raise RuntimeError("cannot modify a locked sample")
         if not lfo:
             return self.stereo((1-panning)/2, (1+panning)/2)
-        lfo = iter(lfo)
+        if isinstance(lfo, Oscillator):
+            lfo = itertools.chain.from_iterable(lfo.blocks())
+        else:
+            lfo = iter(lfo)
         if self.__nchannels == 2:
             right = self.copy().right().get_frame_array()
             left = self.copy().left().get_frame_array()

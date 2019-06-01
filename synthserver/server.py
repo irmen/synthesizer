@@ -29,7 +29,7 @@ class WaveSynthServer:
     def __init__(self):
         self.synth = None       # type: synth.WaveSynth
 
-    def setup(self, samplerate: int=44100, samplewidth: int=2) -> None:
+    def setup(self, samplerate: int = 44100, samplewidth: int = 2) -> None:
         self.synth = synth.WaveSynth(samplerate, samplewidth)
 
     def sine(self, frequency, duration, amplitude=0.9999, phase=0.0, bias=0.0):
