@@ -32,7 +32,7 @@ class Oscillator(ABC):
     consider using the Fast versions instead. They contain optimized algorithms but
     some of their parameters cannot be changed.
     """
-    def __init__(self, samplerate=0) -> None:
+    def __init__(self, samplerate: float = 0) -> None:
         self._samplerate = samplerate or params.norm_samplerate
 
     @abstractmethod
@@ -51,7 +51,8 @@ class EnvelopeFilter(Filter):
     Applies an ADSR volume envelope to the source.
     A,D,S,R are in seconds, sustain_level is an amplitude factor.
     """
-    def __init__(self, source: Oscillator, attack, decay, sustain, sustain_level, release, stop_at_end=False, cycle=False) -> None:
+    def __init__(self, source: Oscillator, attack: float, decay: float, sustain: float, sustain_level: float,
+                 release: float, stop_at_end: bool = False, cycle: bool = False) -> None:
         assert attack >= 0 and decay >= 0 and sustain >= 0 and release >= 0
         assert 0 <= sustain_level <= 1
         super().__init__([source])
@@ -122,7 +123,7 @@ class MixingFilter(Filter):
 
 class AmpModulationFilter(Filter):
     """Modulate the amplitude of the wave of the oscillator by another oscillator (the modulator)."""
-    def __init__(self, source, modulator) -> None:
+    def __init__(self, source: Oscillator, modulator: Oscillator) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
         self.modulator = modulator
@@ -143,7 +144,7 @@ class DelayFilter(Filter):
     Note that if you want to precisely phase-shift an oscillator, you should
     use the phase parameter on the oscillator function itself instead.
     """
-    def __init__(self, source, seconds) -> None:
+    def __init__(self, source: Oscillator, seconds: float) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
         self._seconds = seconds
@@ -164,7 +165,7 @@ class EchoFilter(Filter):
     The decay is the factor with which each echo is decayed in volume (can be >1 to increase in volume instead).
     If you use a very short delay the echos blend into the sound and the effect is more like a reverb.
     """
-    def __init__(self, source, after, amount, delay, decay) -> None:
+    def __init__(self, source: Oscillator, after: float, amount: float, delay: float, decay: float) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
         if decay < 1:
@@ -182,7 +183,8 @@ class EchoFilter(Filter):
         yield from itertools.islice(self._source, int(self._samplerate*self._after))
         # now start mixing the echos
         amp = self._decay
-        echo_oscs = [Oscillator(src, samplerate=self._samplerate) for src in itertools.tee(self._source, self._amount+1)]       # @TODO use NullFilter instead of Oscillator?
+        echo_oscs = [Oscillator(src, samplerate=self._samplerate)
+                     for src in itertools.tee(self._source, self._amount+1)]   # @TODO use NullFilter instead of Oscillator?
         echos = [echo_oscs[0]]
         echo_delay = self._delay
         for echo in echo_oscs[1:]:
@@ -202,7 +204,7 @@ class EchoFilter(Filter):
 
 class ClipFilter(Filter):
     """Clips the values from a source at the given mininum and/or maximum value."""
-    def __init__(self, source, minimum=sys.float_info.min, maximum=sys.float_info.max) -> None:
+    def __init__(self, source: Oscillator, minimum: float = sys.float_info.min, maximum: float = sys.float_info.max) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
         self.min = minimum
@@ -218,7 +220,7 @@ class ClipFilter(Filter):
 
 class AbsFilter(Filter):
     """Returns the absolute value of the samples from the source oscillator."""
-    def __init__(self, source) -> None:
+    def __init__(self, source: Oscillator) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
 
@@ -382,7 +384,8 @@ class Pulse(Oscillator):
     The pwm_lfo oscillator will be clipped between 0 and 1 as pulse width factor.
     """
     def __init__(self, frequency: float, amplitude: float = 1.0, phase: float = 0.0, bias: float = 0.0,
-                 pulsewidth: float = 0.1, fm_lfo: Optional[Oscillator] = None, pwm_lfo: Optional[Oscillator] = None, samplerate: int = 0) -> None:
+                 pulsewidth: float = 0.1, fm_lfo: Optional[Oscillator] = None,
+                 pwm_lfo: Optional[Oscillator] = None, samplerate: int = 0) -> None:
         assert 0 <= pulsewidth <= 1
         super().__init__(samplerate)
         self.frequency = frequency
@@ -421,7 +424,7 @@ class Harmonics(Oscillator):
     Oscillator that produces a waveform based on harmonics.
     This is computationally intensive because many sine waves are added together.
     """
-    def __init__(self, frequency: float, harmonics: List[Tuple[float, float]], amplitude: float = 1.0, phase: float = 0.0,
+    def __init__(self, frequency: float, harmonics: List[Tuple[int, float]], amplitude: float = 1.0, phase: float = 0.0,
                  bias: float = 0.0, fm_lfo: Optional[Oscillator] = None, samplerate: int = 0) -> None:
         super().__init__(samplerate)
         self.frequency = frequency
@@ -466,7 +469,7 @@ class SquareH(Harmonics):
     """
     def __init__(self, frequency: float, num_harmonics: int = 16, amplitude: float = 0.9999, phase: float = 0.0,
                  bias: float = 0.0, fm_lfo: Optional[Oscillator] = None, samplerate: int = 0) -> None:
-        harmonics = [(float(n), 1.0/n) for n in range(1, num_harmonics*2, 2)]  # only the odd harmonics
+        harmonics = [(n, 1.0/n) for n in range(1, num_harmonics*2, 2)]  # only the odd harmonics
         super().__init__(frequency, harmonics, amplitude, phase, bias, fm_lfo=fm_lfo, samplerate=samplerate)
 
 
@@ -478,7 +481,7 @@ class SawtoothH(Harmonics):
     """
     def __init__(self, frequency: float, num_harmonics: int = 16, amplitude: float = 0.9999, phase: float = 0.0,
                  bias: float = 0.0, fm_lfo: Optional[Oscillator] = None, samplerate: int = 0) -> None:
-        harmonics = [(float(n), 1.0/n) for n in range(1, num_harmonics+1)]  # all harmonics
+        harmonics = [(n, 1.0/n) for n in range(1, num_harmonics+1)]  # all harmonics
         super().__init__(frequency, harmonics, amplitude, phase+0.5, bias, fm_lfo=fm_lfo, samplerate=samplerate)
 
     def blocks(self) -> Generator[List[float], None, None]:
@@ -768,7 +771,7 @@ class FastPulse(Oscillator):
                 yield block
 
 
-def next_pwm_block(pwm) -> List[float]:
+def next_pwm_block(pwm: Generator[List[float], None, None]) -> List[float]:
     epsilon = sys.float_info.epsilon
     pwm_block = next(pwm)
     return [min(1.0-epsilon, max(epsilon, p)) for p in pwm_block]
@@ -832,7 +835,7 @@ class FastPointy(Oscillator):
             yield block
 
 
-def plot_waveforms():
+def plot_waveforms() -> None:
     import matplotlib.pyplot as plot
 
     def get_data(osc: Oscillator) -> List[float]:
@@ -842,7 +845,7 @@ def plot_waveforms():
     ncols = 4
     nrows = 3
     freq = 2.0
-    harmonics = [(float(n), 1.0 / n) for n in range(3, 5 * 2, 2)]
+    harmonics = [(n, 1.0 / n) for n in range(3, 5 * 2, 2)]
     fm = FastSine(1, amplitude=0, bias=0, samplerate=samplerate)
     waveforms = [
         ('sine', get_data(Sine(freq, samplerate=samplerate))),
