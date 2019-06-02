@@ -97,9 +97,9 @@ class Sample:
         assert samplerate > 1
         if isinstance(array_or_list, list):
             try:
-                array_or_list = Sample.get_array(2, array_or_list)
+                array_or_list = cls.get_array(2, array_or_list)
             except OverflowError:
-                array_or_list = Sample.get_array(4, array_or_list)
+                array_or_list = cls.get_array(4, array_or_list)
         elif numpy:
             if isinstance(array_or_list, numpy.ndarray) and any(array_or_list):
                 if not isinstance(array_or_list[0], (int, numpy.integer)):
@@ -114,6 +114,30 @@ class Sample:
         if sys.byteorder == "big":
             frames = audioop.byteswap(frames, samplewidth)
         return Sample.from_raw_frames(frames, samplewidth, samplerate, numchannels, name=name)
+
+    @classmethod
+    def from_oscillator(cls, osc: Oscillator, duration: float) -> 'Sample':
+        required_samples = int(duration * osc.samplerate)
+        num_blocks, last_block = divmod(required_samples, params.norm_osc_blocksize)
+        if last_block > 0:
+            num_blocks += 1
+        block_gen = osc.blocks()
+        float_blocks = (next(block_gen) for _ in range(num_blocks))
+        blocks = (list(map(int, fb)) for fb in float_blocks)
+        samples = (cls.from_array(b, osc.samplerate, 1) for b in blocks)
+        sample = next(samples)
+        if last_block == 0:
+            for s2 in samples:
+                sample.join(s2)
+            return sample
+        else:
+            for i in range(num_blocks-2):
+                s2 = next(samples)
+                sample.join(s2)
+            last_sample = next(samples)
+            last_sample.clip(0, last_sample.duration * (last_block/params.norm_osc_blocksize))
+            sample.join(last_sample)
+            return sample
 
     @property
     def samplewidth(self) -> int:
