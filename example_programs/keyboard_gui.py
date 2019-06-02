@@ -253,7 +253,7 @@ class OscillatorGUI(tk.LabelFrame):
             self.harmonics_text.grid_remove()
 
         if wf == "noise":
-            # remove some of the input fields
+            # remote some of the input fields
             self.phase_label.grid_remove()
             self.phase_slider.grid_remove()
             if hasattr(self, "fm_label"):
@@ -261,7 +261,7 @@ class OscillatorGUI(tk.LabelFrame):
                 self.fm_select.grid_remove()
 
         if wf == "linear":
-            # remove most of the input fields
+            # remote most of the input fields
             self.freq_label.grid_remove()
             self.freq_entry.grid_remove()
             self.keys_label.grid_remove()

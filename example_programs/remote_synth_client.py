@@ -1,23 +1,14 @@
 from synthplayer import sample
+from synthplayer.synthserver import register_client_sample_deserializer
 from synthplayer.playback import Output
 import Pyro4
-from Pyro4.util import SerializerBase
 
 
-Pyro4.config.SERIALIZER = "marshal"
-
-
-def sample_deserializer(classname, data):
-    return sample.Sample.from_raw_frames(data["frames"], data["samplewidth"],
-                                         data["samplerate"], data["nchannels"], data["name"])
-
-
-SerializerBase.register_dict_to_class("synthplayer.sample.Sample", sample_deserializer)
-
-
+register_client_sample_deserializer()
 synth = Pyro4.Proxy("PYRONAME:synth.wavesynth")
 synth.setup(44100)
-with Output(44100, nchannels=1, mixing="sequential") as output:
+
+with Output(44100, nchannels=1, samplewidth=2, mixing="sequential") as output:
     silence = sample.Sample.from_raw_frames(b"", samplewidth=2, samplerate=44100, numchannels=1)
     silence.add_silence(0.1)
     output.play_sample(synth.sine(220, .5))
@@ -34,9 +25,20 @@ with Output(44100, nchannels=1, mixing="sequential") as output:
     output.play_sample(silence)
     output.play_sample(synth.sine(880, .5))
     output.play_sample(silence)
-    print("waiting")
+    print("waiting until all tones have played...")
     output.wait_all_played()
-# gen = synth.sine_gen(100, 220)
-# print(gen)
-# for i in gen:
-#     print(i)
+
+    gen = synth.harmonics_gen(220, harmonics=[
+        [1, 1],
+        [2, 1/2],
+        [3, 1/3],
+        [4, 1/4],
+        [5, 1/5],
+        [6, 1/6],
+        [7, 1/7],
+        [8, 1/8],
+        [9, 1/9]
+    ])
+    print("endless waveform stream. press ctrl-c to stop.")
+    for s in gen:
+        output.play_sample(s)

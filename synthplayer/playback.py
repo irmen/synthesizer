@@ -173,10 +173,10 @@ class RealTimeMixer:
                     try:
                         generator.send("fadeout")       # type: ignore
                     except (TypeError, ValueError, StopIteration):
-                        # generator couldn't process the fadeout, just remove the sample...
+                        # generator couldn't process the fadeout, just remote the sample...
                         actually_remove(sid, name)
                 else:
-                    # remove a finished sample (or directly, if no pop prevention active)
+                    # remote a finished sample (or directly, if no pop prevention active)
                     actually_remove(sid, name)
 
     def set_limit(self, samplename: str, max_simultaneously: int) -> None:
@@ -487,7 +487,7 @@ class SounddeviceThread_Seq(AudioApi, SounddeviceUtils):
                             sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                             self.playing_callback(sample)
                     if repeat:
-                        # remove all other samples from the queue and reschedule this one
+                        # remote all other samples from the queue and reschedule this one
                         commands_to_keep = []
                         while True:
                             try:
@@ -695,7 +695,7 @@ class PyAudio_Seq(AudioApi, PyAudioUtils):
                                 sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                                 self.playing_callback(sample)
                         if repeat:
-                            # remove all other samples from the queue and reschedule this one
+                            # remote all other samples from the queue and reschedule this one
                             commands_to_keep = []
                             while True:
                                 try:

@@ -118,13 +118,13 @@ class WaveSynth:
         self.samplerate = samplerate or params.norm_samplerate
         self.samplewidth = samplewidth
 
-    def sine(self, frequency: float, duration: float, amplitude: float = 0.9999, phase: float = 0.0,
+    def sine(self, frequency: int, duration: float, amplitude: float = 0.9999, phase: float = 0.0,
              bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """Simple sine wave. Optional FM using a supplied LFO."""
         wave = self.__sine(frequency, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def sine_gen(self, frequency: float, amplitude: float = 0.9999, phase: float = 0.0,
+    def sine_gen(self, frequency: int, amplitude: float = 0.9999, phase: float = 0.0,
                  bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Simple sine wave generator. Optional FM using a supplied LFO."""
         wave = self.__sine(frequency, amplitude, phase, bias, fm_lfo).blocks()
@@ -132,7 +132,7 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def square(self, frequency: float, duration: float, amplitude: float = 0.75, phase: float = 0.0,
+    def square(self, frequency: int, duration: float, amplitude: float = 0.75, phase: float = 0.0,
                bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """
         A perfect square wave [max/-max].
@@ -142,7 +142,7 @@ class WaveSynth:
         wave = self.__square(frequency, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def square_gen(self, frequency: float, amplitude: float = 0.75, phase: float = 0.0,
+    def square_gen(self, frequency: int, amplitude: float = 0.75, phase: float = 0.0,
                    bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """
         Generator for a perfect square wave [max/-max].
@@ -154,13 +154,13 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def square_h(self, frequency: float, duration: float, num_harmonics: int = 16, amplitude: float = 0.9999,
+    def square_h(self, frequency: int, duration: float, num_harmonics: int = 16, amplitude: float = 0.9999,
                  phase: float = 0.0, bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """A square wave based on harmonic sine waves (more natural sounding than pure square)"""
         wave = self.__square_h(frequency, num_harmonics, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def square_h_gen(self, frequency: float, num_harmonics: int = 16, amplitude: float = 0.9999, phase: float = 0.0,
+    def square_h_gen(self, frequency: int, num_harmonics: int = 16, amplitude: float = 0.9999, phase: float = 0.0,
                      bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Generator for a square wave based on harmonic sine waves (more natural sounding than pure square)"""
         wave = self.__square_h(frequency, num_harmonics, amplitude, phase, bias, fm_lfo).blocks()
@@ -168,13 +168,13 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def triangle(self, frequency: float, duration: float, amplitude: float = 0.9999, phase: float = 0.0,
+    def triangle(self, frequency: int, duration: float, amplitude: float = 0.9999, phase: float = 0.0,
                  bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """Perfect triangle waveform (not using harmonics). Optional FM using a supplied LFO."""
         wave = self.__triangle(frequency, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def triangle_gen(self, frequency: float, amplitude: float = 0.9999, phase: float = 0.0,
+    def triangle_gen(self, frequency: int, amplitude: float = 0.9999, phase: float = 0.0,
                      bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Generator for a perfect triangle waveform (not using harmonics). Optional FM using a supplied LFO."""
         wave = self.__triangle(frequency, amplitude, phase, bias, fm_lfo).blocks()
@@ -182,13 +182,13 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def sawtooth(self, frequency: float, duration: float, amplitude: float = 0.75, phase: float = 0.0,
+    def sawtooth(self, frequency: int, duration: float, amplitude: float = 0.75, phase: float = 0.0,
                  bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """Perfect sawtooth waveform (not using harmonics)."""
         wave = self.__sawtooth(frequency, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def sawtooth_gen(self, frequency: float, amplitude: float = 0.75, phase: float = 0.0,
+    def sawtooth_gen(self, frequency: int, amplitude: float = 0.75, phase: float = 0.0,
                      bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Generator for a perfect sawtooth waveform (not using harmonics)."""
         wave = self.__sawtooth(frequency, amplitude, phase, bias, fm_lfo).blocks()
@@ -196,13 +196,13 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def sawtooth_h(self, frequency: float, duration: float, num_harmonics: int = 16, amplitude: float = 0.5,
+    def sawtooth_h(self, frequency: int, duration: float, num_harmonics: int = 16, amplitude: float = 0.5,
                    phase: float = 0.0, bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def sawtooth_h_gen(self, frequency: float, num_harmonics: int = 16, amplitude: float = 0.5,
+    def sawtooth_h_gen(self, frequency: int, num_harmonics: int = 16, amplitude: float = 0.5,
                        phase: float = 0.0, bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Generator for a Sawtooth waveform based on harmonic sine waves"""
         wave = self.__sawtooth_h(frequency, num_harmonics, amplitude, phase, bias, fm_lfo).blocks()
@@ -210,7 +210,7 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def pulse(self, frequency: float, duration: float, amplitude: float = 0.75, phase: float = 0.0,
+    def pulse(self, frequency: int, duration: float, amplitude: float = 0.75, phase: float = 0.0,
               bias: float = 0.0, pulsewidth: float = 0.1,
               fm_lfo: Optional[Oscillator] = None, pwm_lfo: Optional[Oscillator] = None) -> Sample:
         """
@@ -221,7 +221,7 @@ class WaveSynth:
         wave = self.__pulse(frequency, amplitude, phase, bias, pulsewidth, fm_lfo, pwm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def pulse_gen(self, frequency: float, amplitude: float = 0.75, phase: float = 0.0, bias: float = 0.0,
+    def pulse_gen(self, frequency: int, amplitude: float = 0.75, phase: float = 0.0, bias: float = 0.0,
                   pulsewidth: float = 0.1, fm_lfo: Optional[Oscillator] = None,
                   pwm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """
@@ -234,13 +234,13 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def harmonics(self, frequency: float, duration: float, harmonics: List[Tuple[int, float]],
+    def harmonics(self, frequency: int, duration: float, harmonics: List[Tuple[int, float]],
                   amplitude: float = 0.5, phase: float = 0.0, bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """Makes a waveform based on harmonics. This is slow because many sine waves are added together."""
         wave = self.__harmonics(frequency, harmonics, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def harmonics_gen(self, frequency: float, harmonics: List[Tuple[int, float]],
+    def harmonics_gen(self, frequency: int, harmonics: List[Tuple[int, float]],
                       amplitude: float = 0.5, phase: float = 0.0, bias: float = 0.0,
                       fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Generator for a waveform based on harmonics. This is slow because many sine waves are added together."""
@@ -249,25 +249,25 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def white_noise(self, frequency: float, duration: float, amplitude: float = 0.9999, bias: float = 0.0) -> Sample:
+    def white_noise(self, frequency: int, duration: float, amplitude: float = 0.9999, bias: float = 0.0) -> Sample:
         """White noise (randomness) waveform."""
         wave = self.__white_noise(frequency, amplitude, bias)
         return Sample.from_oscillator(wave, duration)
 
-    def white_noise_gen(self, frequency: float, amplitude: float = 0.9999, bias: float = 0.0) -> Generator[List[int], None, None]:
+    def white_noise_gen(self, frequency: int, amplitude: float = 0.9999, bias: float = 0.0) -> Generator[List[int], None, None]:
         """Generator for White noise (randomness) waveform."""
         wave = self.__white_noise(frequency, amplitude, bias).blocks()
         while True:
             block = next(wave)
             yield list(map(int, block))
 
-    def semicircle(self, frequency: float, duration: float, amplitude: float = 0.9999, phase: float = 0.0,
+    def semicircle(self, frequency: int, duration: float, amplitude: float = 0.9999, phase: float = 0.0,
                    bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """Semicircle half ('W3'). Optional FM using a supplied LFO."""
         wave = self.__semicircle(frequency, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def semicircle_gen(self, frequency: float, amplitude: float = 0.9999, phase: float = 0.0,
+    def semicircle_gen(self, frequency: int, amplitude: float = 0.9999, phase: float = 0.0,
                        bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Semicircle half ('W3') generator. Optional FM using a supplied LFO."""
         wave = self.__semicircle(frequency, amplitude, phase, bias, fm_lfo).blocks()
@@ -275,13 +275,13 @@ class WaveSynth:
             block = next(wave)
             yield list(map(int, block))
 
-    def pointy(self, frequency: float, duration: float, amplitude: float = 0.9999,
+    def pointy(self, frequency: int, duration: float, amplitude: float = 0.9999,
                phase: float = 0.0, bias: float = 0.0, fm_lfo: Optional[Oscillator] = None) -> Sample:
         """Pointy 'inverted cosine' ('W2'). Optional FM using a supplied LFO."""
         wave = self.__pointy(frequency, amplitude, phase, bias, fm_lfo)
         return Sample.from_oscillator(wave, duration)
 
-    def pointy_gen(self, frequency: float, amplitude: float = 0.9999, phase: float = 0.0, bias: float = 0.0,
+    def pointy_gen(self, frequency: int, amplitude: float = 0.9999, phase: float = 0.0, bias: float = 0.0,
                    fm_lfo: Optional[Oscillator] = None) -> Generator[List[int], None, None]:
         """Pointy 'inverted cosine' ('W2') generator. Optional FM using a supplied LFO."""
         wave = self.__pointy(frequency, amplitude, phase, bias, fm_lfo).blocks()
@@ -291,59 +291,59 @@ class WaveSynth:
 
     # note: 'linear'  is not offered as a sampled waveform directly, because this LFO it makes little sense as a sample
 
-    def __sine(self, frequency: float, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
+    def __sine(self, frequency: int, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
             return Sine(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
             return FastSine(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
-    def __semicircle(self, frequency: float, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
+    def __semicircle(self, frequency: int, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
             return Semicircle(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
             return FastSemicircle(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
-    def __pointy(self, frequency: float, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
+    def __pointy(self, frequency: int, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
             return Pointy(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
             return FastPointy(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
-    def __square(self, frequency: float, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
+    def __square(self, frequency: int, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
             return Square(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
             return FastSquare(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
-    def __square_h(self, frequency: float, num_harmonics: int, amplitude: float,
+    def __square_h(self, frequency: int, num_harmonics: int, amplitude: float,
                    phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return SquareH(frequency, num_harmonics, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
 
-    def __triangle(self, frequency: float, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
+    def __triangle(self, frequency: int, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
             return Triangle(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
             return FastTriangle(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
-    def __sawtooth(self, frequency: float, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
+    def __sawtooth(self, frequency: int, amplitude: float, phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         if fm_lfo:
             return Sawtooth(frequency, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
         else:
             return FastSawtooth(frequency, amplitude*scale, phase, bias*scale, samplerate=self.samplerate)
 
-    def __sawtooth_h(self, frequency: float, num_harmonics: int, amplitude: float,
+    def __sawtooth_h(self, frequency: int, num_harmonics: int, amplitude: float,
                      phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return SawtoothH(frequency, num_harmonics, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
 
-    def __pulse(self, frequency: float, amplitude: float, phase: float, bias: float,
+    def __pulse(self, frequency: int, amplitude: float, phase: float, bias: float,
                 pulsewidth: float, fm_lfo: Optional[Oscillator], pwm_lfo: Optional[Oscillator]) -> Oscillator:
         assert 0 <= pulsewidth <= 1
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
@@ -354,12 +354,12 @@ class WaveSynth:
             return FastPulse(frequency, amplitude*scale, phase, bias*scale, pulsewidth,
                              pwm_lfo=pwm_lfo, samplerate=self.samplerate)
 
-    def __harmonics(self, frequency: float, harmonics: List[Tuple[int, float]], amplitude: float,
+    def __harmonics(self, frequency: int, harmonics: List[Tuple[int, float]], amplitude: float,
                     phase: float, bias: float, fm_lfo: Optional[Oscillator]) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return Harmonics(frequency, harmonics, amplitude*scale, phase, bias*scale, fm_lfo=fm_lfo, samplerate=self.samplerate)
 
-    def __white_noise(self, frequency: float, amplitude: float, bias: float) -> Oscillator:
+    def __white_noise(self, frequency: int, amplitude: float, bias: float) -> Oscillator:
         scale = self.__check_and_get_scale(frequency, amplitude, bias)
         return WhiteNoise(frequency, amplitude*scale, bias*scale, samplerate=self.samplerate)
 
@@ -440,7 +440,7 @@ def plot_waveforms() -> None:
     ws2 = WaveSynth(samplerate=params.norm_osc_blocksize, samplewidth=2)
     ncols = 4
     nrows = 3
-    freq = 2.0
+    freq = 2
     dur = 1.0
     harmonics = [(n, 1 / n) for n in range(3, 5 * 2, 2)]
     fm = FastSine(1, amplitude=0, bias=0, samplerate=ws.samplerate)
@@ -453,7 +453,7 @@ def plot_waveforms() -> None:
         ('sawtooth_h', ws.sawtooth_h(freq, dur, num_harmonics=5).get_frame_array()),
         ('pulse', ws.pulse(freq, dur).get_frame_array()),
         ('harmonics', ws.harmonics(freq, dur, harmonics=harmonics).get_frame_array()),
-        ('white_noise', ws2.white_noise(50.0, dur).get_frame_array()),
+        ('white_noise', ws2.white_noise(50, dur).get_frame_array()),
         ('linear', get_data(Linear(20, 0.2, max_value=100, samplerate=ws.samplerate))),
         ('W2-pointy', ws.pointy(freq, dur, fm_lfo=fm).get_frame_array()),
         ('W3-semicircle', ws.semicircle(freq, dur, fm_lfo=fm).get_frame_array())
