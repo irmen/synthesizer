@@ -25,17 +25,6 @@ def sample_serializer(s: sample.Sample) -> Dict[str, Any]:
     }
 
 
-def sample_deserializer(classname: str, data: Dict[str, Any]) -> sample.Sample:
-    return sample.Sample.from_raw_frames(data["frames"], data["samplewidth"],
-                                         data["samplerate"], data["nchannels"], data["name"])
-
-
-def register_client_sample_deserializer() -> None:
-    """can/must be used by clients to deserialize data back into Sample objects"""
-    SerializerBase.register_dict_to_class("synthplayer.sample.Sample", sample_deserializer)
-    Pyro4.config.SERIALIZER = "marshal"
-
-
 @Pyro4.expose
 @Pyro4.behavior(instance_mode="session")
 class WaveSynthServer:
