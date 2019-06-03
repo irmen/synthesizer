@@ -21,5 +21,12 @@ lo = MyLinear(0.0, 0.5, max_value=1000, samplerate=1000)
 # mf = DelayFilter(lo, 0.01).blocks()
 mf = DelayFilter(lo, -0.01).blocks()
 
+
+
 while True:
     print(len(next(mf)))
+
+
+
+# TODO test envelopefilter
+# TODO test echofilter

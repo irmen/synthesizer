@@ -10,13 +10,13 @@ import itertools
 from math import pi, sin, cos, log, fabs, floor, sqrt
 import sys
 import random
-from typing import Generator, List, Sequence, Optional, Tuple
+from typing import Generator, List, Sequence, Optional, Tuple, Iterator
 from abc import abstractmethod, ABC
 from . import params
 
 
-__all__ = ["Oscillator", "Filter", "Sine", "Triangle", "Square", "SquareH", "Sawtooth", "SawtoothH",
-           "Pulse", "Harmonics", "WhiteNoise", "Linear", "Semicircle", "Pointy",
+__all__ = ["Oscillator", "OscillatorFromSingleSamples", "Filter", "Sine", "Triangle", "Square",
+           "SquareH", "Sawtooth", "SawtoothH", "Pulse", "Harmonics", "WhiteNoise", "Linear", "Semicircle", "Pointy",
            "FastSine", "FastPulse", "FastTriangle", "FastSawtooth", "FastSquare", "FastSemicircle", "FastPointy",
            "EnvelopeFilter", "MixingFilter", "AmpModulationFilter", "DelayFilter", "EchoFilter",
            "ClipFilter", "AbsFilter", "NullFilter"]
@@ -43,6 +43,24 @@ class Oscillator(ABC):
     @abstractmethod
     def blocks(self) -> Generator[List[float], None, None]:
         pass
+
+
+class OscillatorFromSingleSamples(Oscillator):
+    """
+    Oscillator that wraps a generator of single sample values.
+    (oscillators return their values in blocks)
+    """
+    def __init__(self, source: Iterator[float], samplerate: int = 0) -> None:
+        super().__init__(samplerate)
+        self.sample_source = source
+
+    def blocks(self) -> Generator[List[float], None, None]:
+        while True:
+            block = list(itertools.islice(self.sample_source, params.norm_osc_blocksize))
+            if block:
+                yield block
+            else:
+                break
 
 
 class Filter(Oscillator, ABC):
@@ -204,25 +222,42 @@ class EchoFilter(Filter):
         self.echo_duration = self._after + self._amount*self._delay
 
     def blocks(self) -> Generator[List[float], None, None]:
-        # @TODO FIX echofilter
-        # first play the first part till the echos start
-        yield from itertools.islice(self._source, int(self.samplerate * self._after))
+        src = self.single_samples()
+        try:
+            while True:
+                yield list(itertools.islice(src, params.norm_osc_blocksize))
+        except StopIteration:
+            return
+
+    def samples_from_source(self) -> Generator[float, None, None]:
+        try:
+            blocks = self.sources[0].blocks()
+            while True:
+                yield from next(blocks)
+        except StopIteration:
+            return
+
+    def single_samples(self) -> Generator[float, None, None]:
+        # first play the first part normally until the echos start
+        source_samples = self.samples_from_source()
+        yield from itertools.islice(source_samples, int(self.samplerate * self._after))
         # now start mixing the echos
         amp = self._decay
-        echo_oscs = [NullFilter(src) for src in itertools.tee(self._source, self._amount+1)]
+        echo_oscs = [OscillatorFromSingleSamples(src) for src in itertools.tee(source_samples, self._amount+1)]
         echos = [echo_oscs[0]]
         echo_delay = self._delay
         for echo in echo_oscs[1:]:
             echo = DelayFilter(echo, echo_delay)
-            echo = AmpModulationFilter(echo, itertools.repeat(amp))
+            echo = AmpModulationFilter(echo, Linear(amp))
             # @todo sometimes mixing the echos causes pops and clicks. Perhaps solvable by using a (very fast) fadein on the echo osc?
             echos.append(echo)
             echo_delay += self._delay
             amp *= self._decay
-        echos = [iter(echo) for echo in echos]
+        echos = [echo.blocks() for echo in echos]
         try:
             while True:
-                yield sum([next(echo) for echo in echos])
+                blocks = [next(echo) for echo in echos]
+                yield from [sum(x) for x in zip(*blocks)]
         except StopIteration:
             return
 
