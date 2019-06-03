@@ -142,7 +142,8 @@ class RealTimeMixer:
                 try:
                     chunk = next(s)
                     if len(chunk) > self.chunksize:
-                        raise ValueError("chunk from sample is larger than chunksize from mixer (" + str(len(chunk)) + " vs " + str(self.chunksize) +")")
+                        raise ValueError("chunk from sample is larger than chunksize from mixer (" +
+                                         str(len(chunk)) + " vs " + str(self.chunksize) + ")")
                     if len(chunk) < self.chunksize:
                         # pad the chunk with some silence
                         chunk = memoryview(chunk.tobytes() + silence[len(chunk):])

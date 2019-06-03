@@ -396,7 +396,7 @@ class EchoFilterGUI(tk.LabelFrame):
                  width=10, length=120).grid(row=row, column=1)
         row += 1
         tk.Label(self, text="decay").grid(row=row, column=0, sticky=tk.E)
-        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.01, to=1.5, resolution=.1,
+        tk.Scale(self, orient=tk.HORIZONTAL, variable=self.input_decay, from_=0.1, to=1.5, resolution=.1,
                  width=10, length=120).grid(row=row, column=1)
 
     def filter(self, source):

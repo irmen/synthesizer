@@ -88,8 +88,23 @@ class EnvelopeFilter(Filter):
         self._cycle = cycle
 
     def blocks(self) -> Generator[List[float], None, None]:
-        # TODO FIX envelopefilter
-        oscillator = iter(self.sources[0])
+        src = self.single_samples()
+        try:
+            while True:
+                yield list(itertools.islice(src, params.norm_osc_blocksize))
+        except StopIteration:
+            return
+
+    def samples_from_source(self) -> Generator[float, None, None]:
+        try:
+            blocks = self.sources[0].blocks()
+            while True:
+                yield from next(blocks)
+        except StopIteration:
+            return
+
+    def single_samples(self) -> Generator[float, None, None]:
+        oscillator = self.samples_from_source()
         while True:
             time = 0.0
             end_time_decay = self._attack + self._decay
@@ -209,12 +224,12 @@ class EchoFilter(Filter):
     The amp_factor is the factor with which each echo changes in volume (<1 for decay, >1 to get louder).
     If you use a very short delay the echos blend into the sound and the effect is more like a reverb.
     """
-    def __init__(self, source: Oscillator, after: float, amount: float, delay: float, amp_factor: float) -> None:
+    def __init__(self, source: Oscillator, after: float, amount: int, delay: float, amp_factor: float) -> None:
         assert isinstance(source, Oscillator)
         super().__init__([source])
         if amp_factor < 1:
             # avoid computing echos that have virtually zero amplitude:
-            amount = int(min(amount, log(0.000001, amp_factor)))
+            amount = int(min(float(amount), log(0.000001, amp_factor)))
         self._after = after
         self._amount = amount
         self._delay = delay
@@ -243,20 +258,19 @@ class EchoFilter(Filter):
         yield from itertools.islice(source_samples, int(self.samplerate * self._after))
         # now start mixing the echos
         amp = self._decay
-        echo_oscs = [OscillatorFromSingleSamples(src) for src in itertools.tee(source_samples, self._amount+1)]
+        echo_oscs = [OscillatorFromSingleSamples(src) for src in itertools.tee(source_samples, self._amount+1)]     # type: List[Oscillator]
         echos = [echo_oscs[0]]
         echo_delay = self._delay
         for echo in echo_oscs[1:]:
-            echo = DelayFilter(echo, echo_delay)
-            echo = AmpModulationFilter(echo, Linear(amp))
+            echo2 = AmpModulationFilter(DelayFilter(echo, echo_delay), Linear(amp))
             # @todo sometimes mixing the echos causes pops and clicks. Perhaps solvable by using a (very fast) fadein on the echo osc?
-            echos.append(echo)
+            echos.append(echo2)
             echo_delay += self._delay
             amp *= self._decay
-        echos = [echo.blocks() for echo in echos]
+        echo_blocks = [echo.blocks() for echo in echos]
         try:
             while True:
-                blocks = [next(echo) for echo in echos]
+                blocks = [next(echoblock) for echoblock in echo_blocks]
                 yield from [sum(x) for x in zip(*blocks)]
         except StopIteration:
             return
