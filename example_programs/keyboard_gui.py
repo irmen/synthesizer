@@ -14,11 +14,14 @@ import itertools
 import tkinter as tk
 from tkinter.filedialog import askopenfile, asksaveasfile
 from configparser import ConfigParser
+from typing import Optional
 from synthplayer.synth import Sine, Triangle, Sawtooth, SawtoothH, Square, SquareH, Harmonics, Pulse, WhiteNoise, Linear, Semicircle, Pointy
 from synthplayer.synth import WaveSynth, note_freq, MixingFilter, EchoFilter, AmpModulationFilter, EnvelopeFilter
 from synthplayer.synth import major_chord_keys
 from synthplayer.sample import Sample
 from synthplayer.playback import Output
+from synthplayer.oscillators import Oscillator
+from synthplayer import params
 import synthplayer
 try:
     import matplotlib
@@ -29,12 +32,15 @@ except ImportError:
     matplotlib = Figure = None
 
 
+params.norm_frames_per_chunk = params.norm_osc_blocksize
+
+
 class StreamingOscSample(Sample):
     def __init__(self, oscillator, samplerate, duration=0.0):
         super().__init__()
         self.mono()
         self.samplerate = samplerate
-        self.oscillator = iter(oscillator)
+        self.blocks = oscillator.blocks()
         self.max_play_duration = duration or 1000000
 
     @property
@@ -48,12 +54,14 @@ class StreamingOscSample(Sample):
         raise NotImplementedError("use oscillators to generate the sound")
 
     def chunked_frame_data(self, chunksize, repeat=False, stopcondition=lambda: False):
-        played_duration = 0.0
         num_frames = chunksize // self.samplewidth // self.nchannels
+        if num_frames != params.norm_osc_blocksize:
+            raise ValueError("streaming osc num_frames must be equal to the oscillator blocksize")
+        played_duration = 0.0
         scale = 2 ** (8 * self.samplewidth - 1)
         while played_duration < self.max_play_duration:
             try:
-                frames = [int(v * scale) for v in itertools.islice(self.oscillator, num_frames)]
+                frames = [int(v * scale) for v in next(self.blocks)]
             except StopIteration:
                 break
             else:
@@ -245,7 +253,7 @@ class OscillatorGUI(tk.LabelFrame):
             self.harmonics_text.grid_remove()
 
         if wf == "noise":
-            # remove some of the input fields
+            # remote some of the input fields
             self.phase_label.grid_remove()
             self.phase_slider.grid_remove()
             if hasattr(self, "fm_label"):
@@ -253,7 +261,7 @@ class OscillatorGUI(tk.LabelFrame):
                 self.fm_select.grid_remove()
 
         if wf == "linear":
-            # remove most of the input fields
+            # remote most of the input fields
             self.freq_label.grid_remove()
             self.freq_entry.grid_remove()
             self.keys_label.grid_remove()
@@ -758,7 +766,7 @@ class SynthGUI(tk.Frame):
         osc.after(int(duration*1000), lambda: osc.set_title_status(None))
         o = self.create_osc(None, None, osc.input_freq.get(), osc, all_oscillators=self.oscillators, is_audio=True)
         o = self.apply_filters(o)
-        sample = self.generate_sample(iter(o), duration)
+        sample = self.generate_sample(o, duration)
         if sample.samplewidth != self.synth.samplewidth:
             print("16 bit overflow!")  # XXX
             sample = sample.make_16bit()
@@ -773,12 +781,12 @@ class SynthGUI(tk.Frame):
         if not matplotlib:
             self.statusbar["text"] = "Cannot plot! To plot things, you need to have matplotlib installed!"
             return
-        o = self.create_osc(None, None, osc.input_freq.get(), osc, all_oscillators=self.oscillators)
-        frames = list(itertools.islice(o, self.synth.samplerate))
+        o = self.create_osc(None, None, osc.input_freq.get(), osc, all_oscillators=self.oscillators).blocks()
+        blocks = list(itertools.islice(o, self.synth.samplerate//params.norm_osc_blocksize))
         # integrating matplotlib in tikinter, see http://matplotlib.org/examples/user_interfaces/embedding_in_tk2.html
         fig = Figure(figsize=(8, 2), dpi=100)
         axis = fig.add_subplot(111)
-        axis.plot(frames)
+        axis.plot(sum(blocks, []))
         axis.set_title("Waveform")
         self.do_close_waveform()
         canvas = FigureCanvasTkAgg(fig, master=self.waveform_area)
@@ -787,10 +795,13 @@ class SynthGUI(tk.Frame):
         close_waveform = tk.Button(self.waveform_area, text="Close waveform", command=self.do_close_waveform)
         close_waveform.pack(side=tk.RIGHT)
 
-    def generate_sample(self, oscillator, duration, use_fade=False):
+    def generate_sample(self, oscillator: Oscillator, duration: float, use_fade: bool = False) -> Optional[Sample]:
         scale = 2**(8*self.synth.samplewidth-1)
+        blocks = oscillator.blocks()
         try:
-            frames = [int(v*scale) for v in itertools.islice(oscillator, int(self.synth.samplerate*duration))]
+            sample_blocks = list(next(blocks) for _ in range(int(self.synth.samplerate*duration/params.norm_osc_blocksize)))
+            float_frames = sum(sample_blocks, [])
+            frames = [int(v*scale) for v in float_frames]
         except StopIteration:
             return None
         else:
@@ -799,7 +810,7 @@ class SynthGUI(tk.Frame):
                 sample.fadein(0.05).fadeout(0.1)
             return sample
 
-    def render_and_play_note(self, oscillator, max_duration=4):
+    def render_and_play_note(self, oscillator: Oscillator, max_duration: float = 4) -> None:
         duration = 0
         for ev in self.envelope_filter_guis:
             duration = max(duration, ev.duration)
@@ -906,7 +917,7 @@ class SynthGUI(tk.Frame):
             # normal, single note
             if self.rendering_choice.get() == "render":
                 self.statusbar["text"] = "rendering note sample..."
-                self.after_idle(lambda: self.render_and_play_note(iter(mixed_osc)))
+                self.after_idle(lambda: self.render_and_play_note(mixed_osc))
             else:
                 self.statusbar["text"] = "playing note {0} {1}".format(first_note, first_octave)
                 sample = StreamingOscSample(oscs_to_play[0], self.synth.samplerate)

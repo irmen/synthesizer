@@ -1,2 +1,2 @@
-__version__ = "1.6"
+__version__ = "2.0"
 __author__ = "Irmen de Jong"

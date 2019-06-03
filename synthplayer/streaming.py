@@ -10,11 +10,13 @@ import shutil
 import json
 import wave
 import os
+import sys
 import io
 import time
 import logging
 from collections import namedtuple
-from typing import Callable, Generator, BinaryIO, Optional, Union, Iterable, Tuple, List, Dict
+from typing import Callable, Generator, BinaryIO, Optional, Union, Iterable, Tuple, List, Dict, Iterator, Any
+from types import TracebackType
 from .sample import Sample
 from . import params
 
@@ -43,9 +45,9 @@ class AudiofileToWavStream(io.RawIOBase):
     ffprobe_executable = "ffprobe"
     oggdec_executable = "oggdec"
 
-    def __init__(self, filename: str, outputfilename: str="", samplerate: int=0,
-                 channels: int=0, sampleformat: str="", bitspersample: int=0,
-                 hqresample: bool=True, startfrom: float=0.0, duration: float=0.0) -> None:
+    def __init__(self, filename: str, outputfilename: str = "", samplerate: int = 0,
+                 channels: int = 0, sampleformat: str = "", bitspersample: int = 0,
+                 hqresample: bool = True, startfrom: float = 0.0, duration: float = 0.0) -> None:
         samplerate = samplerate or params.norm_samplerate
         channels = channels or params.norm_nchannels
         sampleformat = sampleformat or str(8*params.norm_samplewidth)
@@ -210,8 +212,8 @@ class AudiofileToWavStream(io.RawIOBase):
             raise RuntimeError("ffmpeg or oggdec (vorbis-tools) required for sound file decoding/conversion")
         return self.stream
 
-    def read(self, size):
-        return self.stream.read(size)
+    def read(self, size: int = sys.maxsize) -> Optional[bytes]:
+        return self.stream.read(size)   # type: ignore
 
     def close(self) -> None:
         log.debug("closing stream %s", self.name)
@@ -236,10 +238,10 @@ class StreamingSample(Sample):
     Can be used for the realtime mixing output mode to allow
     on demand decoding and streaming of large sound files.
     """
-    def __init__(self, wave_file: Union[str, BinaryIO]=None, name: str="") -> None:
+    def __init__(self, wave_file: Optional[Union[str, BinaryIO]] = None, name: str = "") -> None:
         super().__init__(wave_file, name)
 
-    def view_frame_data(self):
+    def view_frame_data(self) -> memoryview:
         raise NotImplementedError("a streaming sample doesn't have a frame data buffer to view")
 
     def load_wav(self, file_or_stream: Union[str, BinaryIO]) -> 'Sample':
@@ -255,8 +257,8 @@ class StreamingSample(Sample):
         self.wave_stream.readframes(1)   # warm up the stream
         return self
 
-    def chunked_frame_data(self, chunksize: int, repeat: bool=False,
-                           stopcondition: Callable[[], bool]=lambda: False) -> Generator[memoryview, None, None]:
+    def chunked_frame_data(self, chunksize: int, repeat: bool = False,
+                           stopcondition: Callable[[], bool] = lambda: False) -> Generator[memoryview, None, None]:
         silence = b"\0" * chunksize
         while True:
             audiodata = self.wave_stream.readframes(chunksize // self.samplewidth // self.nchannels)
@@ -295,7 +297,7 @@ class EndlessFramesFilter(FramesFilter):
 
 
 class VolumeFilter(SampleFilter):
-    def __init__(self, volume: float=1.0) -> None:
+    def __init__(self, volume: float = 1.0) -> None:
         self.volume = volume
 
     def __call__(self, sample: Sample) -> Sample:
@@ -325,10 +327,10 @@ class SampleStream:
         self.frames_filters = []    # type: List[FramesFilter]
         self.source.readframes(1)  # warm up the stream
 
-    def __enter__(self):
+    def __enter__(self) -> 'SampleStream':
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: type, exc_val: Any, exc_tb: TracebackType) -> None:
         self.close()
 
     def add_frames_filter(self, flter: FramesFilter) -> None:
@@ -338,7 +340,7 @@ class SampleStream:
     def add_filter(self, flter: SampleFilter) -> None:
         self.filters.append(flter)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Sample]:
         return self
 
     def __next__(self) -> Sample:
@@ -363,8 +365,8 @@ class StreamMixer:
     """
     buffer_size = 4096   # number of frames in a buffer
 
-    def __init__(self, streams: Iterable[BinaryIO], endless: bool=False,
-                 samplewidth: int=0, samplerate: int=0, nchannels: int=0) -> None:
+    def __init__(self, streams: Iterable[BinaryIO], endless: bool = False,
+                 samplewidth: int = 0, samplerate: int = 0, nchannels: int = 0) -> None:
         # assume all wave streams are the same parameters
         self.samplewidth = samplewidth or params.norm_samplewidth
         self.samplerate = samplerate or params.norm_samplerate
@@ -376,8 +378,8 @@ class StreamMixer:
         for stream in streams:
             self.add_stream(stream, None, endless)
 
-    def add_stream(self, stream: BinaryIO, filters: Iterable[SampleFilter]=None,
-                   endless: bool=False, end_callback: Callable[[], None]=None) -> None:
+    def add_stream(self, stream: BinaryIO, filters: Optional[Iterable[SampleFilter]] = None,
+                   endless: bool = False, end_callback: Optional[Callable[[], None]] = None) -> None:
         ws = wave.open(stream, 'r')
         ss = SampleStream(ws, self.buffer_size)
         if endless:
@@ -396,7 +398,7 @@ class StreamMixer:
             if end_callback is not None:
                 end_callback()
 
-    def add_sample(self, sample: Sample, end_callback: Callable[[], None]=None) -> None:
+    def add_sample(self, sample: Sample, end_callback: Optional[Callable[[], None]] = None) -> None:
         assert sample.samplewidth == self.samplewidth
         assert sample.samplerate == self.samplerate
         assert sample.nchannels == self.nchannels
@@ -405,10 +407,10 @@ class StreamMixer:
         stream.seek(0, io.SEEK_SET)
         self.add_stream(stream, end_callback=end_callback)
 
-    def __enter__(self):
+    def __enter__(self) -> 'StreamMixer':
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, exc_type: type, exc_val: Any, exc_tb: TracebackType) -> None:
         self.close()
 
     def close(self) -> None:
@@ -422,20 +424,19 @@ class StreamMixer:
         """
         while self.endless or self.sample_streams:
             mixed_sample = Sample.from_raw_frames(b"", self.samplewidth, self.samplerate, self.nchannels)
+            sample = None
             for sample_stream in self.sample_streams:
                 try:
-                    sample = next(sample_stream)        # type: ignore
+                    sample = next(sample_stream)
                 except StopIteration:
                     if self.endless:
                         sample = None
                     else:
-                        break
+                        self.remove_stream(sample_stream)
                 except (os.error, ValueError):
                     # Problem reading from stream. Assume stream closed.
                     sample = None
                 if sample:
                     mixed_sample.mix(sample)
-                else:
-                    self.remove_stream(sample_stream)
             yield self.timestamp, mixed_sample
             self.timestamp += mixed_sample.duration

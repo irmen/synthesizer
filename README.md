@@ -31,6 +31,11 @@ A waveform synthesizer that can generate different wave form samples:
 sine, triangle, sawtooth, square, pulse wave, harmonics and white noise.
 It also supports Frequency Modulation, Pulse-width modulation, and ADSR envelopes using LFOs.
 
+For efficiency reasons, the oscillators and filters return their waveform values in small
+chunks/lists instead of per individual value. When running the synthesizer with pypy the
+speedup is remarkable over the older version (that used single value generators).
+ 
+
 ![Synth Waveforms overview](./waveforms.png?raw=true "Overview of the basic waveforms available in the synth")
 
 ![Synth GUI screenshot](./screenshot.png?raw=true "Screenshot of the Keyboard GUI")

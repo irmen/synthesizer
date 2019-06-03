@@ -411,7 +411,7 @@ class Repl(cmd.Cmd):
     def do_rec(self, args):
         """Record (or overwrite) a new sample (instrument) bar in a pattern.
 Args: [pattern name] [sample] [bar(s)].
-Omit bars to remove the sample from the pattern.
+Omit bars to remote the sample from the pattern.
 If a pattern with the name doesn't exist yet it will be added."""
         args = args.split(maxsplit=2)
         if len(args) not in (2, 3):

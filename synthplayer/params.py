@@ -13,6 +13,9 @@ norm_samplewidth = 2
 # smaller = less latency but more overhead
 norm_frames_per_chunk = norm_samplerate // 30
 
+# oscillator block size (samples)
+norm_osc_blocksize = 512
+
 # should the output sound mixer fade samples to prevent click/pop noise?
 # (it wil incur a slight performance hit)
 auto_sample_pop_prevention = False

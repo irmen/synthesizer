@@ -1,14 +1,15 @@
 import time
 import itertools
 import platform
-from synthplayer import synth
+from synthplayer import synth, params
 
 
 samplerate = 44100
 frequency = 880
-num_samples = samplerate*40
+num_blocks = samplerate*40//params.norm_osc_blocksize
 
-oscillators = [synth.Linear,        # baseline
+oscillators = [
+               synth.Linear,        # baseline
                synth.FastSine,
                synth.FastPulse,
                synth.FastSawtooth,
@@ -16,7 +17,6 @@ oscillators = [synth.Linear,        # baseline
                synth.FastTriangle,
                synth.FastSemicircle,
                synth.FastPointy,
-
                synth.Sine,
                synth.Triangle,
                synth.Square,
@@ -27,24 +27,24 @@ oscillators = [synth.Linear,        # baseline
                # synth.Harmonics,   # used by sawtoothH and squareH already
                synth.WhiteNoise,
                synth.Semicircle,
-               synth.Pointy]
+               synth.Pointy
+               ]
 
 
 if platform.python_implementation().lower() == "pypy":
     print("PYPY WARMUP...")
     for osctype in oscillators:
         osc = osctype(frequency, samplerate=samplerate)
-        osc = osc.generator()
         print(osctype.__name__)
-        dummy = list(itertools.islice(osc, num_samples))
+        dummy = list(itertools.islice(osc.blocks(), num_blocks))
 
 print("\nTESTING...")
 for osctype in oscillators:
     osc = osctype(frequency, samplerate=samplerate)
-    osc = osc.generator()
     print("testing {:20.20s}... ".format(osctype.__name__), end="")
     start = time.time()
-    dummy = list(itertools.islice(osc, num_samples))
+    dummy = list(itertools.islice(osc.blocks(), num_blocks))
     duration = time.time()-start
+    num_samples = num_blocks * params.norm_osc_blocksize
     sample_duration = num_samples/samplerate
     print("{:6.0f} K iterations/sec ({:.1f} x realtime @ {:d} hz)".format(num_samples/duration/1000, sample_duration/duration, samplerate))
