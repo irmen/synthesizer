@@ -276,7 +276,7 @@ def echo_lfo():
     s = EnvelopeFilter(s, .2, .2, 0, 0, 1.5, stop_at_end=True)
     s = EchoFilter(s, .15, 5, 0.3, 0.6)
     s = ClipFilter(s, -32000, 32000)
-    blocks = list(s.blocks())
+    blocks = [[int(v) for v in block] for block in s.blocks()]
     frames = sum(blocks, [])
     import matplotlib.pyplot as plot
     plot.plot(frames)

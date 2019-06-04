@@ -163,7 +163,7 @@ class Internetradio(tkinter.Tk):
                    "http://somafm.com/img/secretagent120.jpg",
                    "http://ice3.somafm.com/secretagent-64-aac"),
         StationDef("University of Calgary", "CJSW-FM",
-                   "https://upload.wikimedia.org/wikipedia/en/thumb/0/0e/CJSW-FM.svg/220px-CJSW-FM.svg.png",
+                   "https://pbs.twimg.com/profile_images/1123369374989967360/zuJdEVow_400x400.png",
                    "http://stream.cjsw.com:80/cjsw.ogg"),
         StationDef("Playtrance.com", "Trance",
                    "https://www.playtrance.com/static/playtrancev20thumb.jpg",

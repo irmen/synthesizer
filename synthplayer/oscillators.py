@@ -75,7 +75,7 @@ class EnvelopeFilter(Filter):
     A,D,S,R are in seconds, sustain_level is an amplitude factor.
     """
     def __init__(self, source: Oscillator, attack: float, decay: float, sustain: float, sustain_level: float,
-                 release: float, stop_at_end: bool = False, cycle: bool = False) -> None:
+                 release: float, stop_at_end: bool = False) -> None:
         assert attack >= 0 and decay >= 0 and sustain >= 0 and release >= 0
         assert 0 <= sustain_level <= 1
         super().__init__([source])
@@ -85,13 +85,15 @@ class EnvelopeFilter(Filter):
         self._sustain_level = sustain_level
         self._release = release
         self._stop_at_end = stop_at_end
-        self._cycle = cycle
 
     def blocks(self) -> Generator[List[float], None, None]:
         src = self.single_samples()
         try:
             while True:
-                yield list(itertools.islice(src, params.norm_osc_blocksize))
+                v = list(itertools.islice(src, params.norm_osc_blocksize))
+                if not v:
+                    return
+                yield v
         except StopIteration:
             return
 
@@ -105,40 +107,37 @@ class EnvelopeFilter(Filter):
 
     def single_samples(self) -> Generator[float, None, None]:
         oscillator = self.samples_from_source()
-        while True:
-            time = 0.0
-            end_time_decay = self._attack + self._decay
-            end_time_sustain = end_time_decay + self._sustain
-            end_time_release = end_time_sustain + self._release
-            increment = 1/self.samplerate
-            if self._attack:
-                amp_change = 1.0/self._attack*increment
-                amp = 0.0
-                while time < self._attack:
-                    yield next(oscillator)*amp
-                    amp += amp_change
-                    time += increment
-            if self._decay:
-                amp = 1.0
-                amp_change = (self._sustain_level-1.0)/self._decay*increment
-                while time < end_time_decay:
-                    yield next(oscillator)*amp
-                    amp += amp_change
-                    time += increment
-            while time < end_time_sustain:
-                yield next(oscillator)*self._sustain_level
+        time = 0.0
+        end_time_decay = self._attack + self._decay
+        end_time_sustain = end_time_decay + self._sustain
+        end_time_release = end_time_sustain + self._release
+        increment = 1/self.samplerate
+        if self._attack:
+            amp_change = 1.0/self._attack*increment
+            amp = 0.0
+            while time < self._attack:
+                yield next(oscillator)*amp
+                amp += amp_change
                 time += increment
-            if self._release:
-                amp = self._sustain_level
-                amp_change = (-self._sustain_level)/self._release*increment
-                while time < end_time_release:
-                    yield next(oscillator)*amp
-                    amp += amp_change
-                    time += increment
-                if amp > 0.0:
-                    yield next(oscillator)*amp
-            if not self._cycle:
-                break
+        if self._decay:
+            amp = 1.0
+            amp_change = (self._sustain_level-1.0)/self._decay*increment
+            while time < end_time_decay:
+                yield next(oscillator)*amp
+                amp += amp_change
+                time += increment
+        while time < end_time_sustain:
+            yield next(oscillator)*self._sustain_level
+            time += increment
+        if self._release:
+            amp = self._sustain_level
+            amp_change = (-self._sustain_level)/self._release*increment
+            while time < end_time_release:
+                yield next(oscillator)*amp
+                amp += amp_change
+                time += increment
+            if amp > 0.0:
+                yield next(oscillator)*amp
         if not self._stop_at_end:
             yield from itertools.repeat(0.0)
 
@@ -240,15 +239,18 @@ class EchoFilter(Filter):
         src = self.single_samples()
         try:
             while True:
-                yield list(itertools.islice(src, params.norm_osc_blocksize))
+                v = list(itertools.islice(src, params.norm_osc_blocksize))
+                if not v:
+                    return
+                yield v
         except StopIteration:
             return
 
     def samples_from_source(self) -> Generator[float, None, None]:
         try:
-            blocks = self.sources[0].blocks()
+            blks = self.sources[0].blocks()
             while True:
-                yield from next(blocks)
+                yield from next(blks)
         except StopIteration:
             return
 
@@ -591,7 +593,10 @@ class WhiteNoise(Oscillator):
             raise ValueError("whitenoise frequency cannot be bigger than the sample rate")
         values = self.random_values()
         while True:
-            yield list(itertools.islice(values, params.norm_osc_blocksize))
+            v = list(itertools.islice(values, params.norm_osc_blocksize))
+            if not v:
+                return
+            yield v
 
 
 class Linear(Oscillator):

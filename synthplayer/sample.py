@@ -11,7 +11,7 @@ import audioop
 import array
 import math
 import itertools
-from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence, Iterator, List
+from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence, Iterator
 from . import params
 from .oscillators import Oscillator
 try:
@@ -37,7 +37,6 @@ if array.array('i').itemsize == 4:
 class Sample:
     """
     Audio sample data. Supports integer sample formats of 2, 3 and 4 bytes per sample (no floating-point).
-    Python 3.4+ is required to support 3-bytes/24-bits sample sizes.
     Most operations modify the sample data in place (if it's not locked) and return the sample object,
     so you can easily chain several operations.
     """
@@ -116,13 +115,15 @@ class Sample:
         return Sample.from_raw_frames(frames, samplewidth, samplerate, numchannels, name=name)
 
     @classmethod
-    def from_oscillator(cls, osc: Oscillator, duration: float) -> 'Sample':
+    def from_oscillator(cls, osc: Oscillator, duration: float, amplitude_scale: float = 2 ** (8 * params.norm_samplewidth - 1)) -> 'Sample':
         required_samples = int(duration * osc.samplerate)
         num_blocks, last_block = divmod(required_samples, params.norm_osc_blocksize)
         if last_block > 0:
             num_blocks += 1
         block_gen = osc.blocks()
         float_blocks = (next(block_gen) for _ in range(num_blocks))
+        if amplitude_scale != 1.0:
+            float_blocks = list(list(amplitude_scale * v for v in block) for block in float_blocks)
         blocks = (list(map(int, fb)) for fb in float_blocks)
         samples = (cls.from_array(b, osc.samplerate, 1) for b in blocks)
         sample = next(samples)
@@ -135,8 +136,9 @@ class Sample:
                 s2 = next(samples)
                 sample.join(s2)
             last_sample = next(samples)
-            last_sample.clip(0, last_sample.duration * (last_block/params.norm_osc_blocksize))
-            sample.join(last_sample)
+            if last_sample.duration > 0:
+                last_sample.clip(0, last_sample.duration * (last_block/params.norm_osc_blocksize))
+                sample.join(last_sample)
             return sample
 
     @property
@@ -248,9 +250,10 @@ class Sample:
         return Sample.get_array(self.samplewidth, self.__frames)
 
     @staticmethod
-    def get_array(samplewidth: int, initializer: Optional[Iterable[Any]] = None) -> 'array.ArrayType[int]':
+    def get_array(samplewidth: int, initializer: Optional[Iterable[int]] = None) -> 'array.ArrayType[int]':
         """Returns an array with the correct type code, optionally initialized with values."""
-        return array.array(samplewidths_to_arraycode[samplewidth], initializer or [])
+        arraycode = samplewidths_to_arraycode[samplewidth]
+        return array.array(arraycode, initializer or [])
 
     def copy(self) -> 'Sample':
         """Returns a copy of the sample (unlocked)."""
@@ -458,7 +461,7 @@ class Sample:
         """Keep only a given clip from the sample."""
         if self.__locked:
             raise RuntimeError("cannot modify a locked sample")
-        assert end_seconds > start_seconds
+        assert end_seconds >= start_seconds
         start = self.frame_idx(start_seconds)
         end = self.frame_idx(end_seconds)
         self.__frames = self.__frames[start:end]
