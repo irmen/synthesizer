@@ -75,7 +75,7 @@ class Sample:
             self.__frames == other.__frames
 
     @classmethod
-    def from_raw_frames(cls, frames: bytes, samplewidth: int, samplerate: int, numchannels: int, name: str = "") -> 'Sample':
+    def from_raw_frames(cls, frames: Union[bytes, list, memoryview], samplewidth: int, samplerate: int, numchannels: int, name: str = "") -> 'Sample':
         """Creates a new sample directly from the raw sample data."""
         assert 1 <= numchannels <= 2
         assert 2 <= samplewidth <= 4
