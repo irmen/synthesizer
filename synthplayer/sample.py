@@ -11,7 +11,7 @@ import audioop
 import array
 import math
 import itertools
-from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence, Iterator, List
+from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence, Iterator
 from . import params
 from .oscillators import Oscillator
 try:
@@ -40,7 +40,8 @@ class Sample:
     Most operations modify the sample data in place (if it's not locked) and return the sample object,
     so you can easily chain several operations.
     """
-    def __init__(self, wave_file: Optional[Union[str, BinaryIO]] = None, name: str = "") -> None:
+    def __init__(self, wave_file: Optional[Union[str, BinaryIO]] = None, name: str = "",
+                 samplerate: int = 0, nchannels: int = 0, samplewidth: int = 0) -> None:
         """Creates a new empty sample, or loads it from a wav file."""
         self.name = name
         self.__locked = False
@@ -55,9 +56,9 @@ class Sample:
             assert 2 <= self.__samplewidth <= 4
             assert self.__samplerate > 1
         else:
-            self.__samplerate = params.norm_samplerate
-            self.__nchannels = params.norm_nchannels
-            self.__samplewidth = params.norm_samplewidth
+            self.__samplerate = samplerate or params.norm_samplerate
+            self.__nchannels = nchannels or params.norm_nchannels
+            self.__samplewidth = samplewidth or params.norm_samplewidth
             self.__frames = b""
             self.__filename = ""
 
@@ -116,31 +117,31 @@ class Sample:
         return Sample.from_raw_frames(frames, samplewidth, samplerate, numchannels, name=name)
 
     @classmethod
-    def from_oscillator(cls, osc: Oscillator, duration: float, amplitude_scale: float = 2 ** (8 * params.norm_samplewidth - 1)) -> 'Sample':
+    def from_oscillator(cls, osc: Oscillator, duration: float, amplitude_scale: Optional[float] = None,
+                        sample_width: int = params.norm_samplewidth) -> 'Sample':
+        amplitude_scale = amplitude_scale or 2 ** (8 * sample_width - 1)
         required_samples = int(duration * osc.samplerate)
         num_blocks, last_block = divmod(required_samples, params.norm_osc_blocksize)
         if last_block > 0:
             num_blocks += 1
         block_gen = osc.blocks()
-        float_blocks = (next(block_gen) for _ in range(num_blocks))     # type: Iterable[List[float]]
-        if amplitude_scale != 1.0:
-            float_blocks = list(list(amplitude_scale * v for v in block) for block in float_blocks)
-        blocks = (list(map(int, fb)) for fb in float_blocks)
-        samples = (cls.from_array(b, osc.samplerate, 1) for b in blocks)
-        sample = next(samples)
-        if last_block == 0:
-            for s2 in samples:
-                sample.join(s2)
-            return sample
-        else:
-            for i in range(num_blocks-2):
-                s2 = next(samples)
-                sample.join(s2)
-            last_sample = next(samples)
-            if last_sample.duration > 0:
-                last_sample.clip(0, last_sample.duration * (last_block/params.norm_osc_blocksize))
-                sample.join(last_sample)
-            return sample
+        sample = cls(None, osc.__class__.__name__, samplerate=osc.samplerate, nchannels=1, samplewidth=sample_width)
+
+        def sample_from_block(b: Iterable[float]) -> 'Sample':
+            if amplitude_scale and amplitude_scale != 1.0:
+                b = [amplitude_scale * v for v in b]
+            intblk = list(map(int, b))
+            return cls.from_array(intblk, osc.samplerate, 1)
+
+        if num_blocks > 0:
+            for block in block_gen:
+                num_blocks -= 1
+                if num_blocks == 0:
+                    block = block[:last_block]
+                sample.join(sample_from_block(block))
+                if num_blocks == 0:
+                    break
+        return sample
 
     @property
     def samplewidth(self) -> int:
