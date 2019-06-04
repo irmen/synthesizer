@@ -117,28 +117,30 @@ class Sample:
         return Sample.from_raw_frames(frames, samplewidth, samplerate, numchannels, name=name)
 
     @classmethod
+    def from_osc_block(cls, block: Iterable[float], samplerate: int, amplitude_scale: Optional[float] = None,
+                       samplewidth: int = params.norm_samplewidth) -> 'Sample':
+        amplitude_scale = amplitude_scale or 2 ** (8 * samplewidth - 1)
+        if amplitude_scale and amplitude_scale != 1.0:
+            block = [amplitude_scale * v for v in block]
+        intblk = list(map(int, block))
+        return cls.from_array(intblk, samplerate, 1)
+
+    @classmethod
     def from_oscillator(cls, osc: Oscillator, duration: float, amplitude_scale: Optional[float] = None,
-                        sample_width: int = params.norm_samplewidth) -> 'Sample':
-        amplitude_scale = amplitude_scale or 2 ** (8 * sample_width - 1)
+                        samplewidth: int = params.norm_samplewidth) -> 'Sample':
+        amplitude_scale = amplitude_scale or 2 ** (8 * samplewidth - 1)
         required_samples = int(duration * osc.samplerate)
         num_blocks, last_block = divmod(required_samples, params.norm_osc_blocksize)
         if last_block > 0:
             num_blocks += 1
         block_gen = osc.blocks()
-        sample = cls(None, osc.__class__.__name__, samplerate=osc.samplerate, nchannels=1, samplewidth=sample_width)
-
-        def sample_from_block(b: Iterable[float]) -> 'Sample':
-            if amplitude_scale and amplitude_scale != 1.0:
-                b = [amplitude_scale * v for v in b]
-            intblk = list(map(int, b))
-            return cls.from_array(intblk, osc.samplerate, 1)
-
+        sample = cls(None, osc.__class__.__name__, samplerate=osc.samplerate, nchannels=1, samplewidth=samplewidth)
         if num_blocks > 0:
             for block in block_gen:
                 num_blocks -= 1
                 if num_blocks == 0:
                     block = block[:last_block]
-                sample.join(sample_from_block(block))
+                sample.join(Sample.from_osc_block(block, osc.samplerate, amplitude_scale, samplewidth))
                 if num_blocks == 0:
                     break
         return sample

@@ -19,7 +19,7 @@ import io
 import os
 import warnings
 from collections import defaultdict
-from typing import Generator, Union, Dict, Tuple, Any, Type, List, Callable, Iterable, Optional, Container
+from typing import Generator, Union, Dict, Tuple, Any, Type, List, Callable, Iterable, Optional
 from types import TracebackType
 from .import params
 from .sample import Sample
