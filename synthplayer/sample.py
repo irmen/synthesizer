@@ -11,7 +11,7 @@ import audioop
 import array
 import math
 import itertools
-from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence, Iterator
+from typing import Callable, Generator, Iterable, Any, Tuple, Union, Optional, BinaryIO, Sequence, Iterator, List
 from . import params
 from .oscillators import Oscillator
 try:
@@ -121,7 +121,7 @@ class Sample:
         if last_block > 0:
             num_blocks += 1
         block_gen = osc.blocks()
-        float_blocks = (next(block_gen) for _ in range(num_blocks))
+        float_blocks = (next(block_gen) for _ in range(num_blocks))     # type: Iterable[List[float]]
         if amplitude_scale != 1.0:
             float_blocks = list(list(amplitude_scale * v for v in block) for block in float_blocks)
         blocks = (list(map(int, fb)) for fb in float_blocks)
