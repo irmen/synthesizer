@@ -5,6 +5,7 @@ simple stream manipulations such as volume (amplitude) control.
 Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
+import audioop
 import subprocess
 import shutil
 import json
@@ -14,19 +15,24 @@ import sys
 import io
 import time
 import logging
-from collections import namedtuple
+import threading
+from collections import namedtuple, defaultdict
 from typing import Callable, Generator, BinaryIO, Optional, Union, Iterable, Tuple, List, Dict, Iterator, Any
 from types import TracebackType
 from .sample import Sample
-from . import params
+from . import params, playback
 
 
-__all__ = ["AudiofileToWavStream", "StreamMixer", "StreamingSample", "SampleStream",
+__all__ = ["AudiofileToWavStream", "StreamMixer", "RealTimeMixer", "StreamingSample", "SampleStream",
            "VolumeFilter", "EndlessFramesFilter"]
 
 log = logging.getLogger("synthplayer.streaming")
 
 AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "bitspersample", "fileformat", "duration"])
+
+
+antipop_fadein = 0.005
+antipop_fadeout = 0.02
 
 
 class AudiofileToWavStream(io.RawIOBase):
@@ -440,3 +446,149 @@ class StreamMixer:
                     mixed_sample.mix(sample)
             yield self.timestamp, mixed_sample
             self.timestamp += mixed_sample.duration
+
+
+class RealTimeMixer:
+    """
+    Real-time audio sample mixer. Samples are played as soon as they're added into the mix.
+    Simply adds a number of samples, clipping if values become too large.
+    Produces (via a generator method) chunks of audio stream data to be fed to the sound output stream.
+    """
+    def __init__(self, chunksize: int, all_played_callback: Callable[[], None], pop_prevention: Optional[bool] = None) -> None:
+        self.chunksize = chunksize
+        self.all_played_callback = all_played_callback or (lambda: None)
+        self.add_lock = threading.Lock()
+        self.chunks_mixed = 0
+        if pop_prevention is None:
+            self.pop_prevention = params.auto_sample_pop_prevention
+        else:
+            self.pop_prevention = pop_prevention
+        self._sid = 0
+        self._closed = False
+        self.active_samples = {}   # type: Dict[int, Tuple[str, float, Generator[memoryview, None, None]]]
+        self.sample_counts = defaultdict(int)  # type: Dict[str, int]
+        self.sample_limits = defaultdict(lambda: 9999999)  # type: Dict[str, int]
+
+    @staticmethod
+    def antipop_fadein_fadeout(orig_generator: Generator[Union[memoryview, bytes], None, None]) -> Generator[bytes, None, None]:
+        # very quickly fades in the first chunk,and fades out the last chunk,
+        # to avoid clicks/pops when the sound suddenly starts playing or is stopped.
+        chunk = next(orig_generator)
+        sample = Sample.from_raw_frames(chunk,      # type: ignore
+                                        params.norm_samplewidth,
+                                        params.norm_samplerate,
+                                        params.norm_nchannels)
+        sample.fadein(antipop_fadein)
+        fadeout = yield sample.view_frame_data()        # type: ignore
+        while not fadeout:
+            try:
+                fadeout = yield next(orig_generator)    # type: ignore
+            except StopIteration:
+                return
+        chunk = next(orig_generator)
+        yield chunk  # to satisfy the result for the .send() on this generator
+        sample = Sample.from_raw_frames(chunk,
+                                        params.norm_samplewidth,
+                                        params.norm_samplerate,
+                                        params.norm_nchannels)
+        sample.fadeout(antipop_fadeout)
+        yield sample.view_frame_data()  # the actual last chunk, faded out
+
+    def add_sample(self, sample: Sample, repeat: bool = False, chunk_delay: int = 0, sid: Optional[int] = None) -> Union[int, None]:
+        if not self.allow_sample(sample, repeat):
+            return None
+        with self.add_lock:
+            sample_chunks = sample.chunked_frame_data(chunksize=self.chunksize, repeat=repeat)
+            if self.pop_prevention:
+                sample_chunks = self.antipop_fadein_fadeout(sample_chunks)  # type: ignore
+            self._sid += 1
+            sid = sid or self._sid
+            self.active_samples[sid] = (sample.name, float(self.chunks_mixed+chunk_delay), sample_chunks)
+            self.sample_counts[sample.name] += 1
+            return sid
+
+    def allow_sample(self, sample: Sample, repeat: bool = False) -> bool:
+        if repeat and self.sample_counts[sample.name] >= 1:  # don't allow more than one repeating sample
+            return False
+        if not sample.name:
+            return True     # samples without a name can't be checked
+        return self.sample_counts[sample.name] < self.sample_limits[sample.name]
+
+    def determine_samples_to_mix(self) -> List[Tuple[int, Tuple[str, Generator[memoryview, None, None]]]]:
+        active = []
+        with self.add_lock:
+            for sid, (name, play_at_chunk, sample) in self.active_samples.items():
+                if play_at_chunk <= self.chunks_mixed:
+                    active.append((sid, (name, sample)))
+        return active
+
+    def clear_sources(self) -> None:
+        # clears all sources
+        with self.add_lock:
+            self.active_samples.clear()
+            self.sample_counts.clear()
+            self.all_played_callback()
+
+    def clear_source(self, sid_or_name: Union[int, str]) -> None:
+        # clear a single sample source by its sid or all sources with the sample name
+        if isinstance(sid_or_name, int):
+            self.remove_sample(sid_or_name)
+        else:
+            active_samples = self.determine_samples_to_mix()
+            for sid, (name, _) in active_samples:
+                if name == sid_or_name:
+                    self.remove_sample(sid)
+
+    def chunks(self) -> Generator[memoryview, None, None]:
+        silence = b"\0" * self.chunksize
+        while not self._closed:
+            chunks_to_mix = []
+            active_samples = self.determine_samples_to_mix()
+            for i, (name, s) in active_samples:
+                try:
+                    chunk = next(s)
+                    if len(chunk) > self.chunksize:
+                        raise ValueError("chunk from sample is larger than chunksize from mixer (" +
+                                         str(len(chunk)) + " vs " + str(self.chunksize) + ")")
+                    if len(chunk) < self.chunksize:
+                        # pad the chunk with some silence
+                        chunk = memoryview(chunk.tobytes() + silence[len(chunk):])
+                    chunks_to_mix.append(chunk)
+                except StopIteration:
+                    self.remove_sample(i, True)
+            chunks_to_mix = chunks_to_mix or [silence]      # type: ignore
+            assert all(len(c) == self.chunksize for c in chunks_to_mix)
+            mixed = chunks_to_mix[0]
+            if len(chunks_to_mix) > 1:
+                for to_mix in chunks_to_mix[1:]:
+                    mixed = audioop.add(mixed, to_mix, params.norm_nchannels)
+                mixed = memoryview(mixed)
+            self.chunks_mixed += 1
+            yield mixed
+
+    def remove_sample(self, sid: int, sample_exhausted: bool = False) -> None:
+        def actually_remove(sid: int, name: str) -> None:
+            del self.active_samples[sid]
+            self.sample_counts[name] -= 1
+            if not self.active_samples:
+                self.all_played_callback()
+        with self.add_lock:
+            if sid in self.active_samples:
+                name, play_at_chunk, generator = self.active_samples[sid]
+                if self.pop_prevention and not sample_exhausted:
+                    # first let the generator produce a fadeout
+                    try:
+                        generator.send("fadeout")       # type: ignore
+                    except (TypeError, ValueError, StopIteration):
+                        # generator couldn't process the fadeout, just remote the sample...
+                        actually_remove(sid, name)
+                else:
+                    # remote a finished sample (or directly, if no pop prevention active)
+                    actually_remove(sid, name)
+
+    def set_limit(self, samplename: str, max_simultaneously: int) -> None:
+        self.sample_limits[samplename] = max_simultaneously
+
+    def close(self) -> None:
+        self.clear_sources()
+        self._closed = True
