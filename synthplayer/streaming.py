@@ -583,7 +583,7 @@ class RealTimeMixer:
                         # generator couldn't process the fadeout, just remote the sample...
                         actually_remove(sid, name)
                 else:
-                    # remote a finished sample (or directly, if no pop prevention active)
+                    # remove a finished sample (or directly, if no pop prevention active)
                     actually_remove(sid, name)
 
     def set_limit(self, samplename: str, max_simultaneously: int) -> None:

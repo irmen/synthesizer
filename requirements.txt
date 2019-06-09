@@ -2,6 +2,7 @@ tinytag
 appdirs
 tqdm
 sounddevice
+soundcard
 pyaudio
 matplotlib
 numpy

@@ -214,7 +214,7 @@ class SounddeviceThreadSequential(AudioApi, SounddeviceUtils):
                             sample = Sample.from_raw_frames(data, self.samplewidth, self.samplerate, self.nchannels)
                             self.playing_callback(sample)
                     if repeat:
-                        # remote all other samples from the queue and reschedule this one
+                        # remove all other samples from the queue and reschedule this one
                         commands_to_keep = []
                         while True:
                             try:

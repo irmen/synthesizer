@@ -6,6 +6,14 @@ available_mix_play_apis = []             # type: List[Type]
 
 
 try:
+    from .soundcard import SoundcardThreadSequential, SoundcardThreadMixed
+    available_sequential_play_apis.append(SoundcardThreadSequential)
+    available_mix_play_apis.append(SoundcardThreadMixed)
+except ImportError:
+    pass
+
+
+try:
     from .sounddevice import SounddeviceThreadSequential, SounddeviceThreadMixed, SounddeviceMixed
     available_sequential_play_apis.append(SounddeviceThreadSequential)
     available_mix_play_apis.append(SounddeviceMixed)
