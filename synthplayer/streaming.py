@@ -20,7 +20,7 @@ from collections import namedtuple, defaultdict
 from typing import Callable, Generator, BinaryIO, Optional, Union, Iterable, Tuple, List, Dict, Iterator, Any
 from types import TracebackType
 from .sample import Sample
-from . import params, playback
+from . import params
 
 
 __all__ = ["AudiofileToWavStream", "StreamMixer", "RealTimeMixer", "StreamingSample", "SampleStream",
