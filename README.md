@@ -46,10 +46,11 @@ speedup is remarkable over the older version (that used single value generators)
 Sound playback engine. Supports multiple sound APIs, 
 efficient sequential streaming or real-time mixing of shorter sound clips.
 The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.
-These are written to an audio stream of one of the supported audio libraries.
-Libraries supported are: [``sounddevice``](http://python-sounddevice.readthedocs.io/),
-[``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) and ``winsound`` (in this order). 
-``winsound`` has very limited capabilities so beware.
+These are written to an audio stream of one of the supported audio library backends, in this order:
+
+- [``sounddevice``](http://python-sounddevice.readthedocs.io/)
+- [``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) 
+- ``winsound`` (only on Windows, and has very limited capabilities). 
 
 # synthplayer.sample
 

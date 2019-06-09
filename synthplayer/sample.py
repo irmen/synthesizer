@@ -253,6 +253,21 @@ class Sample:
         """Returns the sample values as array. Warning: this can copy large amounts of data."""
         return Sample.get_array(self.samplewidth, self.__frames)
 
+    def get_frames_numpy_float(self) -> 'numpy.array':
+        """return the sample values as a numpy float32 array (0.0 ... 1.0) with shape frames * channels.
+         (if numpy is available)"""
+        if numpy:
+            maxsize = 2**(8*self.__samplewidth-1)
+            datatype = {
+                1: numpy.int8,
+                2: numpy.int16,
+                4: numpy.int32
+            }[self.samplewidth]
+            na = numpy.frombuffer(self.__frames, dtype=datatype).reshape((-1, self.nchannels))
+            return na.astype(numpy.float32) / float(maxsize)
+        else:
+            raise RuntimeError("numpy is not available")
+
     @staticmethod
     def get_array(samplewidth: int, initializer: Optional[Iterable[int]] = None) -> 'array.ArrayType[int]':
         """Returns an array with the correct type code, optionally initialized with values."""
