@@ -1,8 +1,8 @@
-from ..sample import Sample
-from .. import params
-from ..streaming import RealTimeMixer
 import threading
 from typing import Optional, Callable, Union, List, Dict, Any
+from ..sample import Sample
+from ..streaming import RealTimeMixer
+from .. import params
 
 
 class AudioApi:
