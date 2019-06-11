@@ -236,6 +236,242 @@ typedef struct
 
     void drwav_free(void* pDataReturnedByOpenAndRead);
 
+
+typedef int ma_result;
+#define MA_SUCCESS                                      0
+
+/* General errors. */
+#define MA_ERROR                                       -1      /* A generic error. */
+#define MA_INVALID_ARGS                                -2
+#define MA_INVALID_OPERATION                           -3
+#define MA_OUT_OF_MEMORY                               -4
+#define MA_ACCESS_DENIED                               -5
+#define MA_TOO_LARGE                                   -6
+#define MA_TIMEOUT                                     -7
+
+/* General miniaudio-specific errors. */
+#define MA_FORMAT_NOT_SUPPORTED                        -100
+#define MA_DEVICE_TYPE_NOT_SUPPORTED                   -101
+#define MA_SHARE_MODE_NOT_SUPPORTED                    -102
+#define MA_NO_BACKEND                                  -103
+#define MA_NO_DEVICE                                   -104
+#define MA_API_NOT_FOUND                               -105
+#define MA_INVALID_DEVICE_CONFIG                       -106
+
+/* State errors. */
+#define MA_DEVICE_BUSY                                 -200
+#define MA_DEVICE_NOT_INITIALIZED                      -201
+#define MA_DEVICE_NOT_STARTED                          -202
+#define MA_DEVICE_UNAVAILABLE                          -203
+
+/* Operation errors. */
+#define MA_FAILED_TO_MAP_DEVICE_BUFFER                 -300
+#define MA_FAILED_TO_UNMAP_DEVICE_BUFFER               -301
+#define MA_FAILED_TO_INIT_BACKEND                      -302
+#define MA_FAILED_TO_READ_DATA_FROM_CLIENT             -303
+#define MA_FAILED_TO_READ_DATA_FROM_DEVICE             -304
+#define MA_FAILED_TO_SEND_DATA_TO_CLIENT               -305
+#define MA_FAILED_TO_SEND_DATA_TO_DEVICE               -306
+#define MA_FAILED_TO_OPEN_BACKEND_DEVICE               -307
+#define MA_FAILED_TO_START_BACKEND_DEVICE              -308
+#define MA_FAILED_TO_STOP_BACKEND_DEVICE               -309
+#define MA_FAILED_TO_CONFIGURE_BACKEND_DEVICE          -310
+#define MA_FAILED_TO_CREATE_MUTEX                      -311
+#define MA_FAILED_TO_CREATE_EVENT                      -312
+#define MA_FAILED_TO_CREATE_THREAD                     -313
+
+
+typedef enum
+{
+    ma_backend_wasapi,
+    ma_backend_dsound,
+    ma_backend_winmm,
+    ma_backend_coreaudio,
+    ma_backend_sndio,
+    ma_backend_audio4,
+    ma_backend_oss,
+    ma_backend_pulseaudio,
+    ma_backend_alsa,
+    ma_backend_jack,
+    ma_backend_aaudio,
+    ma_backend_opensl,
+    ma_backend_webaudio,
+    ma_backend_null    
+} ma_backend;
+
+    typedef int8_t   ma_int8;
+    typedef uint8_t  ma_uint8;
+    typedef int16_t  ma_int16;
+    typedef uint16_t ma_uint16;
+    typedef int32_t  ma_int32;
+    typedef uint32_t ma_uint32;
+    typedef int64_t  ma_int64;
+    typedef uint64_t ma_uint64;
+    typedef uintptr_t ma_uintptr;
+    typedef ma_uint8                   ma_bool8;
+    typedef ma_uint32                  ma_bool32;
+    
+    
+typedef enum
+{
+    ma_dither_mode_none = 0,
+    ma_dither_mode_rectangle,
+    ma_dither_mode_triangle
+} ma_dither_mode;
+
+typedef enum
+{
+    ma_format_unknown = 0,
+    ma_format_u8      = 1,
+    ma_format_s16     = 2,
+    ma_format_s24     = 3,
+    ma_format_s32     = 4,
+    ma_format_f32     = 5,
+    ma_format_count   = 6
+} ma_format;
+
+
+typedef enum
+{
+    ma_channel_mix_mode_rectangular = 0,   /* Simple averaging based on the plane(s) the channel is sitting on. */
+    ma_channel_mix_mode_simple,            /* Drop excess channels; zeroed out extra channels. */
+    ma_channel_mix_mode_custom_weights,    /* Use custom weights specified in ma_channel_router_config. */
+    ma_channel_mix_mode_planar_blend = ma_channel_mix_mode_rectangular,
+    ma_channel_mix_mode_default = ma_channel_mix_mode_planar_blend
+} ma_channel_mix_mode;
+
+
+typedef enum
+{
+    ma_thread_priority_idle     = -5,
+    ma_thread_priority_lowest   = -4,
+    ma_thread_priority_low      = -3,
+    ma_thread_priority_normal   = -2,
+    ma_thread_priority_high     = -1,
+    ma_thread_priority_highest  =  0,
+    ma_thread_priority_realtime =  1,
+    ma_thread_priority_default  =  0
+} ma_thread_priority;
+
+    
+typedef enum
+{
+    ma_device_type_playback = 1,
+    ma_device_type_capture  = 2,
+    ma_device_type_duplex   = 3
+} ma_device_type;
+
+typedef enum
+{
+    ma_share_mode_shared = 0,
+    ma_share_mode_exclusive
+} ma_share_mode;
+
+
+typedef union ma_device_id {
+    ...;
+} ma_device_id;
+typedef struct ma_context {
+    ma_backend backend;
+    ...;
+} ma_context;
+typedef struct ma_device {
+    ma_device_type type;
+    ma_uint32 sampleRate;
+    
+    /* TODO playback struct */
+    /* TODO captures struct */
+    
+    ...;
+}ma_device;
+typedef struct ma_decoder ma_decoder;
+typedef ma_uint8 ma_channel;
+
+
+typedef void (* ma_device_callback_proc)(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
+typedef void (* ma_stop_proc)(ma_device* pDevice);
+typedef void (* ma_log_proc)(ma_context* pContext, ma_device* pDevice, ma_uint32 logLevel, const char* message);
+
+
+typedef struct
+{
+    ma_device_id id;
+    char name[256];
+    ma_uint32 formatCount;
+    ma_format formats[ma_format_count];
+    ma_uint32 minChannels;
+    ma_uint32 maxChannels;
+    ma_uint32 minSampleRate;
+    ma_uint32 maxSampleRate;
+    
+    ...;
+} ma_device_info;
+
+
+typedef struct
+{
+    ma_device_type deviceType;
+    ma_uint32 sampleRate;
+    ma_uint32 bufferSizeInFrames;
+    ma_uint32 bufferSizeInMilliseconds;
+    ma_uint32 periods;
+    ma_device_callback_proc dataCallback;
+    ma_stop_proc stopCallback;
+    
+    /* TODO: missing 'playback' nested struct */
+    /* TODO: missing 'capture' nested struct */
+    
+    ...;
+} ma_device_config;
+
+
+typedef struct
+{
+    ma_log_proc logCallback;
+    ma_thread_priority threadPriority;
+    void* pUserData;
+    ...;
+} ma_context_config;
+
+typedef struct
+{
+    ma_format format;
+    ma_uint32 channels;
+    ma_uint32 sampleRate;
+    ma_channel_mix_mode channelMixMode;
+    ma_dither_mode ditherMode;
+    ...;
+} ma_decoder_config;
+
+
+typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_device_type deviceType, const ma_device_info* pInfo, void* pUserData);
+
+    void ma_free(void* p);
+    ma_result ma_context_init(const ma_backend backends[], ma_uint32 backendCount, const ma_context_config* pConfig, ma_context* pContext);
+    ma_result ma_context_uninit(ma_context* pContext);
+    ma_result ma_context_enumerate_devices(ma_context* pContext, ma_enum_devices_callback_proc callback, void* pUserData);
+    ma_result ma_context_get_devices(ma_context* pContext, ma_device_info** ppPlaybackDeviceInfos, ma_uint32* pPlaybackDeviceCount, ma_device_info** ppCaptureDeviceInfos, ma_uint32* pCaptureDeviceCount);
+    ma_result ma_context_get_device_info(ma_context* pContext, ma_device_type deviceType, const ma_device_id* pDeviceID, ma_share_mode shareMode, ma_device_info* pDeviceInfo);
+    ma_result ma_device_init(ma_context* pContext, const ma_device_config* pConfig, ma_device* pDevice);
+    ma_result ma_device_init_ex(const ma_backend backends[], ma_uint32 backendCount, const ma_context_config* pContextConfig, const ma_device_config* pConfig, ma_device* pDevice);
+    void ma_device_uninit(ma_device* pDevice);
+    void ma_device_set_stop_callback(ma_device* pDevice, ma_stop_proc proc);
+    ma_result ma_device_start(ma_device* pDevice);
+    ma_result ma_device_stop(ma_device* pDevice);
+    ma_bool32 ma_device_is_started(ma_device* pDevice);
+    ma_context_config ma_context_config_init(void);
+    ma_device_config ma_device_config_init(ma_device_type deviceType);
+    ma_decoder_config ma_decoder_config_init(ma_format outputFormat, ma_uint32 outputChannels, ma_uint32 outputSampleRate);
+    ma_result ma_decoder_init_memory(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_uninit(ma_decoder* pDecoder);
+    ma_uint64 ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder);
+    ma_uint64 ma_decoder_read_pcm_frames(ma_decoder* pDecoder, void* pFramesOut, ma_uint64 frameCount);
+    ma_result ma_decoder_seek_to_pcm_frame(ma_decoder* pDecoder, ma_uint64 frameIndex);
+    ma_result ma_decode_file(const char* pFilePath, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
+    ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
+
+
 """)
 
 
@@ -257,6 +493,8 @@ ffibuilder.set_source("_miniaudio", """
     #define STB_VORBIS_HEADER_ONLY
     /* #define STB_VORBIS_NO_PUSHDATA_API  */   /*  needed by miniaudio decoding logic  */
     #include "miniaudio/stb_vorbis.c"
+
+    #include "miniaudio/miniaudio.h"
 
 """,
                       sources=["miniaudio.c"],

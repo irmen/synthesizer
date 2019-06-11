@@ -2,6 +2,10 @@ import miniaudio
 from synthplayer.playback import Output
 from synthplayer.sample import Sample
 
+c = miniaudio.ma_device_init()
+print(c)
+raise SystemExit
+
 
 # f = miniaudio.get_file_info("samples/music.wav")
 # print(vars(f))

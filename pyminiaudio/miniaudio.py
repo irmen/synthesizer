@@ -1,7 +1,7 @@
 import sys
 import os
 import array
-from typing import Generator
+from typing import Generator, List, Tuple
 from _miniaudio import ffi, lib
 
 
@@ -583,3 +583,81 @@ def _get_filename_bytes(filename: str) -> bytes:
     if not os.path.isfile(filename2):
         raise FileNotFoundError(filename)
     return filename2.encode(sys.getfilesystemencoding())
+
+
+# MiniAudio API follows
+
+class MiniaudioError(Exception):
+    def __init__(self, msg: str, errno: int) -> None:
+        super().__init__(msg)
+        self.errno = errno
+
+
+class DeviceInfo:
+    def __init__(self, name: str, ma_device_type: int, formats: List[str], min_channels: int, max_channels: int, min_sample_rate: int, max_sample_rate: int) -> None:
+        self.name = name
+        self.ma_device_type = ma_device_type
+        self.formats = formats
+        self.min_channels = min_channels
+        self.max_channels = max_channels
+        self.min_sample_rate = min_sample_rate
+        self.max_sample_rate = max_sample_rate
+
+
+def ma_get_devices() -> Tuple[List[str], List[str]]:
+    playback_infos = ffi.new("ma_device_info**")
+    playback_count = ffi.new("ma_uint32*")
+    capture_infos = ffi.new("ma_device_info**")
+    capture_count = ffi.new("ma_uint32*")
+    context = ffi.new("ma_context*")
+    result = lib.ma_context_init(ffi.NULL, 0, ffi.NULL, context)
+    if result != lib.MA_SUCCESS:
+        raise MiniaudioError("cannot init context", result)
+    try:
+        result = lib.ma_context_get_devices(context, playback_infos, playback_count, capture_infos, capture_count)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("cannot get device infos", result)
+        devs_playback = []
+        devs_captures = []
+        for i in range(playback_count[0]):
+            ma_device_info = playback_infos[0][i]
+            devs_playback.append(ffi.string(ma_device_info.name).decode())
+            # rest of the info structure is not filled...
+        for i in range(capture_count[0]):
+            ma_device_info = capture_infos[0][i]
+            devs_captures.append(ffi.string(ma_device_info.name).decode())
+            # rest of the info structure is not filled...
+        return devs_playback, devs_captures
+    finally:
+        lib.ma_context_uninit(context)
+
+
+def ma_device_init(sample_rate: int = 44100):
+    # always assume playback for now
+    devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
+    devconfig.sampleRate = sample_rate
+    device = ffi.new("ma_device*")
+    result = lib.ma_device_init(ffi.NULL, ffi.addressof(devconfig), device)
+    if result != lib.MA_SUCCESS:
+        raise MiniaudioError("failed to init device", result)
+    try:
+        print("GOT", result, device[0], dir(device[0]), device[0].sampleRate)  # TODO
+    finally:
+        lib.ma_device_uninit(device)
+
+
+    # void ma_device_set_stop_callback(ma_device* pDevice, ma_stop_proc proc);
+    # ma_result ma_device_start(ma_device* pDevice);
+    # ma_result ma_device_stop(ma_device* pDevice);
+    # ma_bool32 ma_device_is_started(ma_device* pDevice);
+    # ma_context_config ma_context_config_init(void);
+    # ma_decoder_config ma_decoder_config_init(ma_format outputFormat, ma_uint32 outputChannels, ma_uint32 outputSampleRate);
+    # ma_result ma_decoder_init_memory(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    # ma_result ma_decoder_init_file(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    # ma_result ma_decoder_uninit(ma_decoder* pDecoder);
+    # ma_uint64 ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder);
+    # ma_uint64 ma_decoder_read_pcm_frames(ma_decoder* pDecoder, void* pFramesOut, ma_uint64 frameCount);
+    # ma_result ma_decoder_seek_to_pcm_frame(ma_decoder* pDecoder, ma_uint64 frameIndex);
+    # ma_result ma_decode_file(const char* pFilePath, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
+    # ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
+
