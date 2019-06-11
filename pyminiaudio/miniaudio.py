@@ -2,7 +2,7 @@ import sys
 import os
 import array
 from typing import Generator
-from _miniaudio_decoders import ffi, lib
+from _miniaudio import ffi, lib
 
 
 class DecodedSoundFile:

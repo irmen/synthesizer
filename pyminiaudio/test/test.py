@@ -1,29 +1,29 @@
-import miniaudio_decoders
+import miniaudio
 from synthplayer.playback import Output
 from synthplayer.sample import Sample
 
 
-# f = miniaudio_decoders.get_file_info("samples/music.wav")
+# f = miniaudio.get_file_info("samples/music.wav")
 # print(vars(f))
-# f = miniaudio_decoders.wav_get_info(open("samples/music.wav", "rb").read())
+# f = miniaudio.wav_get_info(open("samples/music.wav", "rb").read())
 # print(vars(f))
-# f = miniaudio_decoders.get_file_info("samples/music.ogg")
+# f = miniaudio.get_file_info("samples/music.ogg")
 # print(vars(f))
-# f = miniaudio_decoders.vorbis_get_info(open("samples/music.ogg", "rb").read())
+# f = miniaudio.vorbis_get_info(open("samples/music.ogg", "rb").read())
 # print(vars(f))
-# f = miniaudio_decoders.get_file_info("samples/music.mp3")
+# f = miniaudio.get_file_info("samples/music.mp3")
 # print(vars(f))
-# f = miniaudio_decoders.mp3_get_info(open("samples/music.mp3", "rb").read())
+# f = miniaudio.mp3_get_info(open("samples/music.mp3", "rb").read())
 # print(vars(f))
-# f = miniaudio_decoders.get_file_info("samples/music.flac")
+# f = miniaudio.get_file_info("samples/music.flac")
 # print(vars(f))
-# f = miniaudio_decoders.flac_get_info(open("samples/music.flac", "rb").read())
+# f = miniaudio.flac_get_info(open("samples/music.flac", "rb").read())
 # print(vars(f))
 # raise SystemExit
 
-info = miniaudio_decoders.get_file_info("samples/music.flac")
+info = miniaudio.get_file_info("samples/music.flac")
 print(vars(info))
-stream = miniaudio_decoders.flac_stream_file("samples/music.flac")
+stream = miniaudio.flac_stream_file("samples/music.flac")
 
 with Output(info.sample_rate, info.sample_width, info.nchannels, mixing="sequential") as out:
     for chunk in stream:
@@ -35,13 +35,13 @@ with Output(info.sample_rate, info.sample_width, info.nchannels, mixing="sequent
 raise SystemExit
 
 
-s1 = miniaudio_decoders.vorbis_read_file("samples/music.ogg")
-s2 = miniaudio_decoders.flac_read_file_s16("samples/music.flac")
-s3 = miniaudio_decoders.mp3_read_file_s16("samples/music.mp3")
-s4 = miniaudio_decoders.wav_read_file_s16("samples/music.wav")
+s1 = miniaudio.vorbis_read_file("samples/music.ogg")
+s2 = miniaudio.flac_read_file_s16("samples/music.flac")
+s3 = miniaudio.mp3_read_file_s16("samples/music.mp3")
+s4 = miniaudio.wav_read_file_s16("samples/music.wav")
 
 
-def print_details(s: miniaudio_decoders.DecodedSoundFile) -> None:
+def print_details(s: miniaudio.DecodedSoundFile) -> None:
     print(s.name)
     print("  ", s.nchannels, s.sample_rate, s.sample_width, len(s.samples), s.samples.typecode)
 

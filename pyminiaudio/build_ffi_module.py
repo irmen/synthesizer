@@ -6,7 +6,7 @@
 # - wav via dr_wav
 # - flac via dr_flac
 
-
+import os
 from cffi import FFI
 
 ffibuilder = FFI()
@@ -238,21 +238,32 @@ typedef struct
 
 """)
 
-ffibuilder.set_source("_miniaudio_decoders", """
+
+libraries = []
+compiler_args = []
+if os.name == "posix":
+    libraries = ["m", "pthread", "dl"]
+    compiler_args = ["-g1"]
+
+
+ffibuilder.set_source("_miniaudio", """
     #include <stdint.h>
 
     #define DR_FLAC_NO_OGG
+    #include "miniaudio/dr_flac.h"
     #include "miniaudio/dr_wav.h"
     #include "miniaudio/dr_mp3.h"
-    #include "miniaudio/dr_flac.h"
 
     #define STB_VORBIS_HEADER_ONLY
-    #define STB_VORBIS_NO_PUSHDATA_API
+    /* #define STB_VORBIS_NO_PUSHDATA_API  */   /*  needed by miniaudio decoding logic  */
     #include "miniaudio/stb_vorbis.c"
+
 """,
-                      sources=["decoders.c"],
-                      libraries=["m"],
-                      extra_compile_args=["-mtune=native", "-g1"])
+                      sources=["miniaudio.c"],
+                      libraries=libraries,
+                      extra_compile_args=compiler_args)
+
+print(libraries)
 
 if __name__ == "__main__":
     ffibuilder.compile(verbose=True)
