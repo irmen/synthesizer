@@ -2,8 +2,32 @@ import miniaudio
 from synthplayer.playback import Output
 from synthplayer.sample import Sample
 
-c = miniaudio.ma_device_init()
-print(c)
+c = miniaudio.ma_decode_file("samples/music.ogg", sample_rate=22050)
+print(c, c.sample_rate, len(c.samples))
+c = miniaudio.ma_decode(open("samples/music.ogg", "rb").read(), sample_rate=22050)
+print(c, c.sample_rate, len(c.samples))
+c = miniaudio.vorbis_read_file("samples/music.ogg")
+print(c, c.sample_rate, len(c.samples))
+
+info = miniaudio.get_file_info("samples/music.mp3")
+print(vars(info))
+if info.sample_width == 1:
+    fmt = miniaudio.ma_format_u8
+elif info.sample_width == 2:
+    fmt = miniaudio.ma_format_s16
+elif info.sample_width == 4:
+    fmt = miniaudio.ma_format_s32
+else:
+    raise IOError("invalid sample width")
+stream = miniaudio.ma_stream_memory(open("samples/music.mp3", "rb").read(), ma_output_format=fmt, nchannels=info.nchannels, sample_rate=info.sample_rate)
+
+with Output(info.sample_rate, info.sample_width, info.nchannels, mixing="sequential") as out:
+    for chunk in stream:
+        print(len(chunk), ".", end="", flush=True)
+        s = Sample.from_array(chunk, info.sample_rate, info.nchannels)
+        out.play_sample(s)
+    out.wait_all_played()
+
 raise SystemExit
 
 

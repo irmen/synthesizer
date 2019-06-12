@@ -1,17 +1,17 @@
 import os
-import glob
-from setuptools import setup, find_packages
+import re
+from setuptools import setup
 
 miniaudio_path = os.path.abspath(".")           # to make sure the compiler can find the required include files
 
+PKG_VERSION = re.search(r'^__version__\s*=\s*"(.+)"', open("miniaudio.py", "rt").read(), re.MULTILINE).groups()[0]
 
-PKG_NAME = "miniaudio"
-PKG_VERSION = "0.1"
-
-setup(name=PKG_NAME,
+setup(name="miniaudio",
       version=PKG_VERSION,
       description="miniaudio audio library and decoders (mp3, flac, ogg vorbis, wav) python bindings",
       author="Irmen de Jong",
+      author_email="irmen@razorvine.net",
+      license="MIT",
       py_modules=["miniaudio"],
       setup_requires=["cffi>=1.8.0"],
       install_requires=["cffi>=1.8.0"],

@@ -3,6 +3,10 @@ import os
 import array
 from typing import Generator, List, Tuple
 from _miniaudio import ffi, lib
+from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format_s32
+
+
+__version__ = "1.0"
 
 
 class DecodedSoundFile:
@@ -26,7 +30,11 @@ class SoundFileInfo:
         self.max_frame_size = max_frame_size
 
 
-class DecodeError(IOError):
+class MiniaudioError(Exception):
+    pass
+
+
+class DecodeError(MiniaudioError):
     pass
 
 
@@ -587,14 +595,10 @@ def _get_filename_bytes(filename: str) -> bytes:
 
 # MiniAudio API follows
 
-class MiniaudioError(Exception):
-    def __init__(self, msg: str, errno: int) -> None:
-        super().__init__(msg)
-        self.errno = errno
-
 
 class DeviceInfo:
-    def __init__(self, name: str, ma_device_type: int, formats: List[str], min_channels: int, max_channels: int, min_sample_rate: int, max_sample_rate: int) -> None:
+    def __init__(self, name: str, ma_device_type: int, formats: List[str],
+                 min_channels: int, max_channels: int, min_sample_rate: int, max_sample_rate: int) -> None:
         self.name = name
         self.ma_device_type = ma_device_type
         self.formats = formats
@@ -632,8 +636,103 @@ def ma_get_devices() -> Tuple[List[str], List[str]]:
         lib.ma_context_uninit(context)
 
 
-def ma_device_init(sample_rate: int = 44100):
+def _decode_ma_format(ma_output_format: int) -> Tuple[int, array.array]:
+    if ma_output_format == ma_format_f32:
+        return 4, array.array('f')
+    elif ma_output_format == ma_format_u8:
+        return 1, _create_int_array(1)
+    elif ma_output_format == ma_format_s16:
+        return 2, _create_int_array(2)
+    elif ma_output_format == ma_format_s32:
+        return 4, _create_int_array(4)
+    else:
+        raise ValueError("unsupported miniaudio sample format", ma_output_format)
+
+
+def ma_decode_file(filename: str, ma_output_format: int = ma_format_s16,
+                   nchannels: int = 2, sample_rate: int = 44100) -> DecodedSoundFile:
+    """Convenience function to decode any supported audio file to raw PCM samples in your chosen format."""
+    sample_width, samples = _decode_ma_format(ma_output_format)
+    filenamebytes = _get_filename_bytes(filename)
+    frames = ffi.new("ma_uint64 *")
+    data = ffi.new("void **")
+    decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
+    result = lib.ma_decode_file(filenamebytes, ffi.addressof(decoder_config), frames, data)
+    if result != lib.MA_SUCCESS:
+        raise MiniaudioError("failed to decode file", result)
+    buffer = ffi.buffer(data[0], frames[0] * nchannels * sample_width)
+    samples.frombytes(buffer)
+    return DecodedSoundFile(filename, nchannels, sample_rate, sample_width, samples)
+
+
+def ma_decode(data: bytes, ma_output_format: int = ma_format_s16,
+              nchannels: int = 2, sample_rate: int = 44100) -> DecodedSoundFile:
+    """Convenience function to decode any supported audio file in memory to raw PCM samples in your chosen format."""
+    sample_width, samples = _decode_ma_format(ma_output_format)
+    frames = ffi.new("ma_uint64 *")
+    memory = ffi.new("void **")
+    decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
+    result = lib.ma_decode_memory(data, len(data), ffi.addressof(decoder_config), frames, memory)
+    if result != lib.MA_SUCCESS:
+        raise MiniaudioError("failed to decode data", result)
+    buffer = ffi.buffer(memory[0], frames[0] * nchannels * sample_width)
+    samples.frombytes(buffer)
+    return DecodedSoundFile("<memory>", nchannels, sample_rate, sample_width, samples)
+
+
+def ma_stream_file(filename: str, ma_output_format: int = ma_format_s16,
+                   nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, None, None]:
+    """Convenience function to decode and stream any supported audio file as chunks of raw PCM samples in the chosen format."""
+    sample_width, samples_proto = _decode_ma_format(ma_output_format)
+    filenamebytes = _get_filename_bytes(filename)
+    decoder = ffi.new("ma_decoder *")
+    decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
+    result = lib.ma_decoder_init_file(filenamebytes, ffi.addressof(decoder_config), decoder)
+    if result != lib.MA_SUCCESS:
+        raise MiniaudioError("failed to decode file", result)
+    try:
+        decodebuffer = ffi.new("int8_t[]", frames_to_read * nchannels * sample_width)
+        buf_ptr = ffi.cast("void *", decodebuffer)
+        while True:
+            num_frames = lib.ma_decoder_read_pcm_frames(decoder, buf_ptr, frames_to_read)
+            if num_frames <= 0:
+                break
+            buffer = ffi.buffer(decodebuffer, num_frames * sample_width * nchannels)
+            samples = array.array(samples_proto.typecode)
+            samples.frombytes(buffer)
+            yield samples
+    finally:
+        lib.ma_decoder_uninit(decoder)
+
+
+def ma_stream_memory(data: bytes, ma_output_format: int = ma_format_s16,
+                   nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, None, None]:
+    """Convenience function to decode and stream any supported audio file in memory
+    as chunks of raw PCM samples in the chosen format."""
+    sample_width, samples_proto = _decode_ma_format(ma_output_format)
+    decoder = ffi.new("ma_decoder *")
+    decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
+    result = lib.ma_decoder_init_memory(data, len(data), ffi.addressof(decoder_config), decoder)
+    if result != lib.MA_SUCCESS:
+        raise MiniaudioError("failed to decode memory", result)
+    try:
+        decodebuffer = ffi.new("int8_t[]", frames_to_read * nchannels * sample_width)
+        buf_ptr = ffi.cast("void *", decodebuffer)
+        while True:
+            num_frames = lib.ma_decoder_read_pcm_frames(decoder, buf_ptr, frames_to_read)
+            if num_frames <= 0:
+                break
+            buffer = ffi.buffer(decodebuffer, num_frames * sample_width * nchannels)
+            samples = array.array(samples_proto.typecode)
+            samples.frombytes(buffer)
+            yield samples
+    finally:
+        lib.ma_decoder_uninit(decoder)
+
+
+def ma_device_init(sample_rate: int = 44100) -> None:
     # always assume playback for now
+    # TODO meaningful implementation
     devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
     devconfig.sampleRate = sample_rate
     device = ffi.new("ma_device*")
@@ -650,14 +749,3 @@ def ma_device_init(sample_rate: int = 44100):
     # ma_result ma_device_start(ma_device* pDevice);
     # ma_result ma_device_stop(ma_device* pDevice);
     # ma_bool32 ma_device_is_started(ma_device* pDevice);
-    # ma_context_config ma_context_config_init(void);
-    # ma_decoder_config ma_decoder_config_init(ma_format outputFormat, ma_uint32 outputChannels, ma_uint32 outputSampleRate);
-    # ma_result ma_decoder_init_memory(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
-    # ma_result ma_decoder_init_file(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
-    # ma_result ma_decoder_uninit(ma_decoder* pDecoder);
-    # ma_uint64 ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder);
-    # ma_uint64 ma_decoder_read_pcm_frames(ma_decoder* pDecoder, void* pFramesOut, ma_uint64 frameCount);
-    # ma_result ma_decoder_seek_to_pcm_frame(ma_decoder* pDecoder, ma_uint64 frameIndex);
-    # ma_result ma_decode_file(const char* pFilePath, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
-    # ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
-

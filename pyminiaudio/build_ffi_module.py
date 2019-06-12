@@ -384,7 +384,7 @@ typedef struct ma_device {
     
     ...;
 }ma_device;
-typedef struct ma_decoder ma_decoder;
+
 typedef ma_uint8 ma_channel;
 
 
@@ -427,9 +427,7 @@ typedef struct
 
 typedef struct
 {
-    ma_log_proc logCallback;
     ma_thread_priority threadPriority;
-    void* pUserData;
     ...;
 } ma_context_config;
 
@@ -442,6 +440,18 @@ typedef struct
     ma_dither_mode ditherMode;
     ...;
 } ma_decoder_config;
+
+
+typedef struct ma_decoder
+{
+    /* ma_decoder_read_proc onRead; */
+    /* ma_decoder_seek_proc onSeek; */
+    ma_format  outputFormat;
+    ma_uint32  outputChannels;
+    ma_uint32  outputSampleRate;
+    
+    ...;
+} ma_decoder;
 
 
 typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_device_type deviceType, const ma_device_info* pInfo, void* pUserData);
