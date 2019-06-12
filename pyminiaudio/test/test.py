@@ -2,6 +2,10 @@ import miniaudio
 from synthplayer.playback import Output
 from synthplayer.sample import Sample
 
+miniaudio.ma_device_init()
+raise SystemExit
+
+
 c = miniaudio.ma_decode_file("samples/music.ogg", sample_rate=22050)
 print(c, c.sample_rate, len(c.samples))
 c = miniaudio.ma_decode(open("samples/music.ogg", "rb").read(), sample_rate=22050)

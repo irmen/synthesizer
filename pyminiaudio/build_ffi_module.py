@@ -375,22 +375,26 @@ typedef struct ma_context {
     ma_backend backend;
     ...;
 } ma_context;
-typedef struct ma_device {
-    ma_device_type type;
-    ma_uint32 sampleRate;
-    
-    /* TODO playback struct */
-    /* TODO captures struct */
-    
-    ...;
-}ma_device;
 
 typedef ma_uint8 ma_channel;
-
+typedef struct ma_device ma_device;
 
 typedef void (* ma_device_callback_proc)(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 typedef void (* ma_stop_proc)(ma_device* pDevice);
 typedef void (* ma_log_proc)(ma_context* pContext, ma_device* pDevice, ma_uint32 logLevel, const char* message);
+
+
+struct ma_device {
+    ma_context* pContext;
+    ma_device_type type;
+    ma_uint32 sampleRate;
+    ma_uint32 state;
+    ma_device_callback_proc onData;
+    ma_stop_proc onStop;
+    void* pUserData;                        /* Application defined data. */
+
+    ...;
+};
 
 
 typedef struct
@@ -414,9 +418,9 @@ typedef struct
     ma_uint32 sampleRate;
     ma_uint32 bufferSizeInFrames;
     ma_uint32 bufferSizeInMilliseconds;
-    ma_uint32 periods;
     ma_device_callback_proc dataCallback;
     ma_stop_proc stopCallback;
+    void* pUserData;
     
     /* TODO: missing 'playback' nested struct */
     /* TODO: missing 'capture' nested struct */
@@ -482,6 +486,8 @@ typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_dev
     ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
 
 
+    extern "Python" void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
+    
 """)
 
 

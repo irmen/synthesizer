@@ -1,6 +1,8 @@
 import sys
 import os
 import array
+import struct
+import weakref
 from typing import Generator, List, Tuple
 from _miniaudio import ffi, lib
 from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format_s32
@@ -730,22 +732,52 @@ def ma_stream_memory(data: bytes, ma_output_format: int = ma_format_s16,
         lib.ma_decoder_uninit(decoder)
 
 
+
+_callback_data = {}
+global_weakkeydict = weakref.WeakKeyDictionary()
+
+
+@ffi.def_extern()
+def data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
+    if framecount == 0 or not device.pUserData:
+        return
+    print("callback should provide", framecount, "frames")
+    userdata_id = struct.unpack('q', ffi.unpack(ffi.cast("char *", device.pUserData), struct.calcsize('q')))[0]
+    userdata = _callback_data[userdata_id]
+    print("   userdata=", userdata)
+
+
 def ma_device_init(sample_rate: int = 44100) -> None:
     # always assume playback for now
     # TODO meaningful implementation
     devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
     devconfig.sampleRate = sample_rate
+    devconfig.bufferSizeInMilliseconds = 200
+    devconfig.dataCallback = lib.data_callback
+    userdata = [11, 222, 333]
+    userdata_id = id(userdata)
+    _callback_data[userdata_id] = userdata
+    userdata_ptr = ffi.new("char[]", struct.pack('q', userdata_id))
+    global_weakkeydict[devconfig] = userdata_ptr    # keep ownership alive of the pointer
+    devconfig.pUserData = userdata_ptr
+    #devconfig.playback.format = 9999 # TODO
+    #devconfig.playback.channels = 2  # TODO
     device = ffi.new("ma_device*")
     result = lib.ma_device_init(ffi.NULL, ffi.addressof(devconfig), device)
     if result != lib.MA_SUCCESS:
         raise MiniaudioError("failed to init device", result)
     try:
         print("GOT", result, device[0], dir(device[0]), device[0].sampleRate)  # TODO
+        result = lib.ma_device_start(device)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("failed to start audio device", result)
+        import time
+        time.sleep(0.5)
+        print("ENDING")
     finally:
+        lib.ma_device_stop(device)
         lib.ma_device_uninit(device)
+        del _callback_data[userdata_id]
 
 
     # void ma_device_set_stop_callback(ma_device* pDevice, ma_stop_proc proc);
-    # ma_result ma_device_start(ma_device* pDevice);
-    # ma_result ma_device_stop(ma_device* pDevice);
-    # ma_bool32 ma_device_is_started(ma_device* pDevice);
