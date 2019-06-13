@@ -514,6 +514,7 @@ ffibuilder.set_source("_miniaudio", """
 
 """,
                       sources=["miniaudio.c"],
+                      include_dirs=["."],
                       libraries=libraries,
                       extra_compile_args=compiler_args)
 

@@ -3,7 +3,8 @@ import os
 import array
 import struct
 import weakref
-from typing import Generator, List, Tuple
+import queue
+from typing import Generator, List, Tuple, Optional
 from _miniaudio import ffi, lib
 from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format_s32
 
@@ -737,47 +738,84 @@ _callback_data = {}
 global_weakkeydict = weakref.WeakKeyDictionary()
 
 
+class CallbackUserdata:
+    def __init__(self, sample_width: int, nchannels: int) -> None:
+        self.queue = queue.Queue(maxsize=100)
+        self.residue = _create_int_array(sample_width)
+        self.nchannels = nchannels
+
+    def residue_too_small(self, frames_wanted: int) -> bool:
+        return len(self.residue) < frames_wanted        # TODO ???
+
+    def get_required_residue_and_keep_rest(self, frames_wanted: int) -> array.array:
+        result = self.residue[:frames_wanted]       # ???
+        self.residue = self.residue[frames_wanted:]
+        return result
+
+
 @ffi.def_extern()
 def data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
     if framecount == 0 or not device.pUserData:
         return
-    print("callback should provide", framecount, "frames")
     userdata_id = struct.unpack('q', ffi.unpack(ffi.cast("char *", device.pUserData), struct.calcsize('q')))[0]
-    userdata = _callback_data[userdata_id]
-    print("   userdata=", userdata)
+    userdata = _callback_data[userdata_id]  # type: CallbackUserdata
+    while userdata.residue_too_small(framecount):
+        try:
+            samples = userdata.queue.get_nowait()
+            userdata.residue.extend(samples)
+        except queue.Empty:
+            # hmm, there's still not enough data to proceed...
+            pass # TODO extend with zero samples
+    data = userdata.get_required_residue_and_keep_rest(framecount)
+    print("got", len(data), framecount)   # TODO process
 
 
-def ma_device_init(sample_rate: int = 44100) -> None:
+def ma_device_init(ma_output_format: int = ma_format_s16, nchannels: int = 2,
+                   sample_rate: int = 44100, buffersize_msec: int = 200) -> Generator[None, Tuple[str, array.array], None]:
     # always assume playback for now
     # TODO meaningful implementation
     devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
     devconfig.sampleRate = sample_rate
-    devconfig.bufferSizeInMilliseconds = 200
+    devconfig.bufferSizeInMilliseconds = buffersize_msec
     devconfig.dataCallback = lib.data_callback
-    userdata = [11, 222, 333]
+    sample_width, samples_proto = _decode_ma_format(ma_output_format)
+    userdata = CallbackUserdata(sample_width, nchannels)
     userdata_id = id(userdata)
     _callback_data[userdata_id] = userdata
     userdata_ptr = ffi.new("char[]", struct.pack('q', userdata_id))
     global_weakkeydict[devconfig] = userdata_ptr    # keep ownership alive of the pointer
     devconfig.pUserData = userdata_ptr
     #devconfig.playback.format = 9999 # TODO
-    #devconfig.playback.channels = 2  # TODO
-    device = ffi.new("ma_device*")
+    #devconfig.playback.channels = nchannels # TODO
+    device = ffi.new("ma_device *")
     result = lib.ma_device_init(ffi.NULL, ffi.addressof(devconfig), device)
     if result != lib.MA_SUCCESS:
         raise MiniaudioError("failed to init device", result)
     try:
         print("GOT", result, device[0], dir(device[0]), device[0].sampleRate)  # TODO
-        result = lib.ma_device_start(device)
-        if result != lib.MA_SUCCESS:
-            raise MiniaudioError("failed to start audio device", result)
-        import time
-        time.sleep(0.5)
-        print("ENDING")
+        while True:
+            command, arg = yield None
+            if command == "start":
+                result = lib.ma_device_start(device)
+                if result != lib.MA_SUCCESS:
+                    raise MiniaudioError("failed to start audio device", result)
+            elif command == "stop":
+                lib.ma_device_stop(device)
+            elif command == "quit":
+                break
+            elif command == "play":
+                if not isinstance(arg, array.array) or arg.typecode != samples_proto.typecode:
+                    raise TypeError("play arg should be array.array with typecode "+samples_proto.typecode)
+                userdata.queue.put(arg)
+                print("put some data", len(arg))
+            else:
+                raise MiniaudioError("invalid device command", command)
     finally:
-        lib.ma_device_stop(device)
         lib.ma_device_uninit(device)
         del _callback_data[userdata_id]
-
+        try:
+            yield
+        except GeneratorExit:
+            pass
 
     # void ma_device_set_stop_callback(ma_device* pDevice, ma_stop_proc proc);
