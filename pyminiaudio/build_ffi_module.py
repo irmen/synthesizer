@@ -9,6 +9,8 @@
 import os
 from cffi import FFI
 
+miniaudio_include_dir = os.getcwd()+"/miniaudio"
+
 ffibuilder = FFI()
 ffibuilder.cdef("""
 
@@ -514,7 +516,7 @@ ffibuilder.set_source("_miniaudio", """
 
 """,
                       sources=["miniaudio.c"],
-                      include_dirs=["."],
+                      include_dirs=[miniaudio_include_dir],
                       libraries=libraries,
                       extra_compile_args=compiler_args)
 
