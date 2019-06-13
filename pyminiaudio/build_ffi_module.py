@@ -9,7 +9,7 @@
 import os
 from cffi import FFI
 
-miniaudio_include_dir = os.getcwd()+"/miniaudio"
+miniaudio_include_dir = os.path.join(os.getcwd(), "miniaudio")
 
 ffibuilder = FFI()
 ffibuilder.cdef("""
