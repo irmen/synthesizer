@@ -478,7 +478,14 @@ typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_dev
     ma_context_config ma_context_config_init(void);
     ma_device_config ma_device_config_init(ma_device_type deviceType);
     ma_decoder_config ma_decoder_config_init(ma_format outputFormat, ma_uint32 outputChannels, ma_uint32 outputSampleRate);
+
     ma_result ma_decoder_init_memory(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_memory_wav(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_memory_flac(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_memory_vorbis(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_memory_mp3(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_memory_raw(const void* pData, size_t dataSize, const ma_decoder_config* pConfigIn, const ma_decoder_config* pConfigOut, ma_decoder* pDecoder);
+
     ma_result ma_decoder_init_file(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
     ma_result ma_decoder_uninit(ma_decoder* pDecoder);
     ma_uint64 ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder);
@@ -486,8 +493,12 @@ typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_dev
     ma_result ma_decoder_seek_to_pcm_frame(ma_decoder* pDecoder, ma_uint64 frameIndex);
     ma_result ma_decode_file(const char* pFilePath, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
     ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
-
+    const char* ma_get_backend_name(ma_backend backend);
+    const char* ma_get_format_name(ma_format format);
+    
     void init_miniaudio(void);
+    void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate, ma_uint32 buffer_size_msec, ma_uint32 buffer_size_frames,
+       ma_format format, ma_uint32 channels, ma_format capture_format, ma_uint32 capture_channels);
 
     extern "Python" void internal_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
     
@@ -516,6 +527,8 @@ ffibuilder.set_source("_miniaudio", """
     #include "miniaudio/miniaudio.h"
     
     void init_miniaudio(void);
+    void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate, ma_uint32 buffer_size_msec, ma_uint32 buffer_size_frames,
+       ma_format format, ma_uint32 channels, ma_format capture_format, ma_uint32 capture_channels);
     
 """,
                       sources=["miniaudio.c"],

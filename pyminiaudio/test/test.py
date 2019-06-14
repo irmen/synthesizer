@@ -1,89 +1,57 @@
+import time
+import array
+from typing import Union
 import miniaudio
 from synthplayer.playback import Output
 from synthplayer.sample import Sample
-import time
-import array
 
 
 sound = miniaudio.ma_decode_file("samples/music.ogg")
 offset = 0
 
 
-def producer(framecount: int, sample_width: int, nchannels: int) -> array.array:
+def memory_producer(framecount: int, sample_width: int, nchannels: int) -> Union[bytes, array.array, None]:
     global offset
     assert nchannels == 2 and sample_width == 2
     result = sound.samples[offset:offset+framecount*nchannels]
     offset += framecount*nchannels
+    print(".", end="", flush=True)
+    # print(" ", len(result), "    ", end="\r")
     return result
 
 
-d = miniaudio.MiniaudioPlaybackDevice()
-print("GOT", d)
-d.start(producer)
-time.sleep(2)
+
+#stream = miniaudio.ma_stream_file("samples/music.ogg")
+stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read())
+
+
+def stream_producer(num_frames: int, sample_width: int, nchannels: int) -> Union[bytes, array.array, None]:
+    assert nchannels == 2 and sample_width == 2
+    try:
+        return stream.send(num_frames)
+    except StopIteration:
+        return None
+
+
+d = miniaudio.PlaybackDevice(buffersize_msec=100)
+print("GOT", d.backend)
+next(stream)
+d.start(stream_producer)
+time.sleep(12)
 d.stop()
 time.sleep(1)
 d.close()
 raise SystemExit
 
-import array
-g = miniaudio.ma_device_init()
-g.send(None)
-g.send(("start", None))
-import time
-time.sleep(1)
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-g.send(("play", array.array('h',[1]*400)))
-time.sleep(1)
-g.send(("stop", None))
-time.sleep(1)
-g.send(("quit", None))
-time.sleep(1)
-raise SystemExit
 
-
-c = miniaudio.ma_decode_file("samples/music.ogg", sample_rate=22050)
-print(c, c.sample_rate, len(c.samples))
-c = miniaudio.ma_decode(open("samples/music.ogg", "rb").read(), sample_rate=22050)
-print(c, c.sample_rate, len(c.samples))
-c = miniaudio.vorbis_read_file("samples/music.ogg")
-print(c, c.sample_rate, len(c.samples))
-
-info = miniaudio.get_file_info("samples/music.mp3")
+# c = miniaudio.ma_decode_file("samples/music.ogg", sample_rate=22050)
+# print(c, c.sample_rate, len(c.samples))
+# c = miniaudio.ma_decode(open("samples/music.ogg", "rb").read(), sample_rate=22050)
+# print(c, c.sample_rate, len(c.samples))
+# c = miniaudio.vorbis_read_file("samples/music.ogg")
+# print(c, c.sample_rate, len(c.samples))
+#
+info = miniaudio.get_file_info("samples/music.ogg")
 print(vars(info))
 if info.sample_width == 1:
     fmt = miniaudio.ma_format_u8
@@ -93,7 +61,7 @@ elif info.sample_width == 4:
     fmt = miniaudio.ma_format_s32
 else:
     raise IOError("invalid sample width")
-stream = miniaudio.ma_stream_memory(open("samples/music.mp3", "rb").read(), ma_output_format=fmt, nchannels=info.nchannels, sample_rate=info.sample_rate)
+stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read(), ma_output_format=fmt, nchannels=info.nchannels, sample_rate=info.sample_rate)
 
 with Output(info.sample_rate, info.sample_width, info.nchannels, mixing="sequential") as out:
     for chunk in stream:
