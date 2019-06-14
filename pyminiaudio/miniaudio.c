@@ -20,4 +20,12 @@
 #include "miniaudio/miniaudio.h"
 
 
+void init_miniaudio(void) {
+
+    /* strange, this is needed to avoid a huge multi second delay when using PulseAudio */
+    setenv("PULSE_LATENCY_MSEC", "100", 0);
+
+}
+
+
 /* Nothing more to do here; all the decoder source is in their own single source/include file */

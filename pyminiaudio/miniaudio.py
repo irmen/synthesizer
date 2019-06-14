@@ -2,11 +2,11 @@ import sys
 import os
 import array
 import struct
-import weakref
-import queue
-from typing import Generator, List, Tuple, Optional
+from typing import Generator, List, Tuple, Dict, Callable, Optional
 from _miniaudio import ffi, lib
 from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format_s32
+
+lib.init_miniaudio()
 
 
 __version__ = "1.0"
@@ -39,6 +39,24 @@ class MiniaudioError(Exception):
 
 class DecodeError(MiniaudioError):
     pass
+
+
+backend_names = {
+    lib.ma_backend_wasapi: "wasapi",
+    lib.ma_backend_dsound: "dsound",
+    lib.ma_backend_winmm: "winmm",
+    lib.ma_backend_coreaudio: "coreaudio",
+    lib.ma_backend_sndio: "sndio",
+    lib.ma_backend_audio4: "audio4",
+    lib.ma_backend_oss: "oss",
+    lib.ma_backend_pulseaudio: "pulseaudio",
+    lib.ma_backend_alsa: "alsa",
+    lib.ma_backend_jack: "jack",
+    lib.ma_backend_aaudio: "aaudio",
+    lib.ma_backend_opensl: "opensl",
+    lib.ma_backend_webaudio: "webaudio",
+    lib.ma_backend_null: "null"
+}
 
 
 def get_file_info(filename: str) -> SoundFileInfo:
@@ -733,89 +751,72 @@ def ma_stream_memory(data: bytes, ma_output_format: int = ma_format_s16,
         lib.ma_decoder_uninit(decoder)
 
 
-
-_callback_data = {}
-global_weakkeydict = weakref.WeakKeyDictionary()
-
-
-class CallbackUserdata:
-    def __init__(self, sample_width: int, nchannels: int) -> None:
-        self.queue = queue.Queue(maxsize=100)
-        self.residue = _create_int_array(sample_width)
-        self.nchannels = nchannels
-
-    def residue_too_small(self, frames_wanted: int) -> bool:
-        return len(self.residue) < frames_wanted        # TODO ???
-
-    def get_required_residue_and_keep_rest(self, frames_wanted: int) -> array.array:
-        result = self.residue[:frames_wanted]       # ???
-        self.residue = self.residue[frames_wanted:]
-        return result
+_callback_data = {}     # type: Dict[int, MiniaudioPlaybackDevice]
 
 
 @ffi.def_extern()
-def data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
+def internal_data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
     if framecount == 0 or not device.pUserData:
         return
     userdata_id = struct.unpack('q', ffi.unpack(ffi.cast("char *", device.pUserData), struct.calcsize('q')))[0]
-    userdata = _callback_data[userdata_id]  # type: CallbackUserdata
-    while userdata.residue_too_small(framecount):
-        try:
-            samples = userdata.queue.get_nowait()
-            userdata.residue.extend(samples)
-        except queue.Empty:
-            # hmm, there's still not enough data to proceed...
-            pass # TODO extend with zero samples
-    data = userdata.get_required_residue_and_keep_rest(framecount)
-    print("got", len(data), framecount)   # TODO process
+    playback_device = _callback_data[userdata_id]  # type: MiniaudioPlaybackDevice
+    playback_device.data_callback(device, output, input, framecount)
 
 
-def ma_device_init(ma_output_format: int = ma_format_s16, nchannels: int = 2,
-                   sample_rate: int = 44100, buffersize_msec: int = 200) -> Generator[None, Tuple[str, array.array], None]:
-    # always assume playback for now
-    # TODO meaningful implementation
-    devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
-    devconfig.sampleRate = sample_rate
-    devconfig.bufferSizeInMilliseconds = buffersize_msec
-    devconfig.dataCallback = lib.data_callback
-    sample_width, samples_proto = _decode_ma_format(ma_output_format)
-    userdata = CallbackUserdata(sample_width, nchannels)
-    userdata_id = id(userdata)
-    _callback_data[userdata_id] = userdata
-    userdata_ptr = ffi.new("char[]", struct.pack('q', userdata_id))
-    global_weakkeydict[devconfig] = userdata_ptr    # keep ownership alive of the pointer
-    devconfig.pUserData = userdata_ptr
-    #devconfig.playback.format = 9999 # TODO
-    #devconfig.playback.channels = nchannels # TODO
-    device = ffi.new("ma_device *")
-    result = lib.ma_device_init(ffi.NULL, ffi.addressof(devconfig), device)
-    if result != lib.MA_SUCCESS:
-        raise MiniaudioError("failed to init device", result)
-    try:
-        print("GOT", result, device[0], dir(device[0]), device[0].sampleRate)  # TODO
-        while True:
-            command, arg = yield None
-            if command == "start":
-                result = lib.ma_device_start(device)
-                if result != lib.MA_SUCCESS:
-                    raise MiniaudioError("failed to start audio device", result)
-            elif command == "stop":
-                lib.ma_device_stop(device)
-            elif command == "quit":
-                break
-            elif command == "play":
-                if not isinstance(arg, array.array) or arg.typecode != samples_proto.typecode:
-                    raise TypeError("play arg should be array.array with typecode "+samples_proto.typecode)
-                userdata.queue.put(arg)
-                print("put some data", len(arg))
-            else:
-                raise MiniaudioError("invalid device command", command)
-    finally:
-        lib.ma_device_uninit(device)
-        del _callback_data[userdata_id]
-        try:
-            yield
-        except GeneratorExit:
-            pass
+AudioProducerType = Callable[[int, int, int], bytes]
 
-    # void ma_device_set_stop_callback(ma_device* pDevice, ma_stop_proc proc);
+
+class MiniaudioPlaybackDevice:
+    def __init__(self, ma_output_format: int = ma_format_s16, nchannels: int = 2,
+                 sample_rate: int = 44100, buffersize_msec: int = 200):
+        self.format = ma_output_format
+        self.nchannels = nchannels
+        self.sample_rate = sample_rate
+        self.buffersize_msec = buffersize_msec
+        self._devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
+        self._devconfig.sampleRate = self.sample_rate
+        self._devconfig.bufferSizeInMilliseconds = self.buffersize_msec
+        self._devconfig.dataCallback = lib.internal_data_callback
+        self.sample_width, self.samples_array_proto = _decode_ma_format(ma_output_format)
+        _callback_data[id(self)] = self
+        self.userdata_ptr = ffi.new("char[]", struct.pack('q', id(self)))
+        self._devconfig.pUserData = self.userdata_ptr
+        #devconfig.playback.format = 9999 # TODO
+        #devconfig.playback.channels = nchannels # TODO
+        self._device = ffi.new("ma_device *")
+        self.audio_producer = None   # type: Optional[AudioProducerType]
+        result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("failed to init device", result)
+        self.backend = backend_names[self._device.pContext.backend]
+
+    def __del__(self) -> None:
+        self.close()
+
+    def start(self, audio_producer: AudioProducerType) -> None:
+        if self.audio_producer:
+            raise MiniaudioError("can't start an already started device")
+        self.audio_producer = audio_producer
+        result = lib.ma_device_start(self._device)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("failed to start audio device", result)
+
+    def stop(self) -> None:
+        self.audio_producer = None
+        result = lib.ma_device_stop(self._device)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("failed to stop audio device", result)
+
+    def close(self):
+        self.audio_producer = None
+        if self._device is not None:
+            lib.ma_device_uninit(self._device)
+            self._device = None
+        if id(self) in _callback_data:
+            del _callback_data[id(self)]
+
+    def data_callback(self, device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
+        if self.audio_producer:
+            sample_bytes = self.audio_producer(framecount, self.sample_width, self.nchannels)
+            byte_count = min(framecount * self.sample_width * self.nchannels, len(sample_bytes))
+            ffi.memmove(output, sample_bytes, byte_count)

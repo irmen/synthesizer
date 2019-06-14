@@ -1,6 +1,30 @@
 import miniaudio
 from synthplayer.playback import Output
 from synthplayer.sample import Sample
+import time
+import array
+
+
+sound = miniaudio.ma_decode_file("samples/music.ogg")
+offset = 0
+
+
+def producer(framecount: int, sample_width: int, nchannels: int) -> array.array:
+    global offset
+    assert nchannels == 2 and sample_width == 2
+    result = sound.samples[offset:offset+framecount*nchannels]
+    offset += framecount*nchannels
+    return result
+
+
+d = miniaudio.MiniaudioPlaybackDevice()
+print("GOT", d)
+d.start(producer)
+time.sleep(2)
+d.stop()
+time.sleep(1)
+d.close()
+raise SystemExit
 
 import array
 g = miniaudio.ma_device_init()

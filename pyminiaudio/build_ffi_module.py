@@ -487,8 +487,9 @@ typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_dev
     ma_result ma_decode_file(const char* pFilePath, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
     ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
 
+    void init_miniaudio(void);
 
-    extern "Python" void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
+    extern "Python" void internal_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
     
 """)
 
@@ -513,14 +514,14 @@ ffibuilder.set_source("_miniaudio", """
     #include "miniaudio/stb_vorbis.c"
 
     #include "miniaudio/miniaudio.h"
-
+    
+    void init_miniaudio(void);
+    
 """,
                       sources=["miniaudio.c"],
                       include_dirs=[miniaudio_include_dir],
                       libraries=libraries,
                       extra_compile_args=compiler_args)
-
-print(libraries)
 
 if __name__ == "__main__":
     ffibuilder.compile(verbose=True)
