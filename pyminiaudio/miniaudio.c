@@ -3,10 +3,8 @@
 
 
 #ifndef NO_STB_VORBIS
-#ifdef _MSC_VER		/* visual c++? */
-#include <windows.h>
-#endif
 /* #define STB_VORBIS_NO_PUSHDATA_API  */   /*  needed by miniaudio decoding logic  */
+#define STB_VORBIS_HEADER_ONLY
 #include "miniaudio/stb_vorbis.c"
 #endif
 
@@ -28,6 +26,12 @@
 #define MA_NO_WEBAUDIO
 #define MA_NO_JACK
 #include "miniaudio/miniaudio.h"
+
+
+#ifndef NO_STB_VORBIS
+#undef STB_VORBIS_HEADER_ONLY		/* this time, do include vorbis implementation */
+#include "miniaudio/stb_vorbis.c"
+#endif
 
 
 #ifdef _WIN32
