@@ -18,13 +18,10 @@ from cffi import FFI
 
 miniaudio_include_dir = os.getcwd()
 
-ffibuilder = FFI()
-ffibuilder.cdef("""
-
-void *malloc(size_t size);
-void free(void *ptr);
-
-
+if os.name == "nt":
+    vorbis_defs = ""        # on windows, visual c++ currently can't compile in the stb_vorbis lib
+else:
+    vorbis_defs = """
 
 /********************** stb_vorbis ******************************/
 
@@ -102,6 +99,11 @@ int stb_vorbis_get_samples_float_interleaved(stb_vorbis *f, int channels, float 
 int stb_vorbis_get_samples_short_interleaved(stb_vorbis *f, int channels, short *buffer, int num_shorts);
 
 
+"""
+
+
+ffibuilder = FFI()
+ffibuilder.cdef(vorbis_defs + """
 
 /********************** dr_flac ******************************/
 
@@ -573,9 +575,17 @@ ffibuilder.set_source("_miniaudio", """
     #include "miniaudio/dr_wav.h"
     #include "miniaudio/dr_mp3.h"
 
+
+    #ifdef _MSC_VER     /* visual c++ currently can't compile in the vorbis lib */
+    #define NO_STB_VORBIS
+    #endif
+    
+
+    #ifndef NO_STB_VORBIS
     #define STB_VORBIS_HEADER_ONLY
     /* #define STB_VORBIS_NO_PUSHDATA_API  */   /*  needed by miniaudio decoding logic  */
     #include "miniaudio/stb_vorbis.c"
+    #endif
 
     #include "miniaudio/miniaudio.h"
     
