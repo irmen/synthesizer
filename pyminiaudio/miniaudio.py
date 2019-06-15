@@ -810,6 +810,8 @@ class PlaybackDevice:
         result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
         if result != lib.MA_SUCCESS:
             raise MiniaudioError("failed to init device", result)
+        if self._device.pContext.backend == lib.ma_backend_null:
+            raise MiniaudioError("no suitable audio backend found")
         self.backend = ffi.string(lib.ma_get_backend_name(self._device.pContext.backend)).decode()
 
     def __del__(self) -> None:
