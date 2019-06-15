@@ -24,6 +24,5 @@ Software license for these Python bindings, miniaudio and the decoders: MIT
 
 ## todo
 
-- Windows: Currently there is a problem compiling in the std_vorbis decoder with Msvc on Windows. The compiler stops with a handful of errors in winnt.h
-- Windows: The wasapi sound playback seems to abort the program without any output or error message.
 - the various format conversion functions aren't available yet.
+- documentation is lacking.

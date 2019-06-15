@@ -725,7 +725,8 @@ def _samples_generator(frames_to_read: int, nchannels: int, ma_output_format: in
         want_frames = (yield samples_proto) or frames_to_read
         while True:
             if want_frames > allocated_buffer_frames:
-                raise MiniaudioError("wanted to read more frames than storage was allocated for ({} vs {})".format(want_frames, allocated_buffer_frames))
+                raise MiniaudioError("wanted to read more frames than storage was allocated for ({} vs {})"
+                                     .format(want_frames, allocated_buffer_frames))
             num_frames = lib.ma_decoder_read_pcm_frames(decoder, buf_ptr, want_frames)
             if num_frames <= 0:
                 break
