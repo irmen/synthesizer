@@ -16,7 +16,7 @@ Software license: "MIT software license". See http://opensource.org/licenses/MIT
 import os
 from cffi import FFI
 
-miniaudio_include_dir = os.path.join(os.getcwd(), "miniaudio")
+miniaudio_include_dir = os.getcwd()
 
 ffibuilder = FFI()
 ffibuilder.cdef("""
