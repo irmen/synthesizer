@@ -16,7 +16,7 @@ from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format
 lib.init_miniaudio()
 
 
-__version__ = "1.0.1"
+__version__ = "1.1"
 
 
 class DecodedSoundFile:
@@ -718,18 +718,21 @@ def _samples_generator(frames_to_read: int, nchannels: int, ma_output_format: in
                        decoder: ffi.CData, data: Any) -> Generator[array.array, int, None]:
     _reference = data    # make sure any data passed in is not garbage collected
     sample_width, samples_proto = _decode_ma_format(ma_output_format)
+    allocated_buffer_frames = max(frames_to_read, 16384)
     try:
-        decodebuffer = ffi.new("int8_t[]", max(frames_to_read, 4096) * nchannels * sample_width)
+        decodebuffer = ffi.new("int8_t[]", allocated_buffer_frames * nchannels * sample_width)
         buf_ptr = ffi.cast("void *", decodebuffer)
-        wanted = yield samples_proto
+        want_frames = (yield samples_proto) or frames_to_read
         while True:
-            num_frames = lib.ma_decoder_read_pcm_frames(decoder, buf_ptr, wanted or frames_to_read)
+            if want_frames > allocated_buffer_frames:
+                raise MiniaudioError("wanted to read more frames than storage was allocated for ({} vs {})".format(want_frames, allocated_buffer_frames))
+            num_frames = lib.ma_decoder_read_pcm_frames(decoder, buf_ptr, want_frames)
             if num_frames <= 0:
                 break
             buffer = ffi.buffer(decodebuffer, num_frames * sample_width * nchannels)
             samples = array.array(samples_proto.typecode)
             samples.frombytes(buffer)
-            wanted = yield samples
+            want_frames = yield samples
     finally:
         lib.ma_decoder_uninit(decoder)
 

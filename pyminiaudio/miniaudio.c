@@ -1,12 +1,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#ifdef _MSC_VER     /* visual c++ currently can't compile in the vorbis lib */
-#define NO_STB_VORBIS
-#endif
-
 
 #ifndef NO_STB_VORBIS
+#ifdef _MSC_VER		/* visual c++? */
+#include <windows.h>
+#endif
 /* #define STB_VORBIS_NO_PUSHDATA_API  */   /*  needed by miniaudio decoding logic  */
 #include "miniaudio/stb_vorbis.c"
 #endif

@@ -18,10 +18,7 @@ from cffi import FFI
 
 miniaudio_include_dir = os.getcwd()
 
-if os.name == "nt":
-    vorbis_defs = ""        # on windows, visual c++ currently can't compile in the stb_vorbis lib
-else:
-    vorbis_defs = """
+vorbis_defs = """
 
 /********************** stb_vorbis ******************************/
 
@@ -575,11 +572,6 @@ ffibuilder.set_source("_miniaudio", """
     #include "miniaudio/dr_wav.h"
     #include "miniaudio/dr_mp3.h"
 
-
-    #ifdef _MSC_VER     /* visual c++ currently can't compile in the vorbis lib */
-    #define NO_STB_VORBIS
-    #endif
-    
 
     #ifndef NO_STB_VORBIS
     #define STB_VORBIS_HEADER_ONLY

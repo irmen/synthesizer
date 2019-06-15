@@ -20,21 +20,21 @@ def memory_producer(framecount: int, sample_width: int, nchannels: int) -> Union
     return result
 
 
-# stream = miniaudio.ma_stream_file("samples/music.ogg")
-stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read())
+stream = miniaudio.ma_stream_file("samples/music.ogg")
+# stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read())
 
 
 def stream_producer(num_frames: int, sample_width: int, nchannels: int) -> Union[bytes, array.array, None]:
     assert nchannels == 2 and sample_width == 2
     try:
+        print(".", end="", flush=True)
         return stream.send(num_frames)
     except StopIteration:
         return None
 
 
-d = miniaudio.PlaybackDevice()
-print("GOT", d.backend)
-next(stream)
+d = miniaudio.PlaybackDevice(buffersize_msec=200)
+print("playback device backend:", d.backend)
 d.start(stream_producer)
 time.sleep(4)
 d.stop()
