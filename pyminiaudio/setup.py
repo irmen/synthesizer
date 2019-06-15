@@ -12,6 +12,6 @@ PKG_VERSION = re.search(r'^__version__\s*=\s*"(.+)"', open("miniaudio.py", "rt")
 
 setup(
       version=PKG_VERSION,
-      cffi_modules=["./build_ffi_module.py:ffibuilder"],
+      cffi_modules=["build_ffi_module.py:ffibuilder"],
       include_dirs=[miniaudio_path]
       )
