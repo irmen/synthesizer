@@ -1,7 +1,7 @@
 """
 Python interface to the miniaudio library (https://github.com/dr-soft/miniaudio)
 
-This interface is Copyright by Irmen de Jong (irmen@razorvine.net)
+Author: Irmen de Jong (irmen@razorvine.net)
 Software license: "MIT software license". See http://opensource.org/licenses/MIT
 """
 
@@ -20,7 +20,8 @@ __version__ = "1.0"
 
 
 class DecodedSoundFile:
-    def __init__(self, name: str, nchannels: int, sample_rate: int, sample_width: int, sample_format: int, samples: array.array) -> None:
+    def __init__(self, name: str, nchannels: int, sample_rate: int, sample_width: int,
+                 sample_format: int, samples: array.array) -> None:
         self.name = name
         self.nchannels = nchannels
         self.sample_rate = sample_rate
@@ -92,7 +93,8 @@ def vorbis_get_file_info(filename: str) -> SoundFileInfo:
         info = lib.stb_vorbis_get_info(vorbis)
         duration = lib.stb_vorbis_stream_length_in_seconds(vorbis)
         num_frames = lib.stb_vorbis_stream_length_in_samples(vorbis)
-        return SoundFileInfo(filename, info.channels, info.sample_rate, 2, ma_format_s16, duration, num_frames, info.max_frame_size)
+        return SoundFileInfo(filename, info.channels, info.sample_rate, 2, ma_format_s16,
+                             duration, num_frames, info.max_frame_size)
     finally:
         lib.stb_vorbis_close(vorbis)
 
@@ -106,7 +108,8 @@ def vorbis_get_info(data: bytes) -> SoundFileInfo:
         info = lib.stb_vorbis_get_info(vorbis)
         duration = lib.stb_vorbis_stream_length_in_seconds(vorbis)
         num_frames = lib.stb_vorbis_stream_length_in_samples(vorbis)
-        return SoundFileInfo("<memory>", info.channels, info.sample_rate, 2, ma_format_s16, duration, num_frames, info.max_frame_size)
+        return SoundFileInfo("<memory>", info.channels, info.sample_rate, 2, ma_format_s16,
+                             duration, num_frames, info.max_frame_size)
     finally:
         lib.stb_vorbis_close(vorbis)
 
@@ -184,8 +187,8 @@ def flac_get_file_info(filename: str) -> SoundFileInfo:
     try:
         duration = flac.totalPCMFrameCount / flac.sampleRate
         sample_width = flac.bitsPerSample // 8
-        return SoundFileInfo(filename, flac.channels, flac.sampleRate, sample_width, _ma_format_from_width(sample_width),
-                             duration, flac.totalPCMFrameCount, flac.maxBlockSize)
+        return SoundFileInfo(filename, flac.channels, flac.sampleRate, sample_width,
+                             _ma_format_from_width(sample_width), duration, flac.totalPCMFrameCount, flac.maxBlockSize)
     finally:
         lib.drflac_close(flac)
 
@@ -197,8 +200,8 @@ def flac_get_info(data: bytes) -> SoundFileInfo:
     try:
         duration = flac.totalPCMFrameCount / flac.sampleRate
         sample_width = flac.bitsPerSample // 8
-        return SoundFileInfo("<memory>", flac.channels, flac.sampleRate, sample_width, _ma_format_from_width(sample_width),
-                             duration, flac.totalPCMFrameCount, flac.maxBlockSize)
+        return SoundFileInfo("<memory>", flac.channels, flac.sampleRate, sample_width,
+                             _ma_format_from_width(sample_width), duration, flac.totalPCMFrameCount, flac.maxBlockSize)
     finally:
         lib.drflac_close(flac)
 
@@ -457,8 +460,8 @@ def wav_get_file_info(filename: str) -> SoundFileInfo:
     try:
         duration = wav.totalPCMFrameCount / wav.sampleRate
         sample_width = wav.bitsPerSample // 8
-        return SoundFileInfo(filename, wav.channels, wav.sampleRate, sample_width, _ma_format_from_width(sample_width),
-                             duration, wav.totalPCMFrameCount, 0)
+        return SoundFileInfo(filename, wav.channels, wav.sampleRate, sample_width,
+                             _ma_format_from_width(sample_width), duration, wav.totalPCMFrameCount, 0)
     finally:
         lib.drwav_close(wav)
 
@@ -470,8 +473,8 @@ def wav_get_info(data: bytes) -> SoundFileInfo:
     try:
         duration = wav.totalPCMFrameCount / wav.sampleRate
         sample_width = wav.bitsPerSample // 8
-        return SoundFileInfo("<memory>", wav.channels, wav.sampleRate, sample_width, _ma_format_from_width(sample_width),
-                             duration, wav.totalPCMFrameCount, 0)
+        return SoundFileInfo("<memory>", wav.channels, wav.sampleRate, sample_width,
+                             _ma_format_from_width(sample_width), duration, wav.totalPCMFrameCount, 0)
     finally:
         lib.drwav_close(wav)
 
@@ -711,7 +714,8 @@ def ma_decode(data: bytes, ma_output_format: int = ma_format_s16,
     return DecodedSoundFile("<memory>", nchannels, sample_rate, sample_width, ma_output_format, samples)
 
 
-def _samples_generator(frames_to_read: int, nchannels: int, ma_output_format: int, decoder: ffi.CData, data: Any) -> Generator[array.array, int, None]:
+def _samples_generator(frames_to_read: int, nchannels: int, ma_output_format: int,
+                       decoder: ffi.CData, data: Any) -> Generator[array.array, int, None]:
     _reference = data    # make sure any data passed in is not garbage collected
     sample_width, samples_proto = _decode_ma_format(ma_output_format)
     try:
@@ -730,8 +734,8 @@ def _samples_generator(frames_to_read: int, nchannels: int, ma_output_format: in
         lib.ma_decoder_uninit(decoder)
 
 
-def ma_stream_file(filename: str, ma_output_format: int = ma_format_s16,
-                   nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
+def ma_stream_file(filename: str, ma_output_format: int = ma_format_s16, nchannels: int = 2,
+                   sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
     """
     Convenience generator function to decode and stream any supported audio file
     as chunks of raw PCM samples in the chosen format.
@@ -751,8 +755,8 @@ def ma_stream_file(filename: str, ma_output_format: int = ma_format_s16,
     return g
 
 
-def ma_stream_memory(data: bytes, ma_output_format: int = ma_format_s16,
-                     nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
+def ma_stream_memory(data: bytes, ma_output_format: int = ma_format_s16, nchannels: int = 2,
+                     sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
     """
     Convenience generator function to decode and stream any supported audio file in memory
     as chunks of raw PCM samples in the chosen format.

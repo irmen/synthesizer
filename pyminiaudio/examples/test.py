@@ -20,8 +20,7 @@ def memory_producer(framecount: int, sample_width: int, nchannels: int) -> Union
     return result
 
 
-
-#stream = miniaudio.ma_stream_file("samples/music.ogg")
+# stream = miniaudio.ma_stream_file("samples/music.ogg")
 stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read())
 
 
@@ -33,11 +32,11 @@ def stream_producer(num_frames: int, sample_width: int, nchannels: int) -> Union
         return None
 
 
-d = miniaudio.PlaybackDevice(buffersize_msec=100)
+d = miniaudio.PlaybackDevice()
 print("GOT", d.backend)
 next(stream)
 d.start(stream_producer)
-time.sleep(12)
+time.sleep(4)
 d.stop()
 time.sleep(1)
 d.close()
@@ -61,7 +60,8 @@ elif info.sample_width == 4:
     fmt = miniaudio.ma_format_s32
 else:
     raise IOError("invalid sample width")
-stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read(), ma_output_format=fmt, nchannels=info.nchannels, sample_rate=info.sample_rate)
+stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read(), ma_output_format=fmt,
+                                    nchannels=info.nchannels, sample_rate=info.sample_rate)
 
 with Output(info.sample_rate, info.sample_width, info.nchannels, mixing="sequential") as out:
     for chunk in stream:

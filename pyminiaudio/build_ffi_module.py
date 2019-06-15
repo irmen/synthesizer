@@ -1,10 +1,17 @@
-# Use CFFI to create the glue code but also to actually compile the decoders in one go!
-#
-# Sound formats supported:
-# - ogg vorbis via stb_vorbis
-# - mp3 via dr_mp3
-# - wav via dr_wav
-# - flac via dr_flac
+"""
+Python interface to the miniaudio library (https://github.com/dr-soft/miniaudio)
+
+This module Use CFFI to create the glue code but also to actually compile the decoders in one go!
+Sound formats supported:
+ - ogg vorbis via stb_vorbis
+ - mp3 via dr_mp3
+ - wav via dr_wav
+ - flac via dr_flac
+
+Author: Irmen de Jong (irmen@razorvine.net)
+Software license: "MIT software license". See http://opensource.org/licenses/MIT
+"""
+
 
 import os
 from cffi import FFI
@@ -283,6 +290,12 @@ typedef int ma_result;
 #define MA_FAILED_TO_CREATE_THREAD                     -313
 
 
+#define MA_MIN_CHANNELS                                1
+#define MA_MAX_CHANNELS                                32
+#define MA_MIN_SAMPLE_RATE                             8000
+#define MA_MAX_SAMPLE_RATE                             384000
+
+
 typedef enum
 {
     ma_backend_wasapi,
@@ -462,6 +475,8 @@ typedef struct ma_decoder
 
 typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_device_type deviceType, const ma_device_info* pInfo, void* pUserData);
 
+
+    /**** allocation / initialization / device control ****/
     void ma_free(void* p);
     ma_result ma_context_init(const ma_backend backends[], ma_uint32 backendCount, const ma_context_config* pConfig, ma_context* pContext);
     ma_result ma_context_uninit(ma_context* pContext);
@@ -479,6 +494,7 @@ typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_dev
     ma_device_config ma_device_config_init(ma_device_type deviceType);
     ma_decoder_config ma_decoder_config_init(ma_format outputFormat, ma_uint32 outputChannels, ma_uint32 outputSampleRate);
 
+    /**** decoding ****/
     ma_result ma_decoder_init_memory(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
     ma_result ma_decoder_init_memory_wav(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
     ma_result ma_decoder_init_memory_flac(const void* pData, size_t dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
@@ -487,15 +503,51 @@ typedef ma_bool32 (* ma_enum_devices_callback_proc)(ma_context* pContext, ma_dev
     ma_result ma_decoder_init_memory_raw(const void* pData, size_t dataSize, const ma_decoder_config* pConfigIn, const ma_decoder_config* pConfigOut, ma_decoder* pDecoder);
 
     ma_result ma_decoder_init_file(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file_wav(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file_flac(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file_vorbis(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file_mp3(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    
     ma_result ma_decoder_uninit(ma_decoder* pDecoder);
     ma_uint64 ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder);
     ma_uint64 ma_decoder_read_pcm_frames(ma_decoder* pDecoder, void* pFramesOut, ma_uint64 frameCount);
     ma_result ma_decoder_seek_to_pcm_frame(ma_decoder* pDecoder, ma_uint64 frameIndex);
     ma_result ma_decode_file(const char* pFilePath, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
     ma_result ma_decode_memory(const void* pData, size_t dataSize, ma_decoder_config* pConfig, ma_uint64* pFrameCountOut, void** ppDataOut);
+    
+    /**** format conversion ****/
+    /* TODO: add the streaming DSP conversion API */
+    void ma_pcm_u8_to_s16(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_u8_to_s24(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_u8_to_s32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_u8_to_f32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s16_to_u8(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s16_to_s24(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s16_to_s32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s16_to_f32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s24_to_u8(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s24_to_s16(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s24_to_s32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s24_to_f32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s32_to_u8(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s32_to_s16(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s32_to_s24(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_s32_to_f32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_f32_to_u8(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_f32_to_s16(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_f32_to_s24(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_f32_to_s32(void* pOut, const void* pIn, ma_uint64 count, ma_dither_mode ditherMode);
+    void ma_pcm_convert(void* pOut, ma_format formatOut, const void* pIn, ma_format formatIn, ma_uint64 sampleCount, ma_dither_mode ditherMode);
+    void ma_deinterleave_pcm_frames(ma_format format, ma_uint32 channels, ma_uint64 frameCount, const void* pInterleavedPCMFrames, void** ppDeinterleavedPCMFrames);
+    void ma_interleave_pcm_frames(ma_format format, ma_uint32 channels, ma_uint64 frameCount, const void** ppDeinterleavedPCMFrames, void* pInterleavedPCMFrames);
+    ma_uint64 ma_convert_frames(void* pOut, ma_format formatOut, ma_uint32 channelsOut, ma_uint32 sampleRateOut, const void* pIn, ma_format formatIn, ma_uint32 channelsIn, ma_uint32 sampleRateIn, ma_uint64 frameCount);
+    ma_uint64 ma_convert_frames_ex(void* pOut, ma_format formatOut, ma_uint32 channelsOut, ma_uint32 sampleRateOut, ma_channel channelMapOut[MA_MAX_CHANNELS], const void* pIn, ma_format formatIn, ma_uint32 channelsIn, ma_uint32 sampleRateIn, ma_channel channelMapIn[MA_MAX_CHANNELS], ma_uint64 frameCount);
+
+    /**** misc ****/
     const char* ma_get_backend_name(ma_backend backend);
     const char* ma_get_format_name(ma_format format);
-    
+    void ma_zero_pcm_frames(void* p, ma_uint32 frameCount, ma_format format, ma_uint32 channels);
+
     void init_miniaudio(void);
     void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate, ma_uint32 buffer_size_msec, ma_uint32 buffer_size_frames,
        ma_format format, ma_uint32 channels, ma_format capture_format, ma_uint32 capture_channels);
@@ -526,7 +578,10 @@ ffibuilder.set_source("_miniaudio", """
 
     #include "miniaudio/miniaudio.h"
     
+    /* low-level initialization */
     void init_miniaudio(void);
+    
+    /* helper function to set some parameters in the ma_device_config struct which couldn't be parsed by cffi directly */
     void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate, ma_uint32 buffer_size_msec, ma_uint32 buffer_size_frames,
        ma_format format, ma_uint32 channels, ma_format capture_format, ma_uint32 capture_channels);
     
