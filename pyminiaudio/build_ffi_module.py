@@ -566,6 +566,7 @@ if os.name == "posix":
 
 ffibuilder.set_source("_miniaudio", """
     #include <stdint.h>
+    #include <stdlib.h>
 
     #define DR_FLAC_NO_OGG
     #include "miniaudio/dr_flac.h"
@@ -584,6 +585,12 @@ ffibuilder.set_source("_miniaudio", """
     /* helper function to set some parameters in the ma_device_config struct which couldn't be parsed by cffi directly */
     void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate, ma_uint32 buffer_size_msec, ma_uint32 buffer_size_frames,
        ma_format format, ma_uint32 channels, ma_format capture_format, ma_uint32 capture_channels);
+
+    /* missing protos */
+    ma_result ma_decoder_init_file_wav(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file_flac(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file_vorbis(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+    ma_result ma_decoder_init_file_mp3(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
     
 """,
                       sources=["miniaudio.c"],

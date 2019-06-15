@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <stdint.h>
+
 /* #define STB_VORBIS_NO_PUSHDATA_API  */   /*  needed by miniaudio decoding logic  */
 #include "miniaudio/stb_vorbis.c"
 
@@ -20,11 +23,24 @@
 #include "miniaudio/miniaudio.h"
 
 
+#ifdef _WIN32
+int setenv(const char *name, const char *value, int overwrite)
+{
+    int errcode = 0;
+    if(!overwrite) {
+        size_t envsize = 0;
+        errcode = getenv_s(&envsize, NULL, 0, name);
+        if(errcode || envsize) return errcode;
+    }
+    return _putenv_s(name, value);
+}
+#endif
+
+
 void init_miniaudio(void) {
 
     /* strange, this is needed to avoid a huge multi second delay when using PulseAudio */
     setenv("PULSE_LATENCY_MSEC", "100", 0);
-
 }
 
 
