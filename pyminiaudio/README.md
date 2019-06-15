@@ -24,5 +24,6 @@ Software license for these Python bindings, miniaudio and the decoders: MIT
 
 ## todo
 
-- the various format conversion functions aren't available yet.
-- documentation is lacking.
+- the various format conversion functions aren't properly exposed yet.
+- documentation is severely lacking.
+- only playback for now, the recording capabilities of miniaudio aren't exposed yet 

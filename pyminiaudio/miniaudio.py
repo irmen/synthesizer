@@ -16,7 +16,7 @@ from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format
 lib.init_miniaudio()
 
 
-__version__ = "1.1"
+__version__ = "1.2"
 
 
 class DecodedSoundFile:
@@ -32,9 +32,10 @@ class DecodedSoundFile:
 
 
 class SoundFileInfo:
-    def __init__(self, name: str, nchannels: int, sample_rate: int, sample_width: int, sample_format: int,
+    def __init__(self, name: str, file_format: str, nchannels: int, sample_rate: int, sample_width: int, sample_format: int,
                  duration: float, num_frames: int, max_frame_size: int) -> None:
         self.name = name
+        self.file_format = file_format
         self.nchannels = nchannels
         self.sample_rate = sample_rate
         self.sample_width = sample_width
@@ -56,7 +57,6 @@ class DecodeError(MiniaudioError):
 def get_file_info(filename: str) -> SoundFileInfo:
     """Fetch some information about the audio file."""
     ext = os.path.splitext(filename)[1].lower()
-    print(ext)
     if ext in (".ogg", ".vorbis"):
         return vorbis_get_file_info(filename)
     elif ext == ".mp3":
@@ -71,7 +71,6 @@ def get_file_info(filename: str) -> SoundFileInfo:
 def read_file(filename: str) -> DecodedSoundFile:
     """Reads and decodes the whole audio file. Resulting sample format is 16 bits signed integer."""
     ext = os.path.splitext(filename)[1].lower()
-    print(ext)
     if ext in (".ogg", ".vorbis"):
         return vorbis_read_file(filename)
     elif ext == ".mp3":
@@ -93,7 +92,7 @@ def vorbis_get_file_info(filename: str) -> SoundFileInfo:
         info = lib.stb_vorbis_get_info(vorbis)
         duration = lib.stb_vorbis_stream_length_in_seconds(vorbis)
         num_frames = lib.stb_vorbis_stream_length_in_samples(vorbis)
-        return SoundFileInfo(filename, info.channels, info.sample_rate, 2, ma_format_s16,
+        return SoundFileInfo(filename, "vorbis", info.channels, info.sample_rate, 2, ma_format_s16,
                              duration, num_frames, info.max_frame_size)
     finally:
         lib.stb_vorbis_close(vorbis)
@@ -108,7 +107,7 @@ def vorbis_get_info(data: bytes) -> SoundFileInfo:
         info = lib.stb_vorbis_get_info(vorbis)
         duration = lib.stb_vorbis_stream_length_in_seconds(vorbis)
         num_frames = lib.stb_vorbis_stream_length_in_samples(vorbis)
-        return SoundFileInfo("<memory>", info.channels, info.sample_rate, 2, ma_format_s16,
+        return SoundFileInfo("<memory>", "vorbis", info.channels, info.sample_rate, 2, ma_format_s16,
                              duration, num_frames, info.max_frame_size)
     finally:
         lib.stb_vorbis_close(vorbis)
@@ -187,7 +186,7 @@ def flac_get_file_info(filename: str) -> SoundFileInfo:
     try:
         duration = flac.totalPCMFrameCount / flac.sampleRate
         sample_width = flac.bitsPerSample // 8
-        return SoundFileInfo(filename, flac.channels, flac.sampleRate, sample_width,
+        return SoundFileInfo(filename, "flac", flac.channels, flac.sampleRate, sample_width,
                              _ma_format_from_width(sample_width), duration, flac.totalPCMFrameCount, flac.maxBlockSize)
     finally:
         lib.drflac_close(flac)
@@ -200,7 +199,7 @@ def flac_get_info(data: bytes) -> SoundFileInfo:
     try:
         duration = flac.totalPCMFrameCount / flac.sampleRate
         sample_width = flac.bitsPerSample // 8
-        return SoundFileInfo("<memory>", flac.channels, flac.sampleRate, sample_width,
+        return SoundFileInfo("<memory>", "flac", flac.channels, flac.sampleRate, sample_width,
                              _ma_format_from_width(sample_width), duration, flac.totalPCMFrameCount, flac.maxBlockSize)
     finally:
         lib.drflac_close(flac)
@@ -337,7 +336,7 @@ def mp3_get_file_info(filename: str) -> SoundFileInfo:
     try:
         num_frames = lib.drmp3_get_pcm_frame_count(mp3)
         duration = num_frames / mp3.sampleRate
-        return SoundFileInfo(filename, mp3.channels, mp3.sampleRate, 2, ma_format_s16, duration, num_frames, 0)
+        return SoundFileInfo(filename, "mp3", mp3.channels, mp3.sampleRate, 2, ma_format_s16, duration, num_frames, 0)
     finally:
         lib.drmp3_uninit(mp3)
 
@@ -352,7 +351,7 @@ def mp3_get_info(data: bytes) -> SoundFileInfo:
     try:
         num_frames = lib.drmp3_get_pcm_frame_count(mp3)
         duration = num_frames / mp3.sampleRate
-        return SoundFileInfo("<memory>", mp3.channels, mp3.sampleRate, 2, ma_format_s16, duration, num_frames, 0)
+        return SoundFileInfo("<memory>", "mp3", mp3.channels, mp3.sampleRate, 2, ma_format_s16, duration, num_frames, 0)
     finally:
         lib.drmp3_uninit(mp3)
 
@@ -460,7 +459,7 @@ def wav_get_file_info(filename: str) -> SoundFileInfo:
     try:
         duration = wav.totalPCMFrameCount / wav.sampleRate
         sample_width = wav.bitsPerSample // 8
-        return SoundFileInfo(filename, wav.channels, wav.sampleRate, sample_width,
+        return SoundFileInfo(filename, "wav", wav.channels, wav.sampleRate, sample_width,
                              _ma_format_from_width(sample_width), duration, wav.totalPCMFrameCount, 0)
     finally:
         lib.drwav_close(wav)
@@ -473,7 +472,7 @@ def wav_get_info(data: bytes) -> SoundFileInfo:
     try:
         duration = wav.totalPCMFrameCount / wav.sampleRate
         sample_width = wav.bitsPerSample // 8
-        return SoundFileInfo("<memory>", wav.channels, wav.sampleRate, sample_width,
+        return SoundFileInfo("<memory>", "wav", wav.channels, wav.sampleRate, sample_width,
                              _ma_format_from_width(sample_width), duration, wav.totalPCMFrameCount, 0)
     finally:
         lib.drwav_close(wav)
