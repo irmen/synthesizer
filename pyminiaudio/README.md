@@ -16,12 +16,12 @@ This module provides:
   - streaming and playback are done with generator functions  
 
 
-*requires Python 3.5 or newer*. 
+*Requires Python 3.5 or newer.  Also works on pypy3 (because it uses cffi).* 
 
 Currently, it is only distributed in source form so you need a C compiler to build and install this.
-For Linux and Mac this shouldn't be a problem. For Windows users it may be though.
-If you're a windows user you should make sure you installed the required tools (Visual Studio or 
-the C++ build tools) to be able to compile Python extension modules.
+For Linux and Mac this shouldn't be a problem. For Windows users it may be though:
+you have to make sure that the required tools (Visual Studio or 
+the C++ build tools) are installed that allow you to compile Python extension modules.
  
 Software license for these Python bindings, miniaudio and the decoders: MIT
 

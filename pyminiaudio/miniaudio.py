@@ -17,7 +17,7 @@ from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format
 lib.init_miniaudio()
 
 
-__version__ = "1.2"
+__version__ = "1.2.1"
 
 
 class DecodedSoundFile:
