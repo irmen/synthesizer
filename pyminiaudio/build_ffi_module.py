@@ -560,7 +560,7 @@ libraries = []
 compiler_args = []
 if os.name == "posix":
     libraries = ["m", "pthread", "dl"]
-    compiler_args = ["-g1", "-std=c99", "-O3", "-msse", "-mfpmath=sse", "-ffast-math"]
+    compiler_args = ["-g1", "-O3", "-msse", "-mfpmath=sse", "-ffast-math"]
 
 
 ffibuilder.set_source("_miniaudio", """
