@@ -9,7 +9,8 @@ import sys
 import os
 import array
 import struct
-from typing import Generator, List, Tuple, Dict, Callable, Optional, Union, Any
+import inspect
+from typing import Generator, List, Tuple, Dict, Optional, Union, Any
 from _miniaudio import ffi, lib
 from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format_s32
 
@@ -826,7 +827,7 @@ def internal_data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CDat
     playback_device.data_callback(device, output, input, framecount)
 
 
-AudioProducerType = Callable[[int, int, int], Union[bytes, array.array]]
+AudioProducerType = Generator[Union[bytes, array.array], int, None]
 
 
 class PlaybackDevice:
@@ -858,11 +859,13 @@ class PlaybackDevice:
         self.close()
 
     def start(self, audio_producer: AudioProducerType) -> None:
-        """Start the audio device: playback begins. The audio data is provided by the given audio_producer function.
-        The function receives three parameters: required number of frames, sample width, number of channels.
-        THe function must return the sample data as raw bytes or as an array.array"""
+        """Start the audio device: playback begins. The audio data is provided by the given audio_producer generator.
+        The generator gets sent the required number of frames and should yield the sample data
+        as raw bytes or as an array.array.  (it should already be started before passing it in)"""
         if self.audio_producer:
             raise MiniaudioError("can't start an already started device")
+        if not inspect.isgenerator(audio_producer):
+            raise TypeError("audio producer must be a generator", type(audio_producer))
         self.audio_producer = audio_producer
         result = lib.ma_device_start(self._device)
         if result != lib.MA_SUCCESS:
@@ -886,8 +889,11 @@ class PlaybackDevice:
 
     def data_callback(self, device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
         if self.audio_producer:
-            # TODO: use a generator instead of a function call?
-            samples = self.audio_producer(framecount, self.sample_width, self.nchannels)
+            try:
+                samples = self.audio_producer.send(framecount)
+            except StopIteration:
+                self.audio_producer = None
+                return
             if isinstance(samples, array.array):
                 samples_bytes = memoryview(samples).cast('B')       # type: ignore
             else:

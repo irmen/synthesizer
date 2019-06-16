@@ -12,7 +12,8 @@ This module provides:
   - getting audio file properties (such as duration, number of channels, sample rate) 
   - reading and decoding audio files
   - streaming audio files
-  - playback  (via efficient asynchronous pull-API)  
+  - playback  (via efficient asynchronous pull-API)
+  - streaming and playback are done with generator functions  
 
 
 *requires Python 3.5 or newer*. 

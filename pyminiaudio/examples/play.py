@@ -11,18 +11,20 @@ def show_info(filename):
 
 
 def stream_file(filename):
-    stream = miniaudio.stream_file(filename)
-
-    def stream_producer(num_frames, sample_width, nchannels):
-        assert nchannels == 2 and sample_width == 2
+    def progress_stream_wrapper(stream) -> miniaudio.AudioProducerType:
+        framecount = yield(b"")
         try:
-            return stream.send(num_frames)      # provide num_frames frames from the sample generator
+            while True:
+                framecount = yield stream.send(framecount)
+                print(".", end="", flush=True)
         except StopIteration:
-            return None
+            return
 
+    stream = progress_stream_wrapper(miniaudio.stream_file(filename))
+    next(stream)   # start the generator
     device = miniaudio.PlaybackDevice()
     print("playback device backend:", device.backend)
-    device.start(stream_producer)
+    device.start(stream)
     input("Audio file playing in the background. Enter to stop playback: ")
     device.close()
 
