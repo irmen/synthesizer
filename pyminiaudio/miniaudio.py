@@ -894,6 +894,9 @@ class PlaybackDevice:
             except StopIteration:
                 self.audio_producer = None
                 return
+            except Exception:
+                self.audio_producer = None
+                raise
             if isinstance(samples, array.array):
                 samples_bytes = memoryview(samples).cast('B')       # type: ignore
             else:
