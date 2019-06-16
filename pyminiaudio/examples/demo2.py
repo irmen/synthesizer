@@ -1,14 +1,17 @@
 import miniaudio
 
+
 def memory_stream(soundfile: miniaudio.DecodedSoundFile) -> miniaudio.AudioProducerType:
     required_frames = yield b""  # generator initialization
     current = 0
-    while current < len(soundfile.samples):
+    samples = memoryview(soundfile.samples)     # avoid needless memory copying
+    while current < len(samples):
         sample_count = required_frames * soundfile.nchannels
-        samples = soundfile.samples[current:current + sample_count]
+        output = samples[current:current + sample_count]
         current += sample_count
         print(".", end="", flush=True)
-        required_frames = yield samples
+        required_frames = yield output
+
 
 device = miniaudio.PlaybackDevice()
 decoded = miniaudio.decode_file("samples/music.mp3")

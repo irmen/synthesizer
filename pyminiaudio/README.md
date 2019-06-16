@@ -44,7 +44,7 @@ input("Audio file playing in the background. Enter to stop playback: ")
 device.close()
 ```
 
-### Audio file playback that uses several other API functions
+### Playback using several other API functions
 
 ```python
 import miniaudio
@@ -52,12 +52,13 @@ import miniaudio
 def memory_stream(soundfile: miniaudio.DecodedSoundFile) -> miniaudio.AudioProducerType:
     required_frames = yield b""  # generator initialization
     current = 0
-    while current < len(soundfile.samples):
+    samples = memoryview(soundfile.samples)     # avoid needless memory copying
+    while current < len(samples):
         sample_count = required_frames * soundfile.nchannels
-        samples = soundfile.samples[current:current + sample_count]
+        output = samples[current:current + sample_count]
         current += sample_count
         print(".", end="", flush=True)
-        required_frames = yield samples
+        required_frames = yield output
 
 device = miniaudio.PlaybackDevice()
 decoded = miniaudio.decode_file("samples/music.mp3")
@@ -70,6 +71,41 @@ input("Audio file playing in the background. Enter to stop playback: ")
 device.close()
 ```
 
+### Playback of a file format that miniaudio can't decode by itself
+
+This example uses ffmpeg as an external tool to decode an audio file in a format
+that miniaudio itself can't decode (m4a/aac in this case):
+
+```python
+import subprocess
+import miniaudio
+
+channels = 2
+sample_rate = 44100
+sample_width = 2  # 16 bit pcm
+filename = "samples/music.m4a"  # AAC encoded audio file
+
+def stream_pcm(source):
+    required_frames = yield b""  # generator initialization
+    while True:
+        required_bytes = required_frames * channels * sample_width
+        sample_data = source.read(required_bytes)
+        if not sample_data:
+            break
+        print(".", end="", flush=True)
+        required_frames = yield sample_data
+
+device = miniaudio.PlaybackDevice(ma_output_format=miniaudio.ma_format_s16, nchannels=channels, sample_rate=sample_rate)
+ffmpeg = subprocess.Popen(["ffmpeg", "-v", "fatal", "-hide_banner", "-nostdin",
+                           "-i", filename, "-f", "s16le", "-acodec", "pcm_s16le",
+                           "-ac", str(channels), "-ar", str(sample_rate), "-"], stdin=None, stdout=subprocess.PIPE)
+stream = stream_pcm(ffmpeg.stdout)
+next(stream)  # start the generator
+device.start(stream)
+input("Audio file playing in the background. Enter to stop playback: ")
+device.close()
+ffmpeg.terminate()
+``` 
 
 ## API
 

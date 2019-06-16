@@ -899,7 +899,10 @@ class PlaybackDevice:
                 raise
             if isinstance(samples, array.array):
                 samples_bytes = memoryview(samples).cast('B')       # type: ignore
+            elif isinstance(samples, memoryview) and samples.itemsize != 1:
+                samples_bytes = samples.cast('B')    # type: ignore
             else:
+                # TODO numpy array support?
                 samples_bytes = samples
             if samples_bytes:
                 if len(samples_bytes) > framecount * self.sample_width * self.nchannels:
