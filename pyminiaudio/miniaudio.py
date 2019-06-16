@@ -651,19 +651,6 @@ def _get_filename_bytes(filename: str) -> bytes:
 # MiniAudio API follows
 
 
-class DeviceInfo:
-    """Information about an audio device."""
-    def __init__(self, name: str, ma_device_type: int, formats: List[str],
-                 min_channels: int, max_channels: int, min_sample_rate: int, max_sample_rate: int) -> None:
-        self.name = name
-        self.ma_device_type = ma_device_type
-        self.formats = formats
-        self.min_channels = min_channels
-        self.max_channels = max_channels
-        self.min_sample_rate = min_sample_rate
-        self.max_sample_rate = max_sample_rate
-
-
 def get_devices() -> Tuple[List[str], List[str]]:
     """Get two lists of supported audio devices: playback devices, recording devices."""
     playback_infos = ffi.new("ma_device_info**")
@@ -938,7 +925,7 @@ class WavFileReadStream(io.RawIOBase):
 
     def read(self, amount: int = sys.maxsize) -> Optional[bytes]:
         if self.bytes_done >= self.max_bytes or not self.sample_gen:
-            return None
+            return b""
         while len(self.buffered) < amount:
             try:
                 samples = next(self.sample_gen)
