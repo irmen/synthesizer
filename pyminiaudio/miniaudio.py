@@ -31,7 +31,7 @@ class DecodedSoundFile:
         self.sample_format = sample_format      # one of the ma_format_ values
         self.sample_format_name = ffi.string(lib.ma_get_format_name(sample_format)).decode()
         self.samples = samples
-        self.num_frames = len(samples) / self.nchannels
+        self.num_frames = len(samples) // self.nchannels
         self.duration = self.num_frames / self.sample_rate
 
 
