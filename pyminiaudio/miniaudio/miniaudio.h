@@ -1,6 +1,6 @@
 /*
 Audio playback and capture library. Choice of public domain or MIT-0. See license statements at the end of this file.
-miniaudio (formerly mini_al) - v0.9.5 - 2019-05-21
+miniaudio (formerly mini_al) - v0.9.6 - 2019-xx-xx
 
 David Reid - davidreidsoftware@gmail.com
 */
@@ -304,7 +304,7 @@ UWP
 
 Web Audio / Emscripten
 ----------------------
-- The first time a context is initialized it will create a global object called "mal" whose primary purpose is to act
+- The first time a context is initialized it will create a global object called "miniaudio" whose primary purpose is to act
   as a factory for device objects.
 - Currently the Web Audio backend uses ScriptProcessorNode's, but this may need to change later as they've been deprecated.
 - Google is implementing a policy in their browsers that prevent automatic media output without first receiving some kind
@@ -1770,7 +1770,9 @@ pInput is a pointer to a buffer containing input data from the device. This will
 null for a playback device.
 
 frameCount is the number of PCM frames to process. If an output buffer is provided (pOutput is not null), applications should write out
-to the entire output buffer.
+to the entire output buffer. Note that frameCount will not necessarily be exactly what you asked for when you initialized the deviced.
+The bufferSizeInFrames and bufferSizeInMilliseconds members of the device config are just hints, and are not necessarily exactly what
+you'll get.
 
 Do _not_ call any miniaudio APIs from the callback. Attempting the stop the device can result in a deadlock. The proper way to stop the
 device is to call ma_device_stop() from a different thread, normally the main application thread.
@@ -3064,6 +3066,9 @@ ma_result ma_decoder_init_memory_raw(const void* pData, size_t dataSize, const m
 #ifndef MA_NO_STDIO
 ma_result ma_decoder_init_file(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
 ma_result ma_decoder_init_file_wav(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+ma_result ma_decoder_init_file_flac(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+ma_result ma_decoder_init_file_vorbis(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
+ma_result ma_decoder_init_file_mp3(const char* pFilePath, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
 #endif
 
 ma_result ma_decoder_uninit(ma_decoder* pDecoder);
@@ -5484,12 +5489,6 @@ static MA_INLINE void ma_device__set_state(ma_device* pDevice, ma_uint32 newStat
 static MA_INLINE ma_uint32 ma_device__get_state(ma_device* pDevice)
 {
     return pDevice->state;
-}
-
-/* A helper for determining whether or not the device is running in async mode. */
-static MA_INLINE ma_bool32 ma_device__is_async(ma_device* pDevice)
-{
-    return pDevice->onData != NULL;
 }
 
 
@@ -24507,13 +24506,8 @@ ma_result ma_device_start(ma_device* pDevice)
         return ma_post_error(pDevice, MA_LOG_LEVEL_ERROR, "ma_device_start() called for an uninitialized device.", MA_DEVICE_NOT_INITIALIZED);
     }
 
-    /*
-    Starting the device doesn't do anything in synchronous mode because in that case it's started automatically with
-    ma_device_write() and ma_device_read(). It's best to return an error so that the application can be aware that
-    it's not doing it right.
-    */
-    if (!ma_device__is_async(pDevice)) {
-        return ma_post_error(pDevice, MA_LOG_LEVEL_ERROR, "ma_device_start() called in synchronous mode. This should only be used in asynchronous/callback mode.", MA_DEVICE_NOT_INITIALIZED);
+    if (ma_device__get_state(pDevice) == MA_STATE_STARTED) {
+        return ma_post_error(pDevice, MA_LOG_LEVEL_WARNING, "ma_device_start() called when the device is already started.", MA_INVALID_OPERATION);  /* Already started. Returning an error to let the application know because it probably means they're doing something wrong. */
     }
 
     result = MA_ERROR;
@@ -24562,14 +24556,8 @@ ma_result ma_device_stop(ma_device* pDevice)
         return ma_post_error(pDevice, MA_LOG_LEVEL_ERROR, "ma_device_stop() called for an uninitialized device.", MA_DEVICE_NOT_INITIALIZED);
     }
 
-    /*
-    Stopping is slightly different for synchronous mode. In this case it just tells the driver to stop the internal processing of the device. Also,
-    stopping in synchronous mode does not require state checking.
-    */
-    if (!ma_device__is_async(pDevice)) {
-        if (pDevice->pContext->onDeviceStop) {
-            return pDevice->pContext->onDeviceStop(pDevice);
-        }
+    if (ma_device__get_state(pDevice) == MA_STATE_STOPPED) {
+        return ma_post_error(pDevice, MA_LOG_LEVEL_WARNING, "ma_device_stop() called when the device is already stopped.", MA_INVALID_OPERATION);   /* Already stopped. Returning an error to let the application know because it probably means they're doing something wrong. */
     }
 
     result = MA_ERROR;
@@ -33035,6 +33023,10 @@ Device
 /*
 REVISION HISTORY
 ================
+v0.9.6 - 2019-xx-xx
+  - Don't trigger an assert when ma_device_start() is called on a device that is already started. This will now log a warning
+    and return MA_INVALID_OPERATION. The same applies for ma_device_stop().
+
 v0.9.5 - 2019-05-21
   - Add logging to ma_dlopen() and ma_dlsym().
   - Add ma_decoder_get_length_in_pcm_frames().
