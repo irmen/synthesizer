@@ -95,10 +95,12 @@ def stream_pcm(source):
         print(".", end="", flush=True)
         required_frames = yield sample_data
 
-device = miniaudio.PlaybackDevice(ma_output_format=miniaudio.ma_format_s16, nchannels=channels, sample_rate=sample_rate)
+device = miniaudio.PlaybackDevice(ma_output_format=miniaudio.ma_format_s16,
+                                  nchannels=channels, sample_rate=sample_rate)
 ffmpeg = subprocess.Popen(["ffmpeg", "-v", "fatal", "-hide_banner", "-nostdin",
                            "-i", filename, "-f", "s16le", "-acodec", "pcm_s16le",
-                           "-ac", str(channels), "-ar", str(sample_rate), "-"], stdin=None, stdout=subprocess.PIPE)
+                           "-ac", str(channels), "-ar", str(sample_rate), "-"],
+                          stdin=None, stdout=subprocess.PIPE)
 stream = stream_pcm(ffmpeg.stdout)
 next(stream)  # start the generator
 device.start(stream)
