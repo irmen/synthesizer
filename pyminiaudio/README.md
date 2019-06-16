@@ -163,9 +163,9 @@ Software license for these Python bindings, miniaudio and the decoders: MIT
            Halt playback and close down the device.
        
        start(self, audio_producer: Callable[[int, int, int], Union[bytes, array.array]]) -> None
-           Start the audio device: playback begins. The audio data is provided by the given audio_producer function.
-           The function receives three parameters: required number of frames, sample width, number of channels.
-           THe function must return the sample data as raw bytes or as an array.array
+           Start the audio device: playback begins. The audio data is provided by the given audio_producer
+           generator. The generator gets sent the required number of frames and should yield the sample data
+           as raw bytes or as an array.array.  (it should already be started before passing it in)
        
        stop(self) -> None
            Halt playback.
