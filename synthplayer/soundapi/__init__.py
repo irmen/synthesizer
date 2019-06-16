@@ -11,6 +11,8 @@ try:
     available_mix_play_apis.append(SoundcardThreadMixed)
 except ImportError:
     pass
+except OSError:
+    pass        # on older windows versions (7) the soundcard library may crash with this error
 
 
 try:
