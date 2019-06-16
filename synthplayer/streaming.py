@@ -21,14 +21,18 @@ from typing import Callable, Generator, BinaryIO, Optional, Union, Iterable, Tup
 from types import TracebackType
 from .sample import Sample
 from . import params
+try:
+    import miniaudio
+except ImportError:
+    miniaudio = None
 
 
 __all__ = ["AudiofileToWavStream", "StreamMixer", "RealTimeMixer", "StreamingSample", "SampleStream",
-           "VolumeFilter", "EndlessFramesFilter"]
+           "VolumeFilter", "EndlessFramesFilter", "get_file_info"]
 
 log = logging.getLogger("synthplayer.streaming")
 
-AudioFormatProbe = namedtuple("AudioFormatProbe", ["rate", "channels", "sampformat", "bitspersample", "fileformat", "duration"])
+AudioFormatInfo = namedtuple("AudioFormatInfo", ["rate", "channels", "sampformat", "bitspersample", "fileformat", "duration", "num_frames"])
 
 
 antipop_fadein = 0.005
@@ -54,12 +58,12 @@ class AudiofileToWavStream(io.RawIOBase):
     def __init__(self, filename: str, outputfilename: str = "", samplerate: int = 0,
                  channels: int = 0, sampleformat: str = "", bitspersample: int = 0,
                  hqresample: bool = True, startfrom: float = 0.0, duration: float = 0.0) -> None:
-        samplerate = samplerate or params.norm_samplerate
-        channels = channels or params.norm_nchannels
-        sampleformat = sampleformat or str(8*params.norm_samplewidth)
+        self.sample_rate = samplerate or params.norm_samplerate
+        self.nchannels = channels or params.norm_nchannels
+        self.sample_format = sampleformat or str(8 * params.norm_samplewidth)
         if bitspersample == 0:
             try:
-                bitspersample = int(sampleformat)
+                bitspersample = int(self.sample_format)
             except ValueError:
                 pass
         self.name = filename
@@ -74,32 +78,31 @@ class AudiofileToWavStream(io.RawIOBase):
         self.format_probe = None
         self._startfrom = startfrom
         self._duration = duration
-        if self.ffprobe_executable:
-            try:
-                # probe the existing file format, to see if we can avoid needless conversion
-                probe = self.probe_format(self.name)
-                self.conversion_required = probe.rate != samplerate or probe.channels != channels \
-                    or probe.sampformat != sampleformat or probe.fileformat != "wav" \
-                    or self._startfrom > 0 or self._duration > 0 \
-                    or (bitspersample != 0 and probe.bitspersample != 0 and probe.bitspersample != bitspersample)
-                self.format_probe = probe
-            except (subprocess.CalledProcessError, IOError, OSError):
-                pass
+        try:
+            # probe the existing file format, to see if we can avoid needless conversion
+            probe = self.probe_format(self.name)
+            self.conversion_required = probe.rate != self.sample_rate or probe.channels != self.nchannels \
+                                       or probe.sampformat != self.sample_format or probe.fileformat != "wav" \
+                                       or self._startfrom > 0 or self._duration > 0 \
+                                       or (bitspersample != 0 and probe.bitspersample != 0 and probe.bitspersample != bitspersample)
+            self.format_probe = probe
+        except (subprocess.CalledProcessError, IOError, OSError):
+            probe = None
         if self.conversion_required:
-            if samplerate:
-                samplerate = int(samplerate)
-                assert 2000 <= samplerate <= 200000
+            if self.sample_rate:
+                self.sample_rate = int(self.sample_rate)
+                assert 2000 <= self.sample_rate <= 200000
                 if hqresample:
                     if self.ffmpeg_executable and not self.supports_hq_resample():
                         raise RuntimeError("ffmpeg not found or it isn't compiled with libsoxr, so hq resampling is not supported")
-                    self.resample_options = ["-af", "aresample=resampler=soxr", "-ar", str(samplerate)]
+                    self.resample_options = ["-af", "aresample=resampler=soxr", "-ar", str(self.sample_rate)]
                 else:
-                    self.resample_options = ["-ar", str(samplerate)]
-            if channels:
-                channels = int(channels)
-                assert 1 <= channels <= 9
-                self.downmix_options = ["-ac", str(channels)]
-            if sampleformat:
+                    self.resample_options = ["-ar", str(self.sample_rate)]
+            if self.nchannels:
+                self.nchannels = int(self.nchannels)
+                assert 1 <= self.nchannels <= 9
+                self.downmix_options = ["-ac", str(self.nchannels)]
+            if self.sample_format:
                 codec = {
                     "8": "pcm_u8",
                     "16": "pcm_s16le",
@@ -108,9 +111,9 @@ class AudiofileToWavStream(io.RawIOBase):
                     "float": "pcm_f32le",
                     "alaw": "pcm_alaw",
                     "ulaw": "pcm_mulaw"
-                }[sampleformat]
+                }[self.sample_format]
                 self.sampleformat_options = ["-acodec", codec]
-        self.start_stream()
+        self.start_stream(probe)
 
     @classmethod
     def supports_hq_resample(cls) -> bool:
@@ -123,16 +126,33 @@ class AudiofileToWavStream(io.RawIOBase):
         return False
 
     @classmethod
-    def probe_format(cls, filename: str) -> AudioFormatProbe:
+    def probe_format(cls, filename: str) -> AudioFormatInfo:
+        # first try to use miniaudio if it's available
+        if miniaudio:
+            try:
+                info = miniaudio.get_file_info(filename)
+            except miniaudio.DecodeError:
+                pass   # not a file recognised by miniaudio
+            else:
+                sample_format = {
+                    miniaudio.ma_format_unknown: "?",
+                    miniaudio.ma_format_u8: "8",
+                    miniaudio.ma_format_s16: "16",
+                    miniaudio.ma_format_s24: "24",
+                    miniaudio.ma_format_s32: "32",
+                    miniaudio.ma_format_f32: "float"
+                }[info.sample_format]
+                return AudioFormatInfo(info.sample_rate, info.nchannels, sample_format, info.sample_width*8,
+                                       info.file_format, info.duration, info.num_frames)
+        # if it's a .wav, we can open that ourselves
         try:
-            # first check if it's a .wav we can open ourselves
             with wave.open(filename, "rb") as wf:
                 duration = wf.getnframes() / wf.getframerate()
-                return AudioFormatProbe(wf.getframerate(), wf.getnchannels(),
-                                        str(wf.getsampwidth()*8), wf.getsampwidth()*8, "wav", duration)
+                return AudioFormatInfo(wf.getframerate(), wf.getnchannels(),
+                                       str(wf.getsampwidth()*8), wf.getsampwidth() * 8, "wav", duration, wf.getnframes())
         except wave.Error:
             pass
-        # no wav, try the probe tool
+        # fall back to the probe tool
         command = [cls.ffprobe_executable, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-i", filename]
         probe = subprocess.check_output(command)
         probe = json.loads(probe.decode())
@@ -153,28 +173,53 @@ class AudiofileToWavStream(io.RawIOBase):
         }.get(stream["sample_fmt"], "<unknown>")
         bitspersample = stream["bits_per_sample"]
         if bitspersample == 0:
-            try:
-                bitspersample = int(sampleformat)
-            except ValueError:
-                pass
-        fileformat = probe["format"]["format_name"]
-        duration = probe["format"].get("duration") or stream.get("duration")
-        duration = float(duration) if duration else None
-        result = AudioFormatProbe(samplerate, nchannels, sampleformat, bitspersample, fileformat, duration)
+            if sampleformat == "float":
+                bitspersample = 32
+            else:
+                try:
+                    bitspersample = int(sampleformat)
+                except ValueError:
+                    pass
+        fileformat = stream["codec_name"]
+        duration = stream.get("duration") or probe["format"].get("duration")
+        duration = float(duration) if duration else 0.0
+        num_frames = 0
+        if duration > 0:
+            num_frames = samplerate / duration
+        result = AudioFormatInfo(samplerate, nchannels, sampleformat, bitspersample, fileformat, duration, num_frames)
         log.debug("format probe of %s: %s", filename, result)
         return result
 
-    def start_stream(self) -> Optional[BinaryIO]:
+    def start_stream(self, info: Optional[AudioFormatInfo]) -> None:
         if not self.conversion_required:
             if self.outputfilename:
                 log.debug("direct copy from %s to %s", self.name, self.outputfilename)
                 with open(self.name, "rb") as source:
                     with open(self.outputfilename, "wb") as dest:
                         shutil.copyfileobj(source, dest)
-                return None
+                return
             log.debug("direct stream input from %s", self.name)
             self.stream = open(self.name, "rb")
+            return
         else:
+            # first, attempt to stream via miniaudio
+            if miniaudio:
+                ma_output_format = {
+                    "8": miniaudio.ma_format_u8,
+                    "16": miniaudio.ma_format_s16,
+                    "32": miniaudio.ma_format_s32,
+                    "float": miniaudio.ma_format_f32
+                }[self.sample_format]
+                try:
+                    pcm_gen = miniaudio.stream_file(self.name, ma_output_format, self.nchannels, self.sample_rate)
+                    num_frames = 0
+                    if info:
+                        num_frames = int(info.num_frames * (self.sample_rate / info.rate))
+                    self.stream = miniaudio.WavFileReadStream(pcm_gen, self.sample_rate, self.nchannels, ma_output_format, num_frames)
+                except miniaudio.DecodeError:
+                    pass   # something that miniaudio can't decode, fall back to other methods
+                else:
+                    return
             if self.ffmpeg_executable:
                 command = [self.ffmpeg_executable, "-v", "fatal", "-hide_banner", "-nostdin"]
                 if self._startfrom > 0:
@@ -189,13 +234,13 @@ class AudiofileToWavStream(io.RawIOBase):
                     command.extend(["-y", self.outputfilename])
                     log.debug("ffmpeg file conversion: %s", " ".join(command))
                     subprocess.check_call(command)
-                    return None
+                    return
                 command.extend(["-f", "wav", "-"])
                 log.debug("ffmpeg streaming: %s", " ".join(command))
                 try:
                     converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
                     self.stream = converter.stdout      # type: ignore
-                    return None
+                    return
                 except FileNotFoundError:
                     # somehow the ffmpeg decoder executable couldn't be launched
                     pass
@@ -211,12 +256,11 @@ class AudiofileToWavStream(io.RawIOBase):
                         converter = subprocess.Popen(command, stdin=None, stdout=subprocess.PIPE)
                         self.stream = converter.stdout      # type: ignore
                         log.debug("oggdec streaming: %s", " ".join(command))
-                    return None
+                    return
                 except FileNotFoundError:
                     # somehow the oggdec decoder executable couldn't be launched
                     pass
             raise RuntimeError("ffmpeg or oggdec (vorbis-tools) required for sound file decoding/conversion")
-        return self.stream
 
     def read(self, size: int = sys.maxsize) -> Optional[bytes]:
         return self.stream.read(size)   # type: ignore
@@ -235,6 +279,10 @@ class AudiofileToWavStream(io.RawIOBase):
             return self.stream.closed
         else:
             return True
+
+
+def get_file_info(filename: str) -> AudioFormatInfo:
+    return AudiofileToWavStream.probe_format(filename)
 
 
 class StreamingSample(Sample):

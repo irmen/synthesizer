@@ -247,3 +247,14 @@ ffmpeg.terminate()
        
        stop(self) -> None
            Halt playback.
+
+
+    class WavFileReadStream(pcm_sample_gen: Generator[Union[bytes, array.array], int, NoneType], sample_rate: int, nchannels: int, ma_output_format: int, max_frames: int = 0) -> None
+    
+        An IO stream that reads as a .wav file, and which gets its pcm samples from the provided producer
+    
+        close(self) -> None
+            Flush and close the IO object.
+        
+        read(self, amount: int) -> Union[bytes, NoneType]
+            Read bytes from the stream.

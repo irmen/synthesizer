@@ -7,12 +7,14 @@ Software license: "MIT software license". See http://opensource.org/licenses/MIT
 
 import sys
 import os
+import io
 import array
 import struct
 import inspect
+import wave
 from typing import Generator, List, Tuple, Dict, Optional, Union, Any
 from _miniaudio import ffi, lib
-from _miniaudio.lib import ma_format_f32, ma_format_u8, ma_format_s16, ma_format_s32
+from _miniaudio.lib import ma_format_unknown, ma_format_u8, ma_format_s16, ma_format_s24, ma_format_s32, ma_format_f32
 
 lib.init_miniaudio()
 
@@ -72,7 +74,7 @@ def get_file_info(filename: str) -> SoundFileInfo:
         return flac_get_file_info(filename)
     elif ext == ".wav":
         return wav_get_file_info(filename)
-    raise ValueError("unsupported file format")
+    raise DecodeError("unsupported file format")
 
 
 def read_file(filename: str) -> DecodedSoundFile:
@@ -86,7 +88,7 @@ def read_file(filename: str) -> DecodedSoundFile:
         return flac_read_file_s16(filename)
     elif ext == ".wav":
         return wav_read_file_s16(filename)
-    raise ValueError("unsupported file format")
+    raise DecodeError("unsupported file format")
 
 
 def vorbis_get_file_info(filename: str) -> SoundFileInfo:
@@ -727,7 +729,7 @@ def decode_file(filename: str, ma_output_format: int = ma_format_s16,
     decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
     result = lib.ma_decode_file(filenamebytes, ffi.addressof(decoder_config), frames, data)
     if result != lib.MA_SUCCESS:
-        raise MiniaudioError("failed to decode file", result)
+        raise DecodeError("failed to decode file", result)
     buffer = ffi.buffer(data[0], frames[0] * nchannels * sample_width)
     samples.frombytes(buffer)
     return DecodedSoundFile(filename, nchannels, sample_rate, sample_width, ma_output_format, samples)
@@ -742,7 +744,7 @@ def decode(data: bytes, ma_output_format: int = ma_format_s16,
     decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
     result = lib.ma_decode_memory(data, len(data), ffi.addressof(decoder_config), frames, memory)
     if result != lib.MA_SUCCESS:
-        raise MiniaudioError("failed to decode data", result)
+        raise DecodeError("failed to decode data", result)
     buffer = ffi.buffer(memory[0], frames[0] * nchannels * sample_width)
     samples.frombytes(buffer)
     return DecodedSoundFile("<memory>", nchannels, sample_rate, sample_width, ma_output_format, samples)
@@ -787,7 +789,7 @@ def stream_file(filename: str, ma_output_format: int = ma_format_s16, nchannels:
     decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
     result = lib.ma_decoder_init_file(filenamebytes, ffi.addressof(decoder_config), decoder)
     if result != lib.MA_SUCCESS:
-        raise MiniaudioError("failed to decode file", result)
+        raise DecodeError("failed to decode file", result)
     g = _samples_generator(frames_to_read, nchannels, ma_output_format, decoder, None)
     dummy = next(g)
     assert len(dummy) == 0
@@ -808,7 +810,7 @@ def stream_memory(data: bytes, ma_output_format: int = ma_format_s16, nchannels:
     decoder_config = lib.ma_decoder_config_init(ma_output_format, nchannels, sample_rate)
     result = lib.ma_decoder_init_memory(data, len(data), ffi.addressof(decoder_config), decoder)
     if result != lib.MA_SUCCESS:
-        raise MiniaudioError("failed to decode memory", result)
+        raise DecodeError("failed to decode memory", result)
     g = _samples_generator(frames_to_read, nchannels, ma_output_format, decoder, data)
     dummy = next(g)
     assert len(dummy) == 0
@@ -897,15 +899,58 @@ class PlaybackDevice:
             except Exception:
                 self.audio_producer = None
                 raise
-            if isinstance(samples, array.array):
-                samples_bytes = memoryview(samples).cast('B')       # type: ignore
-            elif isinstance(samples, memoryview) and samples.itemsize != 1:
-                samples_bytes = samples.cast('B')    # type: ignore
-            else:
-                # TODO numpy array support?
-                samples_bytes = samples
+            samples_bytes = _bytes_from_generator_samples(samples)
             if samples_bytes:
                 if len(samples_bytes) > framecount * self.sample_width * self.nchannels:
                     self.audio_producer = None
                     raise MiniaudioError("number of frames from callback exceeds maximum")
                 ffi.memmove(output, samples_bytes, len(samples_bytes))
+
+
+def _bytes_from_generator_samples(samples: Union[array.array, memoryview, bytes]) -> bytes:
+    if isinstance(samples, array.array):
+        return memoryview(samples).cast('B')       # type: ignore
+    elif isinstance(samples, memoryview) and samples.itemsize != 1:
+        return samples.cast('B')    # type: ignore
+    # TODO numpy array support?
+    return samples      # type: ignore
+
+
+class WavFileReadStream(io.RawIOBase):
+    """An IO stream that reads as a .wav file, and which gets its pcm samples from the provided producer"""
+    def __init__(self, pcm_sample_gen: AudioProducerType, sample_rate: int, nchannels: int,
+                 ma_output_format: int, max_frames: int = 0) -> None:
+        self.sample_gen = pcm_sample_gen
+        self.sample_rate = sample_rate
+        self.nchannels = nchannels
+        self.format = ma_output_format
+        self.max_frames = max_frames
+        self.sample_width, _ = _decode_ma_format(ma_output_format)
+        self.max_bytes = (max_frames * nchannels * self.sample_width) or sys.maxsize
+        self.bytes_done = 0
+        # create WAVE header   TODO: use miniaudio's functions for that?
+        memio = io.BytesIO()
+        w = wave.open(memio, "wb")
+        w.setparams((self.nchannels, self.sample_width, self.sample_rate, max_frames, "NONE", "not compressed"))
+        w.writeframesraw(b"")       # force header out
+        self.buffered = memio.getvalue()
+        w.close()
+
+    def read(self, amount: int = sys.maxsize) -> Optional[bytes]:
+        if self.bytes_done >= self.max_bytes or not self.sample_gen:
+            return None
+        while len(self.buffered) < amount:
+            try:
+                samples = next(self.sample_gen)
+            except StopIteration:
+                self.bytes_done = sys.maxsize
+                break
+            else:
+                self.buffered += _bytes_from_generator_samples(samples)
+        result = self.buffered[:amount]
+        self.buffered = self.buffered[amount:]
+        self.bytes_done += len(result)
+        return result
+
+    def close(self) -> None:
+        pass
