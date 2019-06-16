@@ -661,7 +661,7 @@ class DeviceInfo:
         self.max_sample_rate = max_sample_rate
 
 
-def ma_get_devices() -> Tuple[List[str], List[str]]:
+def get_devices() -> Tuple[List[str], List[str]]:
     """Get two lists of supported audio devices: playback devices, recording devices."""
     playback_infos = ffi.new("ma_device_info**")
     playback_count = ffi.new("ma_uint32*")
@@ -716,8 +716,8 @@ def _ma_format_from_width(sample_width: int, is_float: bool = False) -> int:
         raise ValueError("unsupported sample_width", sample_width)
 
 
-def ma_decode_file(filename: str, ma_output_format: int = ma_format_s16,
-                   nchannels: int = 2, sample_rate: int = 44100) -> DecodedSoundFile:
+def decode_file(filename: str, ma_output_format: int = ma_format_s16,
+                nchannels: int = 2, sample_rate: int = 44100) -> DecodedSoundFile:
     """Convenience function to decode any supported audio file to raw PCM samples in your chosen format."""
     sample_width, samples = _decode_ma_format(ma_output_format)
     filenamebytes = _get_filename_bytes(filename)
@@ -732,8 +732,8 @@ def ma_decode_file(filename: str, ma_output_format: int = ma_format_s16,
     return DecodedSoundFile(filename, nchannels, sample_rate, sample_width, ma_output_format, samples)
 
 
-def ma_decode(data: bytes, ma_output_format: int = ma_format_s16,
-              nchannels: int = 2, sample_rate: int = 44100) -> DecodedSoundFile:
+def decode(data: bytes, ma_output_format: int = ma_format_s16,
+           nchannels: int = 2, sample_rate: int = 44100) -> DecodedSoundFile:
     """Convenience function to decode any supported audio file in memory to raw PCM samples in your chosen format."""
     sample_width, samples = _decode_ma_format(ma_output_format)
     frames = ffi.new("ma_uint64 *")
@@ -771,8 +771,8 @@ def _samples_generator(frames_to_read: int, nchannels: int, ma_output_format: in
         lib.ma_decoder_uninit(decoder)
 
 
-def ma_stream_file(filename: str, ma_output_format: int = ma_format_s16, nchannels: int = 2,
-                   sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
+def stream_file(filename: str, ma_output_format: int = ma_format_s16, nchannels: int = 2,
+                sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
     """
     Convenience generator function to decode and stream any supported audio file
     as chunks of raw PCM samples in the chosen format.
@@ -793,8 +793,8 @@ def ma_stream_file(filename: str, ma_output_format: int = ma_format_s16, nchanne
     return g
 
 
-def ma_stream_memory(data: bytes, ma_output_format: int = ma_format_s16, nchannels: int = 2,
-                     sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
+def stream_memory(data: bytes, ma_output_format: int = ma_format_s16, nchannels: int = 2,
+                  sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, None]:
     """
     Convenience generator function to decode and stream any supported audio file in memory
     as chunks of raw PCM samples in the chosen format.
@@ -897,6 +897,3 @@ class PlaybackDevice:
                     self.audio_producer = None
                     raise MiniaudioError("number of frames from callback exceeds maximum")
                 ffi.memmove(output, samples_bytes, len(samples_bytes))
-
-
-# TODO get rid of various ma_ prefixes

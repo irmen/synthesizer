@@ -4,7 +4,7 @@ from typing import Union
 import miniaudio
 
 
-sound = miniaudio.ma_decode_file("samples/music.ogg")
+sound = miniaudio.decode_file("samples/music.ogg")
 offset = 0
 
 
@@ -18,8 +18,8 @@ def memory_producer(framecount: int, sample_width: int, nchannels: int) -> Union
     return result
 
 
-#stream = miniaudio.ma_stream_file("samples/music.ogg")
-stream = miniaudio.ma_stream_memory(open("samples/music.ogg", "rb").read())
+stream = miniaudio.stream_file("samples/music.ogg")
+# stream = miniaudio.stream_memory(open("samples/music.ogg", "rb").read())
 
 
 def stream_producer(num_frames: int, sample_width: int, nchannels: int) -> Union[bytes, array.array, None]:
@@ -36,5 +36,6 @@ print("playback device backend:", d.backend)
 d.start(memory_producer)
 time.sleep(4)
 d.stop()
-time.sleep(1)
 d.close()
+print()
+

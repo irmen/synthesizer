@@ -62,16 +62,16 @@ Software license for these Python bindings, miniaudio and the decoders: MIT
     flac_stream_file(filename: str, frames_to_read: int = 1024) -> Generator[array.array, NoneType, NoneType]
         Streams the flac audio file as interleaved 16 bit signed integer sample arrays segments.
     
-    ma_decode(data: bytes, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100) -> miniaudio.DecodedSoundFile
+    decode(data: bytes, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100) -> miniaudio.DecodedSoundFile
         Convenience function to decode any supported audio file in memory to raw PCM samples in your chosen format.
     
-    ma_decode_file(filename: str, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100) -> miniaudio.DecodedSoundFile
+    decode_file(filename: str, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100) -> miniaudio.DecodedSoundFile
         Convenience function to decode any supported audio file to raw PCM samples in your chosen format.
     
-    ma_get_devices() -> Tuple[List[str], List[str]]
+    get_devices() -> Tuple[List[str], List[str]]
         Get two lists of supported audio devices: playback devices, recording devices.
     
-    ma_stream_file(filename: str, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, NoneType]
+    stream_file(filename: str, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, NoneType]
         Convenience generator function to decode and stream any supported audio file
         as chunks of raw PCM samples in the chosen format.
         If you send() a number into the generator rather than just using next() on it,
@@ -79,7 +79,7 @@ Software license for these Python bindings, miniaudio and the decoders: MIT
         This is particularly useful to plug this stream into an audio device callback that
         wants a variable number of frames per call.
     
-    ma_stream_memory(data: bytes, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, NoneType]
+    stream_memory(data: bytes, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, NoneType]
         Convenience generator function to decode and stream any supported audio file in memory
         as chunks of raw PCM samples in the chosen format.
         If you send() a number into the generator rather than just using next() on it,

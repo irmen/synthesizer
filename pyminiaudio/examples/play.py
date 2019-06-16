@@ -11,7 +11,7 @@ def show_info(filename):
 
 
 def stream_file(filename):
-    stream = miniaudio.ma_stream_file(filename)
+    stream = miniaudio.stream_file(filename)
 
     def stream_producer(num_frames, sample_width, nchannels):
         assert nchannels == 2 and sample_width == 2
