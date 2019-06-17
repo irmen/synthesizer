@@ -78,6 +78,7 @@ class AudiofileToWavStream(io.RawIOBase):
         self.format_probe = None
         self._startfrom = startfrom
         self._duration = duration
+        probe = None
         try:
             # probe the existing file format, to see if we can avoid needless conversion
             probe = self.probe_format(self.name)
@@ -87,7 +88,7 @@ class AudiofileToWavStream(io.RawIOBase):
                                        or (bitspersample != 0 and probe.bitspersample != 0 and probe.bitspersample != bitspersample)
             self.format_probe = probe
         except (subprocess.CalledProcessError, IOError, OSError):
-            probe = None
+            pass
         if self.conversion_required:
             if self.sample_rate:
                 self.sample_rate = int(self.sample_rate)
