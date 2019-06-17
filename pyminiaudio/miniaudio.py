@@ -19,7 +19,7 @@ from _miniaudio.lib import ma_format_unknown, ma_format_u8, ma_format_s16, ma_fo
 lib.init_miniaudio()
 
 
-__version__ = "1.3.dev0"
+__version__ = "1.3"
 
 
 class DecodedSoundFile:
