@@ -71,6 +71,8 @@ class AudioDecoder:
     We need two threads:
      1) main thread that spawns ffmpeg, reads radio stream data, and writes that to ffmpeg
      2) background thread that reads decoded audio data from ffmpeg and plays it
+
+     TODO: use miniaudio decoding if the stream is a format it supports (ogg, mp3)
     """
     def __init__(self, icecast_client, song_title_callback=None, levelmeter_callback=None):
         self.client = icecast_client

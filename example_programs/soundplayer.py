@@ -55,6 +55,7 @@ def play_console(filename_or_stream):
 class LevelGUI(tk.Frame):
     def __init__(self, audio_source, master=None):
         self.lowest_level = -50
+        self.have_started_playing = False
         super().__init__(master)
         self.master.title("Levels")
 
@@ -112,12 +113,13 @@ class LevelGUI(tk.Frame):
         try:
             sample = next(self.samplestream)
             self.audio_out.play_sample(sample)
+            self.have_started_playing = True
             self.after(20, self.stream_audio)
         except StopIteration:
             self.audio_out.close()
 
     def update(self):
-        if not self.audio_out.still_playing():
+        if not self.audio_out.still_playing() and self.have_started_playing:
             self.pbvar_left.set(0)
             self.pbvar_right.set(0)
             print("done!")
