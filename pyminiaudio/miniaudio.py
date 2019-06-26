@@ -668,6 +668,7 @@ def get_devices() -> Tuple[List[str], List[str]]:
         devs_playback = []
         devs_captures = []
         for i in range(playback_count[0]):
+            import pdb; pdb.set_trace()
             ma_device_info = playback_infos[0][i]
             devs_playback.append(ffi.string(ma_device_info.name).decode())
             # rest of the info structure is not filled...
@@ -818,6 +819,61 @@ def internal_data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CDat
 
 AudioProducerType = Generator[Union[bytes, array.array], int, None]
 
+
+class CaptureDevice:
+    def __init__(self, ma_input_format: int = ma_format_s16, nchannels: int = 2,
+                 sample_rate: int = 44100, buffersize_msec: int = 200):
+        self.audio_consumer = None
+        self.format = ma_input_format
+        self.sample_width, self.samples_array_proto = _decode_ma_format(ma_input_format)
+        self.nchannels = nchannels
+        self.sample_rate = sample_rate
+        self.buffersize_msec = buffersize_msec
+        self._device = ffi.new("ma_device *")
+        _callback_data[id(self)] = self
+        self.userdata_ptr = ffi.new("char[]", struct.pack('q', id(self)))
+        self._devconfig = lib.ma_device_config_init(lib.ma_device_type_capture)
+        lib.ma_device_config_set_params(ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec,
+                                        0, 0, 0, self.format, self.nchannels)
+        self._devconfig.pUserData = self.userdata_ptr
+        self._devconfig.dataCallback = lib.internal_data_callback
+        result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("failed to init device", result)
+        if self._device.pContext.backend == lib.ma_backend_null:
+            raise MiniaudioError("no suitable audio backend found")
+        self.backend = ffi.string(lib.ma_get_backend_name(self._device.pContext.backend)).decode()
+
+    def __del__(self) -> None:
+        self.close()
+
+    def start(self, audio_consumer) -> None:
+        if self.audio_consumer:
+            raise MiniaudioError("can't start an already started device")
+        self.audio_consumer = audio_consumer
+        result = lib.ma_device_start(self._device)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("failed to start audio device", result)
+
+    def stop(self) -> None:
+        """Halt playback."""
+        # self.audio_producer = None
+        result = lib.ma_device_stop(self._device)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("failed to stop audio device", result)
+
+    def close(self):
+        """Halt playback and close down the device."""
+        # self.audio_producer = None
+        if self._device is not None:
+            lib.ma_device_uninit(self._device)
+            self._device = None
+        if id(self) in _callback_data:
+            del _callback_data[id(self)]
+
+    def data_callback(self, device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
+        if self.audio_consumer:
+            self.audio_consumer(input, framecount)
 
 class PlaybackDevice:
     """An audio device provided by miniaudio, for audio playback."""
