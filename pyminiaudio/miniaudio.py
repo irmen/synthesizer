@@ -668,7 +668,6 @@ def get_devices() -> Tuple[List[str], List[str]]:
         devs_playback = []
         devs_captures = []
         for i in range(playback_count[0]):
-            import pdb; pdb.set_trace()
             ma_device_info = playback_infos[0][i]
             devs_playback.append(ffi.string(ma_device_info.name).decode())
             # rest of the info structure is not filled...
@@ -873,7 +872,10 @@ class CaptureDevice:
 
     def data_callback(self, device: ffi.CData, output: ffi.CData, input: ffi.CData, framecount: int) -> None:
         if self.audio_consumer:
-            self.audio_consumer(input, framecount)
+            buffer_size = self.sample_width * self.nchannels * framecount
+            data = bytearray(buffer_size)
+            ffi.memmove(data, input, buffer_size)
+            self.audio_consumer(data, framecount)
 
 class PlaybackDevice:
     """An audio device provided by miniaudio, for audio playback."""
