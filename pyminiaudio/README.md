@@ -148,9 +148,6 @@ ffmpeg.terminate()
     decode_file(filename: str, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100) -> miniaudio.DecodedSoundFile
         Convenience function to decode any supported audio file to raw PCM samples in your chosen format.
     
-    get_devices() -> Tuple[List[str], List[str]]
-        Get two lists of supported audio devices: playback devices, recording devices.
-    
     stream_file(filename: str, ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100, frames_to_read: int = 1024) -> Generator[array.array, int, NoneType]
         Convenience generator function to decode and stream any supported audio file
         as chunks of raw PCM samples in the chosen format.
@@ -235,7 +232,6 @@ ffmpeg.terminate()
 
 
     class PlaybackDevice(ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100, buffersize_msec: int = 200)
-       
        An audio device provided by miniaudio, for audio playback.
        
        close(self)
@@ -251,7 +247,6 @@ ffmpeg.terminate()
 
 
     class WavFileReadStream(pcm_sample_gen: Generator[Union[bytes, array.array], int, NoneType], sample_rate: int, nchannels: int, ma_output_format: int, max_frames: int = 0) -> None
-    
         An IO stream that reads as a .wav file, and which gets its pcm samples from the provided producer
     
         close(self) -> None
@@ -259,3 +254,20 @@ ffmpeg.terminate()
         
         read(self, amount: int) -> Union[bytes, NoneType]
             Read bytes from the stream.
+
+
+    class Devices:
+        Access to the audio playback and record devices that miniaudio exposes
+    
+        get_captures(self) -> List[miniaudio.Device]
+            Get a list of capture devices
+        
+        get_playbacks(self) -> List[miniaudio.Device]
+            Get a list of playback devices
+        
+
+    class Device:
+        Contains various properties of a miniaudio playback or record device
+
+        info(self) -> Dict[str, Any]
+            obtain detailed info about the device
