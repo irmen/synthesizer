@@ -19,7 +19,7 @@ from _miniaudio.lib import ma_format_unknown, ma_format_u8, ma_format_s16, ma_fo
 lib.init_miniaudio()
 
 
-__version__ = "1.3"
+__version__ = "1.4"
 
 
 class DecodedSoundFile:
@@ -652,24 +652,29 @@ def _get_filename_bytes(filename: str) -> bytes:
 PLAYBACK = 'playback'
 CAPTURE = 'capture'
 
-class Device:
-    name: str
-    device_type: str
-    id: ffi.CData
 
-    def __init__(self, device_type: str, ma_device_info: ffi.CData, context: ffi.CData):
+class Device:
+    """Contains various properties of a miniaudio playback or record device"""
+    def __init__(self, device_type: str, ma_device_info: ffi.CData, context: ffi.CData) -> None:
         self._device_info = ma_device_info
         self.name = ffi.string(ma_device_info.name).decode()
         self.id = ma_device_info.id
         self.device_type = device_type
         self._context = context
 
-    def info(self):
+    def __str__(self) -> str:
+        return self.device_type + ":" + self.name
+
+    def info(self) -> Dict[str, Any]:
+        """obtain detailed info about the device"""
         if self.device_type == PLAYBACK:
             device_type = lib.ma_device_type_playback
         elif self.device_type == CAPTURE:
             device_type = lib.ma_device_type_capture
-        lib.ma_context_get_device_info(self._context, device_type, ffi.addressof(self.id), 0, ffi.addressof(self._device_info))
+        else:
+            raise ValueError("wrong device type")
+        lib.ma_context_get_device_info(self._context, device_type, ffi.addressof(self.id),
+                                       0, ffi.addressof(self._device_info))
         return {
             # Should these be converted to snake case?
             'minChannels': self._device_info.minChannels,
@@ -679,18 +684,18 @@ class Device:
             # TODO: Formats?
         }
 
+
 class Devices:
-    def __init__(self):
+    """Access to the audio playback and record devices that miniaudio exposes"""
+    def __init__(self) -> None:
         self._context = ffi.new("ma_context*")
         result = lib.ma_context_init(ffi.NULL, 0, ffi.NULL, self._context)
         if result != lib.MA_SUCCESS:
             raise MiniaudioError("cannot init context", result)
-
         self.backend = ffi.string(lib.ma_get_backend_name(self._context[0].backend)).decode()
 
-        self.__cache = {}
-
     def get_playbacks(self) -> List[Device]:
+        """Get a list of playback devices"""
         playback_infos = ffi.new("ma_device_info**")
         playback_count = ffi.new("ma_uint32*")
         result = lib.ma_context_get_devices(self._context, playback_infos, playback_count, ffi.NULL,  ffi.NULL)
@@ -703,6 +708,7 @@ class Devices:
         return devs
 
     def get_captures(self) -> List[Device]:
+        """Get a list of capture devices"""
         capture_infos = ffi.new("ma_device_info**")
         capture_count = ffi.new("ma_uint32*")
         result = lib.ma_context_get_devices(self._context, ffi.NULL,  ffi.NULL, capture_infos, capture_count)
@@ -716,36 +722,6 @@ class Devices:
 
     def __del__(self):
         lib.ma_context_uninit(self._context)
-
-
-
-def get_devices() -> Tuple[List[str], List[str]]:
-    """Get two lists of supported audio devices: playback devices, recording devices."""
-    playback_infos = ffi.new("ma_device_info**")
-    playback_count = ffi.new("ma_uint32*")
-    capture_infos = ffi.new("ma_device_info**")
-    capture_count = ffi.new("ma_uint32*")
-    context = ffi.new("ma_context*")
-    result = lib.ma_context_init(ffi.NULL, 0, ffi.NULL, context)
-    if result != lib.MA_SUCCESS:
-        raise MiniaudioError("cannot init context", result)
-    try:
-        result = lib.ma_context_get_devices(context, playback_infos, playback_count, capture_infos, capture_count)
-        if result != lib.MA_SUCCESS:
-            raise MiniaudioError("cannot get device infos", result)
-        devs_playback = []
-        devs_captures = []
-        for i in range(playback_count[0]):
-            ma_device_info = playback_infos[0][i]
-            devs_playback.append(ffi.string(ma_device_info.name).decode())
-            # rest of the info structure is not filled...
-        for i in range(capture_count[0]):
-            ma_device_info = capture_infos[0][i]
-            devs_captures.append(ffi.string(ma_device_info.name).decode())
-            # rest of the info structure is not filled...
-        return devs_playback, devs_captures
-    finally:
-        lib.ma_context_uninit(context)
 
 
 def _decode_ma_format(ma_output_format: int) -> Tuple[int, array.array]:

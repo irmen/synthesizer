@@ -1,6 +1,4 @@
-import os
 import miniaudio
-import json
 
 if __name__ == "__main__":
     devices = miniaudio.Devices()
@@ -20,4 +18,3 @@ if __name__ == "__main__":
         print("  {}".format(device.name))
         print("    {}".format(device.info()))
         print("\n")
-
