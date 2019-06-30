@@ -1,5 +1,6 @@
 import queue
 import miniaudio
+from itertools import chain
 from typing import List, Dict, Any, Optional, Union
 from .base import AudioApi
 from ..sample import Sample
@@ -11,26 +12,19 @@ class MiniaudioUtils:
         return miniaudio.__version__
 
     def ma_query_apis(self) -> List[Dict[str, Any]]:
-        return []
+        backend = miniaudio.Devices().backend
+        return [{
+            'name': backend
+        }]
 
-    def ma_query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
-        playback, record = miniaudio.get_devices()
+    def ma_query_devices(self) -> List[Dict[str, Any]]:
+        dev = miniaudio.Devices()
+        playback, record = dev.get_playbacks(), dev.get_captures()
         result = []
-        dev_id = 0
-        for dev in playback:
-            result.append({
-                dev_id: {
-                    "name": dev,
-                    "type": "playback"
-                }})
-            dev_id += 1
-        for dev in record:
-            result.append({
-                dev_id: {
-                    "name": dev,
-                    "type": "record"
-                }})
-            dev_id += 1
+        for dev in chain(playback, record):
+            info = {"name": dev.name, "type": dev.device_type}
+            # info.update(dev.info())   # TODO fix segfault
+            result.append(info)
         return result
 
     def ma_query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
@@ -82,7 +76,7 @@ class MiniaudioMixed(AudioApi, MiniaudioUtils):
     def query_apis(self) -> List[Dict[str, Any]]:
         return self.ma_query_apis()
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return self.ma_query_devices()
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
@@ -183,7 +177,7 @@ class MiniaudioSequential(AudioApi, MiniaudioUtils):
     def query_apis(self) -> List[Dict[str, Any]]:
         return self.ma_query_apis()
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return self.ma_query_devices()
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:

@@ -102,7 +102,7 @@ class PyAudioMixed(AudioApi, PyAudioUtils):
     def query_api_version(self) -> str:
         return pyaudio.get_portaudio_version_text()     # type: ignore
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         num_devices = self.audio.get_device_count()
         return [self.audio.get_device_info_by_index(i) for i in range(num_devices)]
 
@@ -205,7 +205,7 @@ class PyAudioSequential(AudioApi, PyAudioUtils):
     def query_api_version(self) -> str:
         return pyaudio.get_portaudio_version_text()     # type: ignore
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         num_devices = self.audio.get_device_count()
         return [self.audio.get_device_info_by_index(i) for i in range(num_devices)]
 

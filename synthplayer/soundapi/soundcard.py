@@ -10,22 +10,25 @@ from .. import params, streaming
 
 class SoundcardUtils:
     def scard_query_apis(self) -> List[Dict[str, Any]]:
-        apis = []
+        apis = {}  # type: Dict[str, Dict[str, Any]]
         for d in self.scard_query_devices():
-            for idx, details in d.items():
-                apis.append({
-                    'name': details["device.api"],
-                    'devices': [idx]
-                })
-        return apis
+            api = d["device.api"]
+            if api in apis:
+                apis[api]["devices"].append(d)
+            else:
+                apis[api] = {
+                    "name": api,
+                    "devices": []
+                }
+        return list(apis.values())
 
-    def scard_query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def scard_query_devices(self) -> List[Dict[str, Any]]:
         speakers = soundcard.all_speakers()
         result = []
-        for idx, speaker in enumerate(speakers):
+        for speaker in speakers:
             info = speaker._get_info()
             info['id'] = speaker.id
-            result.append({idx: info})
+            result.append(info)
         return result
 
     def scard_query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
@@ -84,7 +87,7 @@ class SoundcardThreadMixed(AudioApi, SoundcardUtils):
     def query_apis(self) -> List[Dict[str, Any]]:
         return self.scard_query_apis()
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return self.scard_query_devices()
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
@@ -172,7 +175,7 @@ class SoundcardThreadSequential(AudioApi, SoundcardUtils):
     def query_apis(self) -> List[Dict[str, Any]]:
         return self.scard_query_apis()
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return self.scard_query_devices()
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
