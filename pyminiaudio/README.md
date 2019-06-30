@@ -269,7 +269,7 @@ ffmpeg.terminate()
             Get a list of playback devices
         
 
-    class Device:
+    class DeviceInfo:
         Contains various properties of a miniaudio playback or record device
 
         info(self) -> Dict[str, Any]
