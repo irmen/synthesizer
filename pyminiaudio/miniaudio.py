@@ -11,7 +11,6 @@ import io
 import array
 import struct
 import inspect
-import wave
 from typing import Generator, List, Tuple, Dict, Optional, Union, Any
 from _miniaudio import ffi, lib
 from _miniaudio.lib import ma_format_unknown, ma_format_u8, ma_format_s16, ma_format_s24, ma_format_s32, ma_format_f32
@@ -633,6 +632,24 @@ def wav_stream_file(filename: str, frames_to_read: int = 1024) -> Generator[arra
         lib.drwav_close(wav)
 
 
+def wav_write_file(filename: str, sound: DecodedSoundFile) -> None:
+    """Writes the pcm sound to a WAV file"""
+    fmt = ffi.new("drwav_data_format*")
+    fmt.container = lib.drwav_container_riff
+    fmt.format = lib.DR_WAVE_FORMAT_PCM
+    fmt.channels = sound.nchannels
+    fmt.sampleRate = sound.sample_rate
+    fmt.bitsPerSample = sound.sample_width * 8
+    filename_bytes = filename.encode(sys.getfilesystemencoding())
+    pwav = lib.drwav_open_file_write_sequential(filename_bytes, fmt, sound.num_frames * sound.nchannels)
+    if pwav == ffi.NULL:
+        raise IOError("can't open file for writing")
+    try:
+        amount = lib.drwav_write_pcm_frames(pwav, sound.num_frames, sound.samples.tobytes())
+    finally:
+        lib.drwav_close(pwav)
+
+
 def _create_int_array(itemsize: int) -> array.array:
     for typecode in "bhilq":
         a = array.array(typecode)
@@ -963,13 +980,22 @@ class WavFileReadStream(io.RawIOBase):
         self.sample_width, _ = _decode_ma_format(ma_output_format)
         self.max_bytes = (max_frames * nchannels * self.sample_width) or sys.maxsize
         self.bytes_done = 0
-        # create WAVE header   TODO: use miniaudio's functions for that?
-        memio = io.BytesIO()
-        w = wave.open(memio, "wb")
-        w.setparams((self.nchannels, self.sample_width, self.sample_rate, max_frames, "NONE", "not compressed"))
-        w.writeframesraw(b"")       # force header out
-        self.buffered = memio.getvalue()
-        w.close()
+        # create WAVE header
+        fmt = ffi.new("drwav_data_format*")
+        fmt.container = lib.drwav_container_riff
+        fmt.format = lib.DR_WAVE_FORMAT_PCM
+        fmt.channels = nchannels
+        fmt.sampleRate = sample_rate
+        fmt.bitsPerSample = self.sample_width * 8
+        data = ffi.new("void**")
+        datasize = ffi.new("size_t *")
+        if max_frames > 0:
+            pwav = lib.drwav_open_memory_write_sequential(data, datasize, fmt, max_frames * nchannels)
+        else:
+            pwav = lib.drwav_open_memory_write(data, datasize, fmt)
+        lib.drwav_close(pwav)
+        self.buffered = bytes(ffi.buffer(data[0], datasize[0]))
+        lib.drflac_free(data[0])
 
     def read(self, amount: int = sys.maxsize) -> Optional[bytes]:
         if self.bytes_done >= self.max_bytes or not self.sample_gen:

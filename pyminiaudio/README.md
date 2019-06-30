@@ -230,6 +230,9 @@ ffmpeg.terminate()
     wav_stream_file(filename: str, frames_to_read: int = 1024) -> Generator[array.array, NoneType, NoneType]
         Streams the WAV audio file as interleaved 16 bit signed integer sample arrays segments.
 
+    wav_write_file(filename: str, sound: miniaudio.DecodedSoundFile) -> None
+        Writes the pcm sound to a WAV file
+
 
     class PlaybackDevice(ma_output_format: int = 2, nchannels: int = 2, sample_rate: int = 44100, buffersize_msec: int = 200)
        An audio device provided by miniaudio, for audio playback.

@@ -196,6 +196,16 @@ void drmp3_free(void* p);
 
 /********************** dr_wav **********************************/
 
+/* Common data formats. */
+#define DR_WAVE_FORMAT_PCM          0x1
+#define DR_WAVE_FORMAT_ADPCM        0x2
+#define DR_WAVE_FORMAT_IEEE_FLOAT   0x3
+#define DR_WAVE_FORMAT_ALAW         0x6
+#define DR_WAVE_FORMAT_MULAW        0x7
+#define DR_WAVE_FORMAT_DVI_ADPCM    0x11
+#define DR_WAVE_FORMAT_EXTENSIBLE   0xFFFE
+
+
     typedef int8_t           drwav_int8;
     typedef uint8_t          drwav_uint8;
     typedef int16_t          drwav_int16;
@@ -220,6 +230,21 @@ typedef struct
 
 } drwav;
 
+typedef enum
+{
+    drwav_container_riff,
+    drwav_container_w64
+} drwav_container;
+
+typedef struct
+{
+    drwav_container container;  /* RIFF, W64. */
+    drwav_uint32 format;        /* DR_WAVE_FORMAT_* */
+    drwav_uint32 channels;
+    drwav_uint32 sampleRate;
+    drwav_uint32 bitsPerSample;
+} drwav_data_format;
+
 
     drwav_bool32 drwav_init_file(drwav* pWav, const char* filename);
     drwav* drwav_open_file(const char* filename);
@@ -227,6 +252,8 @@ typedef struct
     drwav* drwav_open_memory(const void* data, size_t dataSize);
 
     void drwav_close(drwav* pWav);
+    void drwav_free(void* pDataReturnedByOpenAndRead);
+
     size_t drwav_read_raw(drwav* pWav, size_t bytesToRead, void* pBufferOut);
     drwav_uint64 drwav_read_pcm_frames(drwav* pWav, drwav_uint64 framesToRead, void* pBufferOut);
     drwav_bool32 drwav_seek_to_pcm_frame(drwav* pWav, drwav_uint64 targetFrameIndex);
@@ -242,7 +269,11 @@ typedef struct
     float* drwav_open_memory_and_read_pcm_frames_f32(const void* data, size_t dataSize, unsigned int* channels, unsigned int* sampleRate, drwav_uint64* totalFrameCount);
     drwav_int32* drwav_open_memory_and_read_pcm_frames_s32(const void* data, size_t dataSize, unsigned int* channels, unsigned int* sampleRate, drwav_uint64* totalFrameCount);
 
-    void drwav_free(void* pDataReturnedByOpenAndRead);
+    drwav* drwav_open_file_write(const char* filename, const drwav_data_format* pFormat);
+    drwav* drwav_open_file_write_sequential(const char* filename, const drwav_data_format* pFormat, drwav_uint64 totalSampleCount);
+    drwav* drwav_open_memory_write(void** ppData, size_t* pDataSize, const drwav_data_format* pFormat);
+    drwav* drwav_open_memory_write_sequential(void** ppData, size_t* pDataSize, const drwav_data_format* pFormat, drwav_uint64 totalSampleCount);
+    drwav_uint64 drwav_write_pcm_frames(drwav* pWav, drwav_uint64 framesToWrite, const void* pData);
 
 
 typedef int ma_result;
