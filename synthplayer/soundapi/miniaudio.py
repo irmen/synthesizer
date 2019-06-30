@@ -18,12 +18,13 @@ class MiniaudioUtils:
         }]
 
     def ma_query_devices(self) -> List[Dict[str, Any]]:
-        dev = miniaudio.Devices()
-        playback, record = dev.get_playbacks(), dev.get_captures()
+        devices = miniaudio.Devices()
+        playback, record = devices.get_playbacks(), devices.get_captures()
         result = []
         for dev in chain(playback, record):
-            info = {"name": dev.name, "type": dev.device_type}
-            # info.update(dev.info())   # TODO fix segfault
+            info = dev.info()
+            info["name"] = dev.name
+            info["type"] = dev.device_type
             result.append(info)
         return result
 

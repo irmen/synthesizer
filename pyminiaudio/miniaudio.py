@@ -670,13 +670,13 @@ PLAYBACK = 'playback'
 CAPTURE = 'capture'
 
 
-class Device:
-    """Contains various properties of a miniaudio playback or record device"""
+class DeviceInfo:
+    """Contains various properties of a miniaudio playback or capture device"""
     def __init__(self, device_type: str, ma_device_info: ffi.CData, context: ffi.CData) -> None:
-        self._device_info = ma_device_info
         self.name = ffi.string(ma_device_info.name).decode()
-        self.id = ma_device_info.id
         self.device_type = device_type
+        self._id = ma_device_info.id     # note: memory is owned by the Devices class. This should be fixed.
+        self._device_info = ma_device_info
         self._context = context
 
     def __str__(self) -> str:
@@ -690,20 +690,21 @@ class Device:
             device_type = lib.ma_device_type_capture
         else:
             raise ValueError("wrong device type")
-        lib.ma_context_get_device_info(self._context, device_type, ffi.addressof(self.id),
+        lib.ma_context_get_device_info(self._context, device_type, ffi.addressof(self._id),
                                        0, ffi.addressof(self._device_info))
+        formats = set(self._device_info.formats[0:self._device_info.formatCount])
+        format_names = {f: ffi.string(lib.ma_get_format_name(f)).decode() for f in formats}
         return {
-            # Should these be converted to snake case?
             'minChannels': self._device_info.minChannels,
             'maxChannels': self._device_info.maxChannels,
             'minSampleRate': self._device_info.minSampleRate,
             'maxSampleRate': self._device_info.maxSampleRate,
-            # TODO: Formats?
+            'formats': format_names
         }
 
 
 class Devices:
-    """Access to the audio playback and record devices that miniaudio exposes"""
+    """Access to the audio playback and capture devices that miniaudio exposes"""
     def __init__(self) -> None:
         self._context = ffi.new("ma_context*")
         result = lib.ma_context_init(ffi.NULL, 0, ffi.NULL, self._context)
@@ -711,7 +712,7 @@ class Devices:
             raise MiniaudioError("cannot init context", result)
         self.backend = ffi.string(lib.ma_get_backend_name(self._context[0].backend)).decode()
 
-    def get_playbacks(self) -> List[Device]:
+    def get_playbacks(self) -> List[DeviceInfo]:
         """Get a list of playback devices"""
         playback_infos = ffi.new("ma_device_info**")
         playback_count = ffi.new("ma_uint32*")
@@ -721,10 +722,10 @@ class Devices:
         devs = []
         for i in range(playback_count[0]):
             ma_device_info = playback_infos[0][i]
-            devs.append(Device(PLAYBACK, ma_device_info, self._context))
+            devs.append(DeviceInfo(PLAYBACK, ma_device_info, self._context))
         return devs
 
-    def get_captures(self) -> List[Device]:
+    def get_captures(self) -> List[DeviceInfo]:
         """Get a list of capture devices"""
         capture_infos = ffi.new("ma_device_info**")
         capture_count = ffi.new("ma_uint32*")
@@ -734,7 +735,7 @@ class Devices:
         devs = []
         for i in range(capture_count[0]):
             ma_device_info = capture_infos[0][i]
-            devs.append(Device(CAPTURE, ma_device_info, self._context))
+            devs.append(DeviceInfo(CAPTURE, ma_device_info, self._context))
         return devs
 
     def __del__(self):
