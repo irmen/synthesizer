@@ -890,7 +890,7 @@ AudioProducerType = Generator[Union[bytes, array.array], int, None]
 class PlaybackDevice:
     """An audio device provided by miniaudio, for audio playback."""
     def __init__(self, ma_output_format: int = ma_format_s16, nchannels: int = 2,
-                 sample_rate: int = 44100, buffersize_msec: int = 200, device_id: ffi.CData = ffi.NULL):
+                 sample_rate: int = 44100, buffersize_msec: int = 200, device_id: Union[ffi.CData, None] = None):
         self.format = ma_output_format
         self.sample_width, self.samples_array_proto = _decode_ma_format(ma_output_format)
         self.nchannels = nchannels
@@ -900,8 +900,12 @@ class PlaybackDevice:
         _callback_data[id(self)] = self
         self.userdata_ptr = ffi.new("char[]", struct.pack('q', id(self)))
         self._devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
+        if device_id:
+            _device_id = ffi.addressof(device_id)
+        else:
+            _device_id = ffi.NULL
         lib.ma_device_config_set_params(ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec,
-                                        0, self.format, self.nchannels, 0, 0, ffi.addressof(device_id), ffi.NULL)
+                                        0, self.format, self.nchannels, 0, 0, _device_id, ffi.NULL)
         self._devconfig.pUserData = self.userdata_ptr
         self._devconfig.dataCallback = lib.internal_data_callback
         self.audio_producer = None   # type: Optional[AudioProducerType]

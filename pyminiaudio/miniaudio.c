@@ -70,12 +70,8 @@ void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate
     config->playback.channels = channels;
     config->capture.format = capture_format;
     config->capture.channels = capture_channels;
-    // if (capture_device_id != NULL) {
-    //     config->capture.pDeviceID = capture_device_id;
-    // }
-    // if (playback_device_id != NULL) {
+    config->capture.pDeviceID = capture_device_id;
     config->playback.pDeviceID = playback_device_id;
-    // }
 }
 
 
