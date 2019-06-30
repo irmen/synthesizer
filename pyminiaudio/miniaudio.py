@@ -649,6 +649,74 @@ def _get_filename_bytes(filename: str) -> bytes:
 
 
 # MiniAudio API follows
+PLAYBACK = 'playback'
+CAPTURE = 'capture'
+
+class Device:
+    name: str
+    device_type: str
+    id: ffi.CData
+
+    def __init__(self, device_type: str, ma_device_info: ffi.CData, context: ffi.CData):
+        self._device_info = ma_device_info
+        self.name = ffi.string(ma_device_info.name).decode()
+        self.id = ma_device_info.id
+        self.device_type = device_type
+        self._context = context
+
+    def info(self):
+        if self.device_type == PLAYBACK:
+            device_type = lib.ma_device_type_playback
+        elif self.device_type == CAPTURE:
+            device_type = lib.ma_device_type_capture
+        lib.ma_context_get_device_info(self._context, device_type, ffi.addressof(self.id), 0, ffi.addressof(self._device_info))
+        return {
+            # Should these be converted to snake case?
+            'minChannels': self._device_info.minChannels,
+            'maxChannels': self._device_info.maxChannels,
+            'minSampleRate': self._device_info.minSampleRate,
+            'maxSampleRate': self._device_info.maxSampleRate,
+            # TODO: Formats?
+        }
+
+class Devices:
+    def __init__(self):
+        self._context = ffi.new("ma_context*")
+        result = lib.ma_context_init(ffi.NULL, 0, ffi.NULL, self._context)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("cannot init context", result)
+
+        self.backend = ffi.string(lib.ma_get_backend_name(self._context[0].backend)).decode()
+
+        self.__cache = {}
+
+    def get_playbacks(self) -> List[Device]:
+        playback_infos = ffi.new("ma_device_info**")
+        playback_count = ffi.new("ma_uint32*")
+        result = lib.ma_context_get_devices(self._context, playback_infos, playback_count, ffi.NULL,  ffi.NULL)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("cannot get device infos", result)
+        devs = []
+        for i in range(playback_count[0]):
+            ma_device_info = playback_infos[0][i]
+            devs.append(Device(PLAYBACK, ma_device_info, self._context))
+        return devs
+
+    def get_captures(self) -> List[Device]:
+        capture_infos = ffi.new("ma_device_info**")
+        capture_count = ffi.new("ma_uint32*")
+        result = lib.ma_context_get_devices(self._context, ffi.NULL,  ffi.NULL, capture_infos, capture_count)
+        if result != lib.MA_SUCCESS:
+            raise MiniaudioError("cannot get device infos", result)
+        devs = []
+        for i in range(capture_count[0]):
+            ma_device_info = capture_infos[0][i]
+            devs.append(Device(CAPTURE, ma_device_info, self._context))
+        return devs
+
+    def __del__(self):
+        lib.ma_context_uninit(self._context)
+
 
 
 def get_devices() -> Tuple[List[str], List[str]]:
@@ -822,7 +890,7 @@ AudioProducerType = Generator[Union[bytes, array.array], int, None]
 class PlaybackDevice:
     """An audio device provided by miniaudio, for audio playback."""
     def __init__(self, ma_output_format: int = ma_format_s16, nchannels: int = 2,
-                 sample_rate: int = 44100, buffersize_msec: int = 200):
+                 sample_rate: int = 44100, buffersize_msec: int = 200, device_id: Union[ffi.CData, None] = None):
         self.format = ma_output_format
         self.sample_width, self.samples_array_proto = _decode_ma_format(ma_output_format)
         self.nchannels = nchannels
@@ -832,8 +900,12 @@ class PlaybackDevice:
         _callback_data[id(self)] = self
         self.userdata_ptr = ffi.new("char[]", struct.pack('q', id(self)))
         self._devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
+        if device_id:
+            _device_id = ffi.addressof(device_id)
+        else:
+            _device_id = ffi.NULL
         lib.ma_device_config_set_params(ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec,
-                                        0, self.format, self.nchannels, 0, 0)
+                                        0, self.format, self.nchannels, 0, 0, _device_id, ffi.NULL)
         self._devconfig.pUserData = self.userdata_ptr
         self._devconfig.dataCallback = lib.internal_data_callback
         self.audio_producer = None   # type: Optional[AudioProducerType]
