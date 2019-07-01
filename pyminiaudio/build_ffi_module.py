@@ -414,7 +414,6 @@ typedef enum
 
 
 typedef union ma_device_id {
-    wchar_t wasapi[64];
     ...;
 } ma_device_id;
 typedef struct ma_context {
