@@ -866,7 +866,7 @@ def stream_memory(data: bytes, ma_output_format: int = ma_format_s16, nchannels:
     return g
 
 
-_callback_data = {}     # type: Dict[int, PlaybackDevice]
+_callback_data = {}     # type: Dict[int, Union[PlaybackDevice, CaptureDevice, DuplexStream]]
 
 
 @ffi.def_extern()
@@ -874,7 +874,7 @@ def internal_data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CDat
     if framecount == 0 or not device.pUserData:
         return
     userdata_id = struct.unpack('q', ffi.unpack(ffi.cast("char *", device.pUserData), struct.calcsize('q')))[0]
-    callback_device = _callback_data[userdata_id]  # type: PlaybackDevice
+    callback_device = _callback_data[userdata_id]  # type: Union[PlaybackDevice, CaptureDevice, DuplexStream]
     callback_device.data_callback(device, output, input, framecount)
 
 
