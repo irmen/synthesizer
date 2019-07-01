@@ -923,7 +923,6 @@ def pointer_or_null(_id:  Union[ffi.CData, None]) -> ffi.CData:
 class CaptureDevice(AbstractDevice):
     def __init__(self, ma_input_format: int = ma_format_s16, nchannels: int = 2,
                  sample_rate: int = 44100, buffersize_msec: int = 200, device_id: Union[ffi.CData, None] = None):
-        self.callback_generator = None
         self.format = ma_input_format
         self.sample_width, self.samples_array_proto = _decode_ma_format(ma_input_format)
         self.nchannels = nchannels
@@ -938,6 +937,7 @@ class CaptureDevice(AbstractDevice):
                                         0, 0, 0, self.format, self.nchannels, ffi.NULL, _device_id)
         self._devconfig.pUserData = self.userdata_ptr
         self._devconfig.dataCallback = lib.internal_data_callback
+        self.callback_generator = None # type: Optional[CaptureCallbackGeneratorType]
         result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
         if result != lib.MA_SUCCESS:
             raise MiniaudioError("failed to init device", result)
@@ -980,7 +980,7 @@ class PlaybackDevice(AbstractDevice):
                                         0, self.format, self.nchannels, 0, 0, _device_id, ffi.NULL)
         self._devconfig.pUserData = self.userdata_ptr
         self._devconfig.dataCallback = lib.internal_data_callback
-        self.callback_generator = None   # type: Optional[CallbackGeneratorType]
+        self.callback_generator = None   # type: Optional[PlaybackCallbackGeneratorType]
         result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
         if result != lib.MA_SUCCESS:
             raise MiniaudioError("failed to init device", result)
@@ -1014,7 +1014,6 @@ class PlaybackDevice(AbstractDevice):
 
 class DuplexStream(AbstractDevice):
     def __init__(self, playback_format: int = ma_format_s16, playback_channels: int = 2, capture_format: int = ma_format_s16, capture_channels: int = 2, sample_rate: int = 44100, buffersize_msec: int = 200, playback_device_id: Union[ffi.CData, None] = None, capture_device_id: Union[ffi.CData, None] = None):
-        self.callback_generator = None
         self.capture_format = capture_format
         self.playback_format = playback_format
         self.sample_width, self.samples_array_proto = _decode_ma_format(capture_format)
@@ -1035,6 +1034,8 @@ class DuplexStream(AbstractDevice):
         lib.ma_device_config_set_params(ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec, 0, playback_format, playback_channels, capture_format, capture_channels, _playback_device_id, _capture_device_id)
         self._devconfig.pUserData = self.userdata_ptr
         self._devconfig.dataCallback = lib.internal_data_callback
+        self.callback_generator = None # type: Optional[DuplexCallbackGeneratorType]
+
         result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
         if result != lib.MA_SUCCESS:
             raise MiniaudioError("failed to init device", result)
