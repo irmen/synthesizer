@@ -87,7 +87,7 @@ class SounddeviceMixed(AudioApi, SounddeviceUtils):
     def query_apis(self) -> List[Dict[str, Any]]:
         return list(sounddevice.query_hostapis())           # type: ignore
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return list(sounddevice.query_devices())            # type: ignore
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
@@ -169,7 +169,7 @@ class SounddeviceThreadMixed(AudioApi, SounddeviceUtils):
     def query_apis(self) -> List[Dict[str, Any]]:
         return list(sounddevice.query_hostapis())       # type: ignore
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return list(sounddevice.query_devices())        # type: ignore
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
@@ -267,7 +267,7 @@ class SounddeviceThreadSequential(AudioApi, SounddeviceUtils):
     def query_apis(self) -> List[Dict[str, Any]]:
         return list(sounddevice.query_hostapis())           # type: ignore
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return list(sounddevice.query_devices())            # type: ignore
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:

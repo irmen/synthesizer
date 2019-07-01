@@ -57,7 +57,7 @@ class AudioApi:
     def query_apis(self) -> List[Dict[str, Any]]:
         return []
 
-    def query_devices(self) -> List[Dict[int, Dict[str, Any]]]:
+    def query_devices(self) -> List[Dict[str, Any]]:
         return []
 
     def query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:

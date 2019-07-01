@@ -62,7 +62,7 @@ void init_miniaudio(void) {
 
 
 void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate, ma_uint32 buffer_size_msec,
-  ma_uint32 buffer_size_frames, ma_format format, ma_uint32 channels, ma_format capture_format, ma_uint32 capture_channels) {
+  ma_uint32 buffer_size_frames, ma_format format, ma_uint32 channels, ma_format capture_format, ma_uint32 capture_channels, ma_device_id* playback_device_id, ma_device_id* capture_device_id) {
     config->sampleRate = sample_rate;
     config->bufferSizeInFrames = buffer_size_frames;
     config->bufferSizeInMilliseconds = buffer_size_msec;
@@ -70,6 +70,8 @@ void ma_device_config_set_params(ma_device_config* config, ma_uint32 sample_rate
     config->playback.channels = channels;
     config->capture.format = capture_format;
     config->capture.channels = capture_channels;
+    config->capture.pDeviceID = capture_device_id;
+    config->playback.pDeviceID = playback_device_id;
 }
 
 
