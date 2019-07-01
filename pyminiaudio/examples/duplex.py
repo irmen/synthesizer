@@ -13,6 +13,7 @@ if __name__ == "__main__":
     duplex = miniaudio.DuplexStream(buffersize_msec=0, sample_rate=48000)
     generator = pass_through()
     next(generator)
+    print("Starting duplex stream. Press Ctrl + C to exit.")
     duplex.start(generator)
 
     running = True
