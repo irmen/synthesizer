@@ -1,3 +1,13 @@
+# Project specific
+Pipfile
+NOTES.md
+
+# Virtual enviroment
+/.venv/
+
+# Vscode
+/.vscode/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
