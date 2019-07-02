@@ -881,13 +881,14 @@ def internal_data_callback(device: ffi.CData, output: ffi.CData, input: ffi.CDat
 PlaybackCallbackGeneratorType = Generator[Union[bytes, array.array], int, None]
 CaptureCallbackGeneratorType = Generator[None, Union[bytes, array.array], None]
 DuplexCallbackGeneratorType = Generator[Union[bytes, array.array], Union[bytes, array.array], None]
+GeneratorTypes = Union[PlaybackCallbackGeneratorType, CaptureCallbackGeneratorType, DuplexCallbackGeneratorType]
 
 
 class AbstractDevice:
     def __del__(self) -> None:
         self.close()
 
-    def start(self, callback_generator) -> None:
+    def start(self, callback_generator: GeneratorTypes) -> None:
         if self.callback_generator:
             raise MiniaudioError("can't start an already started device")
         if not inspect.isgenerator(callback_generator):
@@ -904,7 +905,7 @@ class AbstractDevice:
         if result != lib.MA_SUCCESS:
             raise MiniaudioError("failed to stop audio device", result)
 
-    def close(self):
+    def close(self) -> None:
         """Halt playback and close down the device."""
         self.callback_generator = None
         if self._device is not None:
@@ -913,7 +914,8 @@ class AbstractDevice:
         if id(self) in _callback_data:
             del _callback_data[id(self)]
 
-def pointer_or_null(_id:  Union[ffi.CData, None]) -> ffi.CData:
+
+def pointer_or_null(_id: Union[ffi.CData, None]) -> ffi.CData:
     if _id:
         return ffi.addressof(_id)
     else:
@@ -922,7 +924,8 @@ def pointer_or_null(_id:  Union[ffi.CData, None]) -> ffi.CData:
 
 class CaptureDevice(AbstractDevice):
     def __init__(self, ma_input_format: int = ma_format_s16, nchannels: int = 2,
-                 sample_rate: int = 44100, buffersize_msec: int = 200, device_id: Union[ffi.CData, None] = None):
+                 sample_rate: int = 44100, buffersize_msec: int = 200, device_id: Union[ffi.CData, None] = None
+                 ) -> None:
         self.format = ma_input_format
         self.sample_width, self.samples_array_proto = _decode_ma_format(ma_input_format)
         self.nchannels = nchannels
@@ -937,7 +940,7 @@ class CaptureDevice(AbstractDevice):
                                         0, 0, 0, self.format, self.nchannels, ffi.NULL, _device_id)
         self._devconfig.pUserData = self.userdata_ptr
         self._devconfig.dataCallback = lib.internal_data_callback
-        self.callback_generator = None # type: Optional[CaptureCallbackGeneratorType]
+        self.callback_generator = None  # type: Optional[CaptureCallbackGeneratorType]
         result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
         if result != lib.MA_SUCCESS:
             raise MiniaudioError("failed to init device", result)
@@ -962,10 +965,12 @@ class CaptureDevice(AbstractDevice):
                 self.callback_generator = None
                 raise
 
+
 class PlaybackDevice(AbstractDevice):
     """An audio device provided by miniaudio, for audio playback."""
     def __init__(self, ma_output_format: int = ma_format_s16, nchannels: int = 2,
-                 sample_rate: int = 44100, buffersize_msec: int = 200, device_id: Union[ffi.CData, None] = None):
+                 sample_rate: int = 44100, buffersize_msec: int = 200, device_id: Union[ffi.CData, None] = None
+                 ) -> None:
         self.format = ma_output_format
         self.sample_width, self.samples_array_proto = _decode_ma_format(ma_output_format)
         self.nchannels = nchannels
@@ -1013,7 +1018,11 @@ class PlaybackDevice(AbstractDevice):
 
 
 class DuplexStream(AbstractDevice):
-    def __init__(self, playback_format: int = ma_format_s16, playback_channels: int = 2, capture_format: int = ma_format_s16, capture_channels: int = 2, sample_rate: int = 44100, buffersize_msec: int = 200, playback_device_id: Union[ffi.CData, None] = None, capture_device_id: Union[ffi.CData, None] = None):
+    def __init__(self, playback_format: int = ma_format_s16,
+                 playback_channels: int = 2, capture_format: int = ma_format_s16,
+                 capture_channels: int = 2, sample_rate: int = 44100, buffersize_msec: int = 200,
+                 playback_device_id: Union[ffi.CData, None] = None, capture_device_id: Union[ffi.CData, None] = None
+                 ) -> None:
         self.capture_format = capture_format
         self.playback_format = playback_format
         self.sample_width, self.samples_array_proto = _decode_ma_format(capture_format)
@@ -1031,10 +1040,13 @@ class DuplexStream(AbstractDevice):
         _capture_device_id = pointer_or_null(capture_device_id)
         _playback_device_id = pointer_or_null(playback_device_id)
 
-        lib.ma_device_config_set_params(ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec, 0, playback_format, playback_channels, capture_format, capture_channels, _playback_device_id, _capture_device_id)
+        lib.ma_device_config_set_params(
+            ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec, 0,
+            playback_format, playback_channels, capture_format, capture_channels,
+            _playback_device_id, _capture_device_id)
         self._devconfig.pUserData = self.userdata_ptr
         self._devconfig.dataCallback = lib.internal_data_callback
-        self.callback_generator = None # type: Optional[DuplexCallbackGeneratorType]
+        self.callback_generator = None  # type: Optional[DuplexCallbackGeneratorType]
 
         result = lib.ma_device_init(ffi.NULL, ffi.addressof(self._devconfig), self._device)
         if result != lib.MA_SUCCESS:
@@ -1063,6 +1075,7 @@ class DuplexStream(AbstractDevice):
                 samples_bytes = _bytes_from_generator_samples(out_data)
                 ffi.memmove(output, samples_bytes, len(samples_bytes))
 
+
 def _bytes_from_generator_samples(samples: Union[array.array, memoryview, bytes]) -> bytes:
     if isinstance(samples, array.array):
         return memoryview(samples).cast('B')       # type: ignore
@@ -1070,7 +1083,6 @@ def _bytes_from_generator_samples(samples: Union[array.array, memoryview, bytes]
         return samples.cast('B')    # type: ignore
     # TODO numpy array support?
     return samples      # type: ignore
-
 
 
 class WavFileReadStream(io.RawIOBase):

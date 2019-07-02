@@ -9,7 +9,6 @@ if __name__ == "__main__":
             print(".", end="", flush=True)
             data = yield data
 
-
     duplex = miniaudio.DuplexStream(buffersize_msec=0, sample_rate=48000)
     generator = pass_through()
     next(generator)
