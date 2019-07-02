@@ -1,6 +1,7 @@
 tinytag
 appdirs
 tqdm
+miniaudio
 sounddevice
 soundcard
 pyaudio

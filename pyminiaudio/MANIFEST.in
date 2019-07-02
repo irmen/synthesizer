@@ -1,4 +1,0 @@
-graft miniaudio
-prune examples
-include build_ffi_module.py
-include LICENSE

@@ -1,11 +1,10 @@
 [![saythanks](https://img.shields.io/badge/say-thanks-ff69b4.svg)](https://saythanks.io/to/irmen)
  synthplayer:[![Latest Version](https://img.shields.io/pypi/v/synthplayer.svg)](https://pypi.python.org/pypi/synthplayer/)
- miniaudio:[![Latest Version](https://img.shields.io/pypi/v/miniaudio.svg)](https://pypi.python.org/pypi/miniaudio/)
 
 **Software sound synthesizer (FM/PWM oscillators), sound file streaming and conversion, 
 and sound playback and mixing engine.**
 
-Libraries on Pypi: [synthplayer](https://pypi.org/project/synthplayer/) | [miniaudio](https://pypi.org/project/miniaudio/) 
+Pypi: [synthplayer](https://pypi.org/project/synthplayer/)  
 
 *requires Python 3.5 or newer*.
 
@@ -22,11 +21,6 @@ or set the ``synthplayer.playback.default_audio_device`` parameter at the start 
 (The environment variable has priority over the code parameter)
 
 To find the correct device number you can use the ``query_devices`` method or type ``python -m sounddevice``.
-
-# miniaudio
-
-See the [directory](./pyminiaudio/) of this sub-project for more details about these
-bindings to the miniaudio library for audio file decoding and sound playback.
 
 # synthplayer.synth
 
