@@ -45,6 +45,7 @@ efficient sequential streaming or real-time mixing of shorter sound clips.
 The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.
 These are written to an audio stream of one of the supported audio library backends, in this order:
 
+- [``miniaudio``](https://github.com/irmen/pyminiaudio/)
 - [``soundcard``](https://soundcard.readthedocs.io/)
 - [``sounddevice``](http://python-sounddevice.readthedocs.io/)
 - [``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) 
