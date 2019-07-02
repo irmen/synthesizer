@@ -675,7 +675,7 @@ class DeviceInfo:
     def __init__(self, device_type: str, ma_device_info: ffi.CData, context: ffi.CData) -> None:
         self.name = ffi.string(ma_device_info.name).decode()
         self.device_type = device_type
-        self._id = ma_device_info.id     # note: memory is owned by the Devices class. This should be fixed.
+        self._id = ma_device_info.id     # note: memory is owned by the Devices class. TODO This should be fixed.
         self._device_info = ma_device_info
         self._context = context
 
@@ -885,6 +885,9 @@ GeneratorTypes = Union[PlaybackCallbackGeneratorType, CaptureCallbackGeneratorTy
 
 
 class AbstractDevice:
+    callback_generator: Optional[GeneratorTypes]
+    _device: ffi.CData
+
     def __del__(self) -> None:
         self.close()
 
@@ -915,7 +918,7 @@ class AbstractDevice:
             del _callback_data[id(self)]
 
 
-def pointer_or_null(_id: Union[ffi.CData, None]) -> ffi.CData:
+def _pointer_or_null(_id: Union[ffi.CData, None]) -> ffi.CData:
     if _id:
         return ffi.addressof(_id)
     else:
@@ -935,7 +938,7 @@ class CaptureDevice(AbstractDevice):
         _callback_data[id(self)] = self
         self.userdata_ptr = ffi.new("char[]", struct.pack('q', id(self)))
         self._devconfig = lib.ma_device_config_init(lib.ma_device_type_capture)
-        _device_id = pointer_or_null(device_id)
+        _device_id = _pointer_or_null(device_id)
         lib.ma_device_config_set_params(ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec,
                                         0, 0, 0, self.format, self.nchannels, ffi.NULL, _device_id)
         self._devconfig.pUserData = self.userdata_ptr
@@ -980,7 +983,7 @@ class PlaybackDevice(AbstractDevice):
         _callback_data[id(self)] = self
         self.userdata_ptr = ffi.new("char[]", struct.pack('q', id(self)))
         self._devconfig = lib.ma_device_config_init(lib.ma_device_type_playback)
-        _device_id = pointer_or_null(device_id)
+        _device_id = _pointer_or_null(device_id)
         lib.ma_device_config_set_params(ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec,
                                         0, self.format, self.nchannels, 0, 0, _device_id, ffi.NULL)
         self._devconfig.pUserData = self.userdata_ptr
@@ -1037,8 +1040,8 @@ class DuplexStream(AbstractDevice):
         self.userdata_ptr = ffi.new("char[]", struct.pack('q', id(self)))
         self._devconfig = lib.ma_device_config_init(lib.ma_device_type_duplex)
 
-        _capture_device_id = pointer_or_null(capture_device_id)
-        _playback_device_id = pointer_or_null(playback_device_id)
+        _capture_device_id = _pointer_or_null(capture_device_id)
+        _playback_device_id = _pointer_or_null(playback_device_id)
 
         lib.ma_device_config_set_params(
             ffi.addressof(self._devconfig), self.sample_rate, self.buffersize_msec, 0,

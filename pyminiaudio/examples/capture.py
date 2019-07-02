@@ -1,19 +1,30 @@
-import miniaudio
+import array
 from time import sleep
+import miniaudio
 
 
 if __name__ == "__main__":
-    buffer = b""
+    buffer_chunks = []
 
     def record_to_buffer():
-        data = yield
+        _ = yield
         while True:
             data = yield
             print(".", end="", flush=True)
-            global buffer
-            buffer += data
+            buffer_chunks.append(data)
 
-    capture = miniaudio.CaptureDevice(buffersize_msec=0, sample_rate=48000)
+    devices = miniaudio.Devices()
+    print("Available recording devices:")
+    captures = devices.get_captures()
+    for p in enumerate(captures):
+        print(p[0], "= ", p[1])
+    choice = int(input("record from which device? "))
+
+    selected_device = captures[choice]
+    print("Recording from {}".format(selected_device.name))
+
+    capture = miniaudio.CaptureDevice(buffersize_msec=1000, sample_rate=44100, device_id=selected_device._id)   # TODO: fix ownership of _id? or create copy?
+    print(capture.format)
     generator = record_to_buffer()
     print("Recording for 3 seconds")
     next(generator)
@@ -21,12 +32,13 @@ if __name__ == "__main__":
     sleep(3)
     capture.stop()
 
-    print("")
+    buffer = b"".join(buffer_chunks)
+    print("\nRecorded", len(buffer), "bytes")
     print("Wring to ./capture.wav")
-    samples = miniaudio._create_int_array(capture.format)
+    samples = array.array('h')
     samples.frombytes(buffer)
     sound = miniaudio.DecodedSoundFile(
         'capture', capture.nchannels, capture.sample_rate,
         capture.sample_width, capture.format, samples)
-    miniaudio.wav_write_file('./examples/capture.wav', sound)
+    miniaudio.wav_write_file('capture.wav', sound)
     print("Recording done")
