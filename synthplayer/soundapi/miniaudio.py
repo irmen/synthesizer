@@ -20,16 +20,21 @@ class MiniaudioUtils:
     def ma_query_devices(self) -> List[Dict[str, Any]]:
         devices = miniaudio.Devices()
         playback, record = devices.get_playbacks(), devices.get_captures()
-        result = []
-        for dev in chain(playback, record):
-            info = dev.info()
-            info["name"] = dev.name
-            info["type"] = dev.device_type
-            result.append(info)
-        return result
+        return playback + record
 
     def ma_query_device_details(self, device: Optional[Union[int, str]] = None, kind: Optional[str] = None) -> Any:
-        raise LookupError("not available for miniaudio api")
+        devices = miniaudio.Devices()
+        if kind == miniaudio.DeviceType.PLAYBACK:
+            devs = devices.get_playbacks()
+        elif kind == miniaudio.DeviceType.CAPTURE:
+            devs = devices.get_playbacks()
+        else:
+            devs = devices.get_playbacks() + devices.get_captures()
+        id_buf = miniaudio.ffi.buffer(device)
+        for d in devs:
+            if miniaudio.ffi.buffer(d["id"]) == id_buf:
+                return d
+        raise LookupError("device not found")
 
 
 class MiniaudioMixed(AudioApi, MiniaudioUtils):
@@ -37,20 +42,20 @@ class MiniaudioMixed(AudioApi, MiniaudioUtils):
     def __init__(self, samplerate: int = 0, samplewidth: int = 0, nchannels: int = 0, frames_per_chunk: int = 0) -> None:
         super().__init__(samplerate, samplewidth, nchannels, frames_per_chunk, 0)
         self.mixed_chunks = self.mixer.chunks()
-        ma_output_format = {
-            1: miniaudio.ma_format_u8,
-            2: miniaudio.ma_format_s16,
-            3: miniaudio.ma_format_s24,
-            4: miniaudio.ma_format_s32
+        output_format = {
+            1: miniaudio.SampleFormat.UNSIGNED8,
+            2: miniaudio.SampleFormat.SIGNED16,
+            3: miniaudio.SampleFormat.SIGNED24,
+            4: miniaudio.SampleFormat.SIGNED32
         }[self.samplewidth]
         buffersize_msec = self.nchannels * 1000 * self.frames_per_chunk // self.samplerate
         self.mixed_chunks = self.mixer.chunks()
-        self.device = miniaudio.PlaybackDevice(ma_output_format, self.nchannels, self.samplerate, buffersize_msec)
+        self.device = miniaudio.PlaybackDevice(output_format, self.nchannels, self.samplerate, buffersize_msec)
         stream = self.generator()
         next(stream)  # start generator
         self.device.start(stream)
 
-    def generator(self) -> miniaudio.AudioProducerType:
+    def generator(self) -> miniaudio.PlaybackCallbackGeneratorType:
         playable = next(self.mixed_chunks)
         required_frames = yield b""  # generator initialization
         while True:
@@ -89,18 +94,18 @@ class MiniaudioSequential(AudioApi, MiniaudioUtils):
     def __init__(self, samplerate: int = 0, samplewidth: int = 0, nchannels: int = 0, queue_size: int = 100) -> None:
         super().__init__(samplerate, samplewidth, nchannels, queue_size=queue_size)
         self.command_queue = queue.Queue(maxsize=queue_size)        # type: queue.Queue[Dict[str, Any]]
-        ma_output_format = {
-            1: miniaudio.ma_format_u8,
-            2: miniaudio.ma_format_s16,
-            3: miniaudio.ma_format_s24,
-            4: miniaudio.ma_format_s32
+        output_format = {
+            1: miniaudio.SampleFormat.UNSIGNED8,
+            2: miniaudio.SampleFormat.SIGNED16,
+            3: miniaudio.SampleFormat.SIGNED24,
+            4: miniaudio.SampleFormat.SIGNED32
         }[self.samplewidth]
-        self.device = miniaudio.PlaybackDevice(ma_output_format, self.nchannels, self.samplerate)
+        self.device = miniaudio.PlaybackDevice(output_format, self.nchannels, self.samplerate)
         stream = self.generator()
         next(stream)  # start generator
         self.device.start(stream)
 
-    def generator(self) -> miniaudio.AudioProducerType:
+    def generator(self) -> miniaudio.PlaybackCallbackGeneratorType:
         required_frames = yield b""  # generator initialization
         playable = b""
         while True:

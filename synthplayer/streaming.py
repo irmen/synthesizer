@@ -136,12 +136,12 @@ class AudiofileToWavStream(io.RawIOBase):
                 pass   # not a file recognised by miniaudio
             else:
                 sample_format = {
-                    miniaudio.ma_format_unknown: "?",
-                    miniaudio.ma_format_u8: "8",
-                    miniaudio.ma_format_s16: "16",
-                    miniaudio.ma_format_s24: "24",
-                    miniaudio.ma_format_s32: "32",
-                    miniaudio.ma_format_f32: "float"
+                    miniaudio.SampleFormat.UNKNOWN: "?",
+                    miniaudio.SampleFormat.UNSIGNED8: "8",
+                    miniaudio.SampleFormat.SIGNED16: "16",
+                    miniaudio.SampleFormat.SIGNED24: "24",
+                    miniaudio.SampleFormat.SIGNED32: "32",
+                    miniaudio.SampleFormat.FLOAT32: "float"
                 }[info.sample_format]
                 return AudioFormatInfo(info.sample_rate, info.nchannels, sample_format, info.sample_width*8,
                                        info.file_format, info.duration, info.num_frames)
@@ -205,18 +205,19 @@ class AudiofileToWavStream(io.RawIOBase):
         else:
             # first, attempt to stream via miniaudio
             if miniaudio:
-                ma_output_format = {
-                    "8": miniaudio.ma_format_u8,
-                    "16": miniaudio.ma_format_s16,
-                    "32": miniaudio.ma_format_s32,
-                    "float": miniaudio.ma_format_f32
+                output_format = {
+                    "8": miniaudio.SampleFormat.UNSIGNED8,
+                    "16": miniaudio.SampleFormat.SIGNED16,
+                    "24": miniaudio.SampleFormat.SIGNED24,
+                    "32": miniaudio.SampleFormat.SIGNED32,
+                    "float": miniaudio.SampleFormat.FLOAT32
                 }[self.sample_format]
                 try:
-                    pcm_gen = miniaudio.stream_file(self.name, ma_output_format, self.nchannels, self.sample_rate)
+                    pcm_gen = miniaudio.stream_file(self.name, output_format, self.nchannels, self.sample_rate)
                     num_frames = 0
                     if info:
                         num_frames = int(info.num_frames * (self.sample_rate / info.rate))
-                    self.stream = miniaudio.WavFileReadStream(pcm_gen, self.sample_rate, self.nchannels, ma_output_format, num_frames)
+                    self.stream = miniaudio.WavFileReadStream(pcm_gen, self.sample_rate, self.nchannels, output_format, num_frames)
                 except miniaudio.DecodeError:
                     pass   # something that miniaudio can't decode, fall back to other methods
                 else:
