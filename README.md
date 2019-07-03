@@ -129,11 +129,11 @@ kick7      = .... x...
 
 To simply mix and stream your track file to your speakers use the following command:
 
-``python3 trackmixer.py mytrack.ini``
+``python trackmixer.py mytrack.ini``
 
 To load your track file and start the interactive command line interface:
 
-``python3 trackmixer.py -i mytrack.ini``
+``python trackmixer.py -i mytrack.ini``
 
 ...then type ``help`` to see what commands are available.
 
