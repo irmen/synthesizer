@@ -1,13 +1,17 @@
-.PHONY: all dist install upload clean test check lint
+.PHONY: all dist install check_upload upload clean test check lint
 
 all:
-	@echo "targets include dist, upload, install, clean, lint"
+	@echo "targets include dist, check_upload, upload, install, clean, lint"
 
 dist:
+	python setup.py clean --all
 	python setup.py sdist bdist_wheel
 	@echo "Look in the dist/ directory"
 
-upload: dist
+check_upload:
+	twine check dist/*
+
+upload: dist check_upload
 	@echo "Uploading to Pypi using twine...."
 	twine upload dist/*
 
