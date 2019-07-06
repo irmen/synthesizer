@@ -105,7 +105,6 @@ class Instrument:
                     region.sample = Sample(filename, value)
                     region.sample.amplify(0.7)    # adjust base volume down to avoid clipping issues when mixing
                     region.sample.normalize()
-                    print("   RESULT", region.sample)  # XXX
                     self.total_sample_memory += len(region.sample) * region.sample.samplewidth * region.sample.nchannels
             elif variable == "lorand":
                 if value.endswith("s"):

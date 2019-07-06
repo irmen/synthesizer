@@ -5,7 +5,7 @@ from .gui import Gui
 
 
 params.norm_samplerate = 48000
-params.norm_nchannels = 1                   # drumkit outputs in mono
+params.norm_samplewidth = 2
 
 
 with Output(mixing="mix", queue_size=2) as output:
@@ -22,5 +22,5 @@ with Output(mixing="mix", queue_size=2) as output:
         currently_playing[key] = sid
 
     gui = Gui(audio)
-    gui.start("/mnt/nfs/media/SoundEffecs/salamander_drumkit_v1_mono/")
+    gui.start("/mnt/nfs/media/SoundEffecs/salamander_drumkit_v1/")
 
