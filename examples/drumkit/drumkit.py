@@ -4,7 +4,6 @@ import os
 import random
 import itertools
 from synthplayer.sample import Sample
-from synthplayer import params
 from typing import Dict, Optional, List
 
 
@@ -104,11 +103,10 @@ class Instrument:
                         print("Warning: sample not found:", filename, file=sys.stderr)
                         return None
                     region.sample = Sample(filename, value)
-                    if region.sample.nchannels != 2 or region.sample.samplerate != params.norm_samplerate or\
-                            region.sample.samplewidth != params.norm_samplewidth:
-                        region.sample.normalize()
-                        region.sample.amplify(0.6)    # adjust base volume down to avoid clipping issues when mixing
-                        self.total_sample_memory += len(region.sample) * region.sample.samplewidth * region.sample.nchannels
+                    region.sample.amplify(0.7)    # adjust base volume down to avoid clipping issues when mixing
+                    region.sample.normalize()
+                    print("   RESULT", region.sample)  # XXX
+                    self.total_sample_memory += len(region.sample) * region.sample.samplewidth * region.sample.nchannels
             elif variable == "lorand":
                 if value.endswith("s"):
                     value = value[:-1]

@@ -46,6 +46,8 @@ class Sample:
         self.name = name
         self.__locked = False
         self.__samplerate = self.__nchannels = self.__samplewidth = 0
+        if params.norm_nchannels not in (1, 2):
+            raise ValueError("norm_nchannels has invalid value, can only be 1 or 2")
         if wave_file:
             self.load_wav(wave_file)
             if isinstance(wave_file, str):
@@ -80,7 +82,7 @@ class Sample:
                         numchannels: int, name: str = "") -> 'Sample':
         """Creates a new sample directly from the raw sample data."""
         assert 1 <= numchannels <= 2
-        assert 2 <= samplewidth <= 4
+        assert 1 <= samplewidth <= 4
         assert samplerate > 1
         s = cls(name=name)
         if isinstance(frames, (list, memoryview)):
@@ -110,7 +112,6 @@ class Sample:
                 if type(array_or_list[0]) is not int:
                     raise TypeError("the sample values must be integer")
         samplewidth = array_or_list.itemsize
-        assert 2 <= samplewidth <= 4
         frames = array_or_list.tobytes()
         if sys.byteorder == "big":
             frames = audioop.byteswap(frames, samplewidth)
@@ -271,6 +272,8 @@ class Sample:
     @staticmethod
     def get_array(samplewidth: int, initializer: Optional[Iterable[int]] = None) -> 'array.ArrayType[int]':
         """Returns an array with the correct type code, optionally initialized with values."""
+        if samplewidth not in samplewidths_to_arraycode:
+            raise ValueError("can't create a Python array for samplewidth " + str(samplewidth))
         arraycode = samplewidths_to_arraycode[samplewidth]
         return array.array(arraycode, initializer or [])
 
@@ -369,13 +372,19 @@ class Sample:
             raise RuntimeError("cannot modify a locked sample")
         self.resample(params.norm_samplerate)
         if self.samplewidth != params.norm_samplewidth:
-            # Convert to 16 bit sample size.
+            # Convert to desired sample size.
             self.__frames = audioop.lin2lin(self.__frames, self.samplewidth, params.norm_samplewidth)
             self.__samplewidth = params.norm_samplewidth
-        if self.nchannels == 1:
+        if params.norm_nchannels not in (1, 2):
+            raise ValueError("norm_nchannels has invalid value, can only be 1 or 2")
+        if self.nchannels == 1 and params.norm_nchannels == 2:
             # convert to stereo
             self.__frames = audioop.tostereo(self.__frames, self.samplewidth, 1, 1)
             self.__nchannels = 2
+        elif self.nchannels == 2 and params.norm_nchannels == 1:
+            # convert to mono
+            self.__frames = audioop.tomono(self.__frames, self.__samplewidth, 1, 1)
+            self.__nchannels = 1
         return self
 
     def resample(self, samplerate: int) -> 'Sample':
@@ -680,7 +689,7 @@ class Sample:
             self.__frames = audioop.tostereo(self.__frames, self.__samplewidth, left_factor, right_factor)
             self.__nchannels = 2
             return self
-        raise ValueError("sample must be mono or stereo already")
+        raise ValueError("sample must be mono or stereo")
 
     def stereo_mix(self, other: 'Sample', other_channel: str, other_mix_factor: float = 1.0,
                    mix_at: float = 0.0, other_seconds: Optional[float] = None) -> 'Sample':

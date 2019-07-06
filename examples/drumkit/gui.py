@@ -62,14 +62,13 @@ class Gui(tkinter.Tk):
     def set_button_sound(self, x, y, name: str, instr: Instrument, velocity: int):
         self.buttongrid.set_button_sound(x, y, name, instr, velocity)
 
-    def start(self):
+    def start(self, samples_location: str):
         self.messages.insert(tkinter.END, "~~~~ Python DrumKit ~~~~\n")
-        location = "/mnt/nfs/media/SoundEffecs/salamander_drumkit_v1/"
-        if not os.path.isdir(location):
+        if not os.path.isdir(samples_location):
             print(">>>> Select the directory contaiting the  Salamander Drumkit v1 files <<<<")
-            location = tkinter.filedialog.askdirectory()
+            samples_location = tkinter.filedialog.askdirectory()
         import threading
-        threading.Thread(target=self.load_drumkit, args=(location,)).start()
+        threading.Thread(target=self.load_drumkit, args=(samples_location,)).start()
         self.mainloop()
 
     def load_drumkit(self, location) -> None:
