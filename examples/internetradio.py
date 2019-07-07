@@ -4,14 +4,16 @@ import subprocess
 import tkinter
 from tkinter import ttk
 from collections import namedtuple
+from typing import Union
+
 from PIL import Image, ImageTk
 import requests
 from synthplayer.playback import Output
 from synthplayer.sample import Sample, LevelMeter
-# try:
-#     import miniaudio
-# except ImportError:
-#     miniaudio = None
+try:
+    import miniaudio
+except ImportError:
+    miniaudio = None
 
 
 class IceCastClient:
@@ -27,6 +29,7 @@ class IceCastClient:
         self.stream_title = "???"
         self.station_genre = "???"
         self.station_name = "???"
+        self.audio_info = ""
         self.block_size = block_size
         self._stop_stream = False
         with requests.get(url, stream=True, headers={"icy-metadata": "1"}) as result:
@@ -42,7 +45,7 @@ class IceCastClient:
             self.station_genre = result.headers["icy-genre"]
             self.station_name = result.headers["icy-name"]
             self.stream_format = result.headers["Content-Type"]
-            audio_info = result.headers.get("ice-audio-info", None)
+            self.audio_info = result.headers.get("ice-audio-info", "")
             if "icy-metaint" in result.headers:
                 meta_interval = int(result.headers["icy-metaint"])
             else:
@@ -81,13 +84,12 @@ class AudioDecoder:
      1) main thread that spawns ffmpeg, reads radio stream data, and writes that to ffmpeg
      2) background thread that reads decoded audio data from ffmpeg and plays it
 
-     TODO: use miniaudio decoding if the stream is a format it supports (ogg, mp3)
     """
-    def __init__(self, icecast_client, song_title_callback=None, levelmeter_callback=None):
+    def __init__(self, icecast_client, song_title_callback=None, update_ui=None):
         self.client = icecast_client
         self.stream_title = "???"
         self.song_title_callback = song_title_callback
-        self.levelmeter_callback = levelmeter_callback
+        self.update_ui = update_ui
         self.ffmpeg_process = None
 
     def stop_playback(self):
@@ -109,8 +111,8 @@ class AudioDecoder:
                 else:
                     print("\n\nNew Song:", self.stream_title, "\n")
             levelmeter.update(sample)
-            if self.levelmeter_callback:
-                self.levelmeter_callback(levelmeter)
+            if self.update_ui:
+                self.update_ui(levelmeter, None)
             else:
                 levelmeter.print(60, True)
 
@@ -118,7 +120,7 @@ class AudioDecoder:
             output.register_notify_played(played)
             while True:
                 try:
-                    audio = pcm_stream.read(44100 * 2 * 2 // 10)
+                    audio = pcm_stream.read(44100 * 2 * 2 // 20)
                     if not audio:
                         break
                 except (IOError, ValueError):
@@ -137,9 +139,11 @@ class AudioDecoder:
             fmt = "ogg"
         if not self.song_title_callback:
             print("\nStreaming Radio Station: ", self.client.station_name)
-        # if miniaudio and fmt in ("ogg", "mp3"):
-        #     self.use_miniaudio_decoding(fmt)   # TODO requires miniaudio decoder pull API
-        #     return
+        if miniaudio and fmt in ("ogg", "mp3"):
+            self.update_ui(None, "decoder: MiniAudio ("+fmt+")")
+            self.use_miniaudio_decoding(fmt)
+            return
+        self.update_ui(None, "decoder: ffmpeg ("+fmt+")")
         self.use_ffmpeg_decoding(fmt)
 
     def use_ffmpeg_decoding(self, fmt):
@@ -174,16 +178,39 @@ class AudioDecoder:
         self._audio_playback(decoder_stream)
 
 
-class MiniaudioDecoderStream:
+class MiniaudioDecoderStream(miniaudio.StreamableSource):
+    class MiniaudioStreamSource(miniaudio.StreamableSource):
+        def __init__(self, network_datagen):
+            self.network_datagen = network_datagen
+            self.buffer = b""
+
+        def read(self, num_bytes: int) -> Union[bytes, memoryview]:
+            while len(self.buffer) < num_bytes:
+                try:
+                    self.buffer += next(self.network_datagen)
+                except StopIteration:
+                    break
+            result = self.buffer[0:num_bytes]
+            self.buffer = self.buffer[num_bytes:]
+            return result
+
     def __init__(self, fmt, stream):
-        self.format = fmt
-        self.stream = stream
+        if fmt in ("ogg", "vorbis"):
+            format = miniaudio.FileFormat.VORBIS
+        elif fmt == "mp3":
+            format = miniaudio.FileFormat.MP3
+        elif fmt == "flac":
+            format = miniaudio.FileFormat.FLAC
+        else:
+            raise ValueError("unsupported audio file format "+fmt)
+        mastream = MiniaudioDecoderStream.MiniaudioStreamSource(stream)
+        self.pcm_stream = miniaudio.stream_any(mastream, format, dither=miniaudio.DitherMode.TRIANGLE)
 
     def read(self, size):
-        print("MINIAUDIO READ", size)
-        raise NotImplementedError("requires miniaudio deoder pull API")
-        # chunk = next(self.stream)
-        # TODOminiaudio.decode(chunk)
+        try:
+            return self.pcm_stream.send(size)
+        except StopIteration:
+            return b""
 
 
 class Internetradio(tkinter.Tk):
@@ -201,9 +228,6 @@ class Internetradio(tkinter.Tk):
         StationDef("Playtrance.com", "Trance",
                    "https://www.playtrance.com/static/playtrancev20thumb.jpg",
                    "http://live.playtrance.com:8000/playtrance-main.aac"),
-        # StationDef("Ogg TEST", "Game music",
-        #            None,
-        #            "http://allstream.rainwave.cc:8000/all.ogg")
     ]
 
     def __init__(self):
@@ -222,6 +246,8 @@ class Internetradio(tkinter.Tk):
         self.stream_name_label.pack()
         self.song_title_label = tkinter.Label(self, text="...")
         self.song_title_label.pack()
+        self.decoder_label = tkinter.Label(self, text="...")
+        self.decoder_label.pack()
         s = ttk.Style()
         s.theme_use("default")
         s.configure("TProgressbar", thickness=8)
@@ -262,18 +288,20 @@ class Internetradio(tkinter.Tk):
             self.play_thread.join()
         self.stream_name_label.configure(text="{} | {}".format(station.station_name, station.stream_name))
         self.icyclient = IceCastClient(station.stream_url, 8192)
-        self.decoder = AudioDecoder(self.icyclient, self.set_song_title, self.update_levelmeter)
+        self.decoder = AudioDecoder(self.icyclient, self.set_song_title, self.update_ui)
         self.set_song_title("...")
         self.play_thread = threading.Thread(target=self.decoder.stream_radio, daemon=True)
         self.play_thread.start()
 
     def set_song_title(self, title):
-        self.song_title_label.configure(text=title)
+        self.song_title_label["text"]=title
 
-    def update_levelmeter(self, levelmeter):
-        if self.decoder:
+    def update_ui(self, levelmeter, message):
+        if self.decoder and levelmeter:
             self.level_left.configure(value=60+levelmeter.level_left)
             self.level_right.configure(value=60+levelmeter.level_right)
+        if message:
+            self.decoder_label["text"] = message
 
 
 radio = Internetradio()
