@@ -8,6 +8,10 @@ from PIL import Image, ImageTk
 import requests
 from synthplayer.playback import Output
 from synthplayer.sample import Sample, LevelMeter
+# try:
+#     import miniaudio
+# except ImportError:
+#     miniaudio = None
 
 
 class IceCastClient:
@@ -25,15 +29,20 @@ class IceCastClient:
         self.station_name = "???"
         self.block_size = block_size
         self._stop_stream = False
+        with requests.get(url, stream=True, headers={"icy-metadata": "1"}) as result:
+            self.station_genre = result.headers["icy-genre"]
+            self.station_name = result.headers["icy-name"]
+            self.stream_format = result.headers["Content-Type"]
 
     def stop_streaming(self):
         self._stop_stream = True
 
     def stream(self):
-        with requests.get(self. url, stream=True, headers={"icy-metadata": "1"}) as result:
+        with requests.get(self.url, stream=True, headers={"icy-metadata": "1"}) as result:
             self.station_genre = result.headers["icy-genre"]
             self.station_name = result.headers["icy-name"]
             self.stream_format = result.headers["Content-Type"]
+            audio_info = result.headers.get("ice-audio-info", None)
             if "icy-metaint" in result.headers:
                 meta_interval = int(result.headers["icy-metaint"])
             else:
@@ -88,7 +97,7 @@ class AudioDecoder:
             self.ffmpeg_process.kill()
             self.ffmpeg_process = None
 
-    def _audio_playback(self, ffmpeg_stream):
+    def _audio_playback(self, pcm_stream):
         # thread 3: audio playback
         levelmeter = LevelMeter()
 
@@ -109,7 +118,7 @@ class AudioDecoder:
             output.register_notify_played(played)
             while True:
                 try:
-                    audio = ffmpeg_stream.read(44100 * 2 * 2 // 10)
+                    audio = pcm_stream.read(44100 * 2 * 2 // 10)
                     if not audio:
                         break
                 except (IOError, ValueError):
@@ -119,25 +128,30 @@ class AudioDecoder:
                     output.play_sample(sample)
 
     def stream_radio(self):
-        stream = self.client.stream()
-        first_chunk = next(stream)
         fmt = ""
         if self.client.stream_format == "audio/mpeg":
             fmt = "mp3"
         elif self.client.stream_format.startswith("audio/aac"):
             fmt = "aac"
+        elif self.client.stream_format.endswith("/ogg"):
+            fmt = "ogg"
         if not self.song_title_callback:
             print("\nStreaming Radio Station: ", self.client.station_name)
+        # if miniaudio and fmt in ("ogg", "mp3"):
+        #     self.use_miniaudio_decoding(fmt)   # TODO requires miniaudio decoder pull API
+        #     return
+        self.use_ffmpeg_decoding(fmt)
+
+    def use_ffmpeg_decoding(self, fmt):
+        stream = self.client.stream()
         cmd = ["ffmpeg", "-v", "fatal", "-nostdin", "-i", "-"]
         if fmt:
             cmd.extend(["-f", fmt])
         # cmd.extend(["-af", "aresample=resampler=soxr"])     # enable this if your ffmpeg has sox hq resample
         cmd.extend(["-ar", "44100", "-ac", "2", "-acodec", "pcm_s16le", "-f", "s16le", "-"])
         self.ffmpeg_process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        self.ffmpeg_process.stdin.write(first_chunk)
         audio_playback_thread = threading.Thread(target=self._audio_playback, args=[self.ffmpeg_process.stdout], daemon=True)
         audio_playback_thread.start()
-
         try:
             for chunk in stream:
                 if self.ffmpeg_process:
@@ -154,6 +168,23 @@ class AudioDecoder:
             if not self.song_title_callback:
                 print("\n")
 
+    def use_miniaudio_decoding(self, fmt):
+        stream = self.client.stream()
+        decoder_stream = MiniaudioDecoderStream(fmt, stream)
+        self._audio_playback(decoder_stream)
+
+
+class MiniaudioDecoderStream:
+    def __init__(self, fmt, stream):
+        self.format = fmt
+        self.stream = stream
+
+    def read(self, size):
+        print("MINIAUDIO READ", size)
+        raise NotImplementedError("requires miniaudio deoder pull API")
+        # chunk = next(self.stream)
+        # TODOminiaudio.decode(chunk)
+
 
 class Internetradio(tkinter.Tk):
     StationDef = namedtuple("StationDef", ["station_name", "stream_name", "icon_url", "stream_url"])
@@ -169,7 +200,10 @@ class Internetradio(tkinter.Tk):
                    "http://stream.cjsw.com:80/cjsw.ogg"),
         StationDef("Playtrance.com", "Trance",
                    "https://www.playtrance.com/static/playtrancev20thumb.jpg",
-                   "http://live.playtrance.com:8000/playtrance-main.aac")
+                   "http://live.playtrance.com:8000/playtrance-main.aac"),
+        # StationDef("Ogg TEST", "Game music",
+        #            None,
+        #            "http://allstream.rainwave.cc:8000/all.ogg")
     ]
 
     def __init__(self):
