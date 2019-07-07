@@ -23,4 +23,3 @@ with Output(mixing="mix", queue_size=2) as output:
 
     gui = Gui(audio)
     gui.start("/mnt/nfs/media/SoundEffecs/salamander_drumkit_v1/")
-

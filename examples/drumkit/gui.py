@@ -75,7 +75,8 @@ class Gui(tkinter.Tk):
         files = glob.glob(os.path.normpath(location + "/*.sfz"))
         if not files:
             print("ERROR: There are no *.sfz sample instrument files in the drumkit location! ({})".format(location))
-            print("Download the Salamander Drumkit from http://download.linuxaudio.org/musical-instrument-libraries/sfz/salamander_drumkit_v1.tar.7z")
+            print("Download the Salamander Drumkit from: "
+                  "http://download.linuxaudio.org/musical-instrument-libraries/sfz/salamander_drumkit_v1.tar.7z")
             return
         dk = DrumKit()
         dk.load(location)

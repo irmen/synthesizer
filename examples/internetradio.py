@@ -294,7 +294,7 @@ class Internetradio(tkinter.Tk):
         self.play_thread.start()
 
     def set_song_title(self, title):
-        self.song_title_label["text"]=title
+        self.song_title_label["text"] = title
 
     def update_ui(self, levelmeter, message):
         if self.decoder and levelmeter:
