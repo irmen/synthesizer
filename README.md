@@ -9,19 +9,6 @@ Pypi: [synthplayer](https://pypi.org/project/synthplayer/)
 *requires Python 3.5 or newer*.
 
 
-## No sound? Configure the correct output audio device
-On some systems, the portaudio system audio library seems to report a wrong 
-default output audio device. In this case, you may get an ``IOError``
-(describing the problem). You can also get another error (or no sound output at all,
-without any errors at all...) If this happens, you can manually configure the output audio device
-that should be used:
-
-Either set the ``PY_SYNTHPLAYER_AUDIO_DEVICE`` environment variable to the correct device number,
-or set the ``synthplayer.playback.default_audio_device`` parameter at the start of your code.
-(The environment variable has priority over the code parameter)
-
-To find the correct device number you can use the ``query_devices`` method or type ``python -m sounddevice``.
-
 # synthplayer.synth
 
 A waveform synthesizer that can generate different wave form samples:
@@ -43,13 +30,28 @@ speedup is remarkable over the older version (that used single value generators)
 Sound playback engine. Supports multiple sound APIs, 
 efficient sequential streaming or real-time mixing of shorter sound clips.
 The streaming is implemented via Python generators where the main generator essentially produces mixed sample fragments.
-These are written to an audio stream of one of the supported audio library backends, in this order:
+These are written to an audio stream of one of the supported audio libraries.
+Synthplayer will detect them in this order:
 
-- [``miniaudio``](https://github.com/irmen/pyminiaudio/)
+- [``miniaudio``](https://github.com/irmen/pyminiaudio/)  ← highly recommended, lots of nice features
 - [``soundcard``](https://soundcard.readthedocs.io/)
 - [``sounddevice``](http://python-sounddevice.readthedocs.io/)
 - [``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) 
-- ``winsound`` (only on Windows, and has very limited capabilities). 
+- ``winsound`` (only on Windows, and has very limited capabilities, but comes installed by default). 
+
+### No errors, but hearing no sound? 
+If you see no errors but hear nothing, you may need to manually configure the correct 
+output audio device. On some systems, the portaudio system audio library seems to report a wrong 
+default output audio device. In this case, you may get an ``IOError``
+(describing the problem). You can also get another error (or no sound output at all,
+without any errors at all...) If this happens, you can manually configure the output audio device
+that should be used:
+
+Either set the ``PY_SYNTHPLAYER_AUDIO_DEVICE`` environment variable to the correct device number,
+or set the ``synthplayer.playback.default_audio_device`` parameter at the start of your code.
+(The environment variable has priority over the code parameter)
+
+To find the correct device number you can use the ``query_devices`` method or type ``python -m sounddevice``.
 
 # synthplayer.sample
 

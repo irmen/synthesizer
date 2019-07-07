@@ -4,6 +4,5 @@ tqdm
 miniaudio>=1.6
 sounddevice
 soundcard
-pyaudio
 matplotlib
 numpy
