@@ -4,6 +4,9 @@
 **Software sound synthesizer (FM/PWM oscillators), sound file streaming and conversion, 
 and sound playback and mixing engine.**
 
+This software has been created by Irmen de Jong (irmen@razorvine.net), 
+and is distributed under the LGPL 3.0 software license (see 'LICENSE').
+
 Pypi: [synthplayer](https://pypi.org/project/synthplayer/)  
 
 *requires Python 3.5 or newer*.
