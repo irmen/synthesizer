@@ -8,6 +8,10 @@ You can play simple notes, chords, or let an arpeggiator run the notes.
 Written by Irmen de Jong (irmen@razorvine.net) - License: GNU LGPL 3.
 """
 
+
+# TODO   the metallicbuzz preset crashes the application because stream chunk size mismatch
+
+
 import time
 import collections
 import itertools
@@ -626,7 +630,6 @@ class SynthGUI(tk.Frame):
         self.echos_ending_time = 0
         self.currently_playing = {}     # (note, octave) -> sid
         self.arp_after_id = 0
-        showwarning("garbled sound output", "When using miniaudio 1.20+, the audio could be garbled (not always the case). I haven't had time yet to debug and fix this. Sorry for any inconvenience.")
 
     def bind_keypress(self, key, note, octave):
         def kbpress(event):
