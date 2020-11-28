@@ -1,7 +1,7 @@
 tinytag
 appdirs
 tqdm
-miniaudio>=1.10
+miniaudio>=1.39
 sounddevice
 soundcard
 matplotlib

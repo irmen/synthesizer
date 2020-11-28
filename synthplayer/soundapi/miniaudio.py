@@ -1,6 +1,5 @@
 import queue
 import miniaudio
-from itertools import chain
 from typing import List, Dict, Any, Optional, Union
 from .base import AudioApi
 from ..sample import Sample

@@ -1,5 +1,4 @@
 import threading
-import re
 import subprocess
 import tkinter
 from tkinter import ttk
@@ -16,69 +15,11 @@ except ImportError:
     miniaudio = None
 
 
-class IceCastClient:
-    """
-    A simple client for IceCast audio streams.
-    The stream method yields blocks of encoded audio data from the stream.
-    If the stream has Icy Meta Data, the stream_title attribute will be updated
-    with the actual title taken from the meta data.
-    """
-    def __init__(self, url, block_size=16384):
-        self.url = url
-        self.stream_format = "???"
-        self.stream_title = "???"
-        self.station_genre = "???"
-        self.station_name = "???"
-        self.audio_info = ""
-        self.block_size = block_size
-        self._stop_stream = False
-        with requests.get(url, stream=True, headers={"icy-metadata": "1"}) as result:
-            self.station_genre = result.headers["icy-genre"]
-            self.station_name = result.headers["icy-name"]
-            self.stream_format = result.headers["Content-Type"]
-
-    def stop_streaming(self):
-        self._stop_stream = True
-
-    def stream(self):
-        with requests.get(self.url, stream=True, headers={"icy-metadata": "1"}) as result:
-            self.station_genre = result.headers["icy-genre"]
-            self.station_name = result.headers["icy-name"]
-            self.stream_format = result.headers["Content-Type"]
-            self.audio_info = result.headers.get("ice-audio-info", "")
-            if "icy-metaint" in result.headers:
-                meta_interval = int(result.headers["icy-metaint"])
-            else:
-                meta_interval = 0
-            if meta_interval:
-                audiodata = b""
-                for chunk in result.iter_content(self.block_size):
-                    if self._stop_stream:
-                        return
-                    audiodata += chunk
-                    if len(audiodata) < meta_interval + 1:
-                        continue
-                    meta_size = 16 * audiodata[meta_interval]
-                    if len(audiodata) < meta_interval + 1 + meta_size:
-                        continue
-                    metadata = str(audiodata[meta_interval + 1: meta_interval + 1 + meta_size].strip(b"\0"), "utf-8")
-                    if metadata:
-                        self.stream_title = re.search("StreamTitle='(.*?)'", metadata).group(1)
-                    yield audiodata[:meta_interval]
-                    audiodata = audiodata[meta_interval + 1 + meta_size:]
-                    if self._stop_stream:
-                        return
-            else:
-                for chunk in result.iter_content(self.block_size):
-                    if self._stop_stream:
-                        break
-                    yield chunk
-
-
 class AudioDecoder:
     """
     Reads streaming audio from an IceCast stream,
-    decodes it using ffmpeg, and plays it on the output sound device.
+    decodes it using ffmpeg or miniaudio if possible,
+    and plays it on the output sound device.
 
     We need two threads:
      1) main thread that spawns ffmpeg, reads radio stream data, and writes that to ffmpeg
@@ -91,13 +32,16 @@ class AudioDecoder:
         self.song_title_callback = song_title_callback
         self.update_ui = update_ui
         self.ffmpeg_process = None
+        self._stop_playback = False
 
     def stop_playback(self):
-        if self.ffmpeg_process:
-            self.ffmpeg_process.stdin.close()
-            self.ffmpeg_process.stdout.close()
-            self.ffmpeg_process.kill()
-            self.ffmpeg_process = None
+        self._stop_playback = True
+        ffmpeg = self.ffmpeg_process
+        self.ffmpeg_process = None
+        if ffmpeg:
+            # ffmpeg.stdin.close()
+            # ffmpeg.stdout.close()
+            ffmpeg.kill()
 
     def _audio_playback(self, pcm_stream):
         # thread 3: audio playback
@@ -118,7 +62,7 @@ class AudioDecoder:
 
         with Output(mixing="sequential", frames_per_chunk=44100//4) as output:
             output.register_notify_played(played)
-            while True:
+            while not self._stop_playback:
                 try:
                     audio = pcm_stream.read(44100 * 2 * 2 // 20)
                     if not audio:
@@ -126,25 +70,19 @@ class AudioDecoder:
                 except (IOError, ValueError):
                     break
                 else:
-                    sample = Sample.from_raw_frames(audio, 2, 44100, 2)
-                    output.play_sample(sample)
+                    if not self._stop_playback:
+                        sample = Sample.from_raw_frames(audio, 2, 44100, 2)
+                        output.play_sample(sample)
 
     def stream_radio(self):
-        fmt = ""
-        if self.client.stream_format == "audio/mpeg":
-            fmt = "mp3"
-        elif self.client.stream_format.startswith("audio/aac"):
-            fmt = "aac"
-        elif self.client.stream_format.endswith("/ogg"):
-            fmt = "ogg"
         if not self.song_title_callback:
             print("\nStreaming Radio Station: ", self.client.station_name)
-        if miniaudio and fmt in ("ogg", "mp3"):
-            self.update_ui(None, "decoder: MiniAudio ("+fmt+")")
-            self.use_miniaudio_decoding(fmt)
+        if miniaudio and self.client.audio_format != miniaudio.FileFormat.UNKNOWN:
+            self.update_ui(None, "decoder: MiniAudio ("+self.client.audio_format.name+")")
+            self.use_miniaudio_decoding(self.client.audio_format)
             return
-        self.update_ui(None, "decoder: ffmpeg ("+fmt+")")
-        self.use_ffmpeg_decoding(fmt)
+        self.update_ui(None, "decoder: ffmpeg")
+        self.use_ffmpeg_decoding(None)   # TODO we don't know the non-miniaudio file format anymore... :(
 
     def use_ffmpeg_decoding(self, fmt):
         stream = self.client.stream()
@@ -158,6 +96,8 @@ class AudioDecoder:
         audio_playback_thread.start()
         try:
             for chunk in stream:
+                if self._stop_playback:
+                    break
                 if self.ffmpeg_process:
                     self.ffmpeg_process.stdin.write(chunk)
                 else:
@@ -167,6 +107,7 @@ class AudioDecoder:
         except KeyboardInterrupt:
             pass
         finally:
+            self.client.close()
             self.stop_playback()
             audio_playback_thread.join()
             if not self.song_title_callback:
@@ -282,12 +223,12 @@ class Internetradio(tkinter.Tk):
         if self.play_thread:
             self.set_song_title("(switching streams...)")
             self.update()
-            self.icyclient.stop_streaming()
-            # self.decoder.stop_playback()   # this doesn't work properly on Windows, it hangs. Therefore we close the http stream.
+            self.icyclient.close()
+            self.decoder.stop_playback()
             self.decoder = None
-            self.play_thread.join()
+            self.play_thread.join(timeout=2)
         self.stream_name_label.configure(text="{} | {}".format(station.station_name, station.stream_name))
-        self.icyclient = IceCastClient(station.stream_url, 8192)
+        self.icyclient = miniaudio.IceCastClient(station.stream_url, 8192)
         self.decoder = AudioDecoder(self.icyclient, self.set_song_title, self.update_ui)
         self.set_song_title("...")
         self.play_thread = threading.Thread(target=self.decoder.stream_radio, daemon=True)
