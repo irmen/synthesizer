@@ -31,19 +31,6 @@ try:
 except ImportError:
     pass
 
-try:
-    from .pyaudio import PyAudioSequential, PyAudioMixed
-    available_sequential_play_apis.append(PyAudioSequential)
-    available_mix_play_apis.append(PyAudioMixed)
-except ImportError:
-    pass
-
-try:
-    from .winsound import WinsoundSeq
-    available_sequential_play_apis.append(WinsoundSeq)
-except ImportError:
-    pass
-
 
 def best_api(samplerate: int = 0, samplewidth: int = 0, nchannels: int = 0,
              frames_per_chunk: int = 0, mixing: str = "mix", queue_size: int = 100) -> AudioApi:

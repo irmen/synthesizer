@@ -39,8 +39,7 @@ Synthplayer will detect them in this order:
 - [``miniaudio``](https://github.com/irmen/pyminiaudio/)  ← highly recommended, lots of nice features
 - [``soundcard``](https://soundcard.readthedocs.io/)
 - [``sounddevice``](http://python-sounddevice.readthedocs.io/)
-- [``pyaudio``](http://people.csail.mit.edu/hubert/pyaudio/) 
-- ``winsound`` (only on Windows, and has very limited capabilities, but comes installed by default). 
+
 
 ### No errors, but hearing no sound? 
 If you see no errors but hear nothing, you may need to manually configure the correct 

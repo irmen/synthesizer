@@ -1,9 +1,5 @@
 """
 Various audio output options. Here the specific audio library code is located.
-Supported audio output libraries:
-- pyaudio
-- sounddevice (both thread+blocking stream, and nonblocking callback stream variants)
-- winsound (limited capabilities)
 
 It can play multiple samples at the same time via real-time mixing, and you can
 loop samples as well without noticable overhead (great for continous effects or music)
