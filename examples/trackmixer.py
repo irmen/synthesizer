@@ -499,7 +499,7 @@ def main(track_file, outputfile=None, interactive=False):
                 print("\r                          ")
             else:
                 # output can't stream, fallback on mixing everything to a wav
-                print("(Sorry, streaming audio is not possible, perhaps because you don't have sounddevice or pyaudio installed?)")
+                print("(Sorry, streaming audio is not possible, install one of the audio libraries that supports that)")
                 song.mix(outputfile)
                 mix = Sample(wave_file=outputfile)
                 print("Playing sound...")

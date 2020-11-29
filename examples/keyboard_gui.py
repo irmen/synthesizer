@@ -63,10 +63,14 @@ class StreamingOscSample(Sample):
         if num_frames != params.norm_osc_blocksize:
             raise ValueError("streaming osc num_frames must be equal to the oscillator blocksize")
         played_duration = 0.0
-        scale = 2 ** (8 * self.samplewidth - 1)
+        scale = 2 ** (8 * self.samplewidth - 1) - 1
+
+        def clamp(amplitude):
+            return min(1.0, max(-1.0, amplitude))
+
         while played_duration < self.max_play_duration:
             try:
-                frames = [int(v * scale) for v in next(self.blocks)]
+                frames = [int(clamp(v) * scale) for v in next(self.blocks)]
             except StopIteration:
                 break
             else:
@@ -585,7 +589,7 @@ class SynthGUI(tk.Frame):
         self.samplerate_choice.set(22050)
         tk.Label(lf, text="Samplerate:").pack(anchor=tk.W)
         subf = tk.Frame(lf)
-        tk.Radiobutton(subf, variable=self.samplerate_choice, value=44100, text="44.1 kHz",
+        tk.Radiobutton(subf, state='disabled', variable=self.samplerate_choice, value=44100, text="44.1 kHz",
                        fg=lf.cget('fg'), selectcolor=lf.cget('bg'), pady=0, command=self.create_synth).pack(side=tk.LEFT)
         tk.Radiobutton(subf, variable=self.samplerate_choice, value=22050, text="22 kHz",
                        fg=lf.cget('fg'), selectcolor=lf.cget('bg'), pady=0, command=self.create_synth).pack(side=tk.LEFT)
