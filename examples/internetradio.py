@@ -85,7 +85,6 @@ class AudioDecoder:
         self.use_ffmpeg_decoding(None)   # TODO we don't know the non-miniaudio file format anymore... :(
 
     def use_ffmpeg_decoding(self, fmt):
-        stream = self.client.stream()
         cmd = ["ffmpeg", "-v", "fatal", "-nostdin", "-i", "-"]
         if fmt:
             cmd.extend(["-f", fmt])
@@ -95,9 +94,8 @@ class AudioDecoder:
         audio_playback_thread = threading.Thread(target=self._audio_playback, args=[self.ffmpeg_process.stdout], daemon=True)
         audio_playback_thread.start()
         try:
-            for chunk in stream:
-                if self._stop_playback:
-                    break
+            while not self._stop_playback:
+                chunk = self.client.read(8192)
                 if self.ffmpeg_process:
                     self.ffmpeg_process.stdin.write(chunk)
                 else:
@@ -114,38 +112,13 @@ class AudioDecoder:
                 print("\n")
 
     def use_miniaudio_decoding(self, fmt):
-        stream = self.client.stream()
-        decoder_stream = MiniaudioDecoderStream(fmt, stream)
-        self._audio_playback(decoder_stream)
+        pcm_stream = MiniaudioDecoderPcmStream(fmt, self.client)
+        self._audio_playback(pcm_stream)
 
 
-class MiniaudioDecoderStream(miniaudio.StreamableSource):
-    class MiniaudioStreamSource(miniaudio.StreamableSource):
-        def __init__(self, network_datagen):
-            self.network_datagen = network_datagen
-            self.buffer = b""
-
-        def read(self, num_bytes: int) -> Union[bytes, memoryview]:
-            while len(self.buffer) < num_bytes:
-                try:
-                    self.buffer += next(self.network_datagen)
-                except StopIteration:
-                    break
-            result = self.buffer[0:num_bytes]
-            self.buffer = self.buffer[num_bytes:]
-            return result
-
+class MiniaudioDecoderPcmStream(miniaudio.StreamableSource):
     def __init__(self, fmt, stream):
-        if fmt in ("ogg", "vorbis"):
-            format = miniaudio.FileFormat.VORBIS
-        elif fmt == "mp3":
-            format = miniaudio.FileFormat.MP3
-        elif fmt == "flac":
-            format = miniaudio.FileFormat.FLAC
-        else:
-            raise ValueError("unsupported audio file format "+fmt)
-        mastream = MiniaudioDecoderStream.MiniaudioStreamSource(stream)
-        self.pcm_stream = miniaudio.stream_any(mastream, format, dither=miniaudio.DitherMode.TRIANGLE)
+        self.pcm_stream = miniaudio.stream_any(stream, fmt, dither=miniaudio.DitherMode.TRIANGLE)
 
     def read(self, size):
         try:
@@ -162,7 +135,7 @@ class Internetradio(tkinter.Tk):
                    "http://ice3.somafm.com/groovesalad-64-aac"),
         StationDef("Soma FM", "Secret Agent",
                    "http://somafm.com/img/secretagent120.jpg",
-                   "http://ice3.somafm.com/secretagent-64-aac"),
+                   "http://ice3.somafm.com/secretagent-128-mp3"),
         StationDef("University of Calgary", "CJSW-FM",
                    "https://calgaryartsdevelopment.com/wp-content/uploads/2019/06/CJSW-logo.png",
                    "https://cjsw.leanstream.co/CJSWFM"),
@@ -227,7 +200,7 @@ class Internetradio(tkinter.Tk):
             self.decoder = None
             self.play_thread.join(timeout=2)
         self.stream_name_label.configure(text="{} | {}".format(station.station_name, station.stream_name))
-        self.icyclient = miniaudio.IceCastClient(station.stream_url, 8192)
+        self.icyclient = miniaudio.IceCastClient(station.stream_url)
         self.decoder = AudioDecoder(self.icyclient, self.set_song_title, self.update_ui)
         self.set_song_title("...")
         self.play_thread = threading.Thread(target=self.decoder.stream_radio, daemon=True)

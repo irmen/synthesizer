@@ -1,6 +1,6 @@
 tinytag
 appdirs
 tqdm
-miniaudio>=1.39
+miniaudio>=1.41
 matplotlib
 numpy
