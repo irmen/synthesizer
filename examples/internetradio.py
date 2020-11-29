@@ -1,12 +1,12 @@
 import threading
 import subprocess
 import tkinter
+import urllib.request
 from tkinter import ttk
 from collections import namedtuple
 from typing import Union
 
 from PIL import Image, ImageTk
-import requests
 from synthplayer.playback import Output
 from synthplayer.sample import Sample, LevelMeter
 try:
@@ -202,19 +202,18 @@ class Internetradio(tkinter.Tk):
         self.after(100, self.load_button_icons)
 
     def load_button_icons(self):
-        with requests.session() as session:
-            for index, station in enumerate(self.stations):
-                try:
-                    image = Image.open(session.get(station.icon_url, stream=True).raw)
-                except OSError:
-                    button = self.station_buttons[index]
-                    button.configure(command=lambda s=station: self.station_select(s))
-                else:
-                    image.thumbnail((128, 128))
-                    tkimage = ImageTk.PhotoImage(image)
-                    button = self.station_buttons[index]
-                    button.configure(image=tkimage, command=lambda s=station: self.station_select(s), width=160, height=140)
-                    button._tkimage = tkimage
+        for index, station in enumerate(self.stations):
+            try:
+                with urllib.request.urlopen(station.icon_url) as image_data:
+                    image = Image.open(image_data)
+            except OSError:
+                button = self.station_buttons[index]
+                button.configure(command=lambda s=station: self.station_select(s))
+            else:
+                image.thumbnail((128, 128))
+                button = self.station_buttons[index]
+                button._tkimage = ImageTk.PhotoImage(image)
+                button.configure(image=button._tkimage, command=lambda s=station: self.station_select(s), width=160, height=140)
 
     def station_select(self, station):
         for button in self.station_buttons:
