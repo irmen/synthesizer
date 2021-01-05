@@ -9,7 +9,7 @@ and is distributed under the LGPL 3.0 software license (see 'LICENSE').
 
 Pypi: [synthplayer](https://pypi.org/project/synthplayer/)  
 
-*requires Python 3.5 or newer*.
+*requires Python 3.6 or newer*.
 
 
 # synthplayer.synth
