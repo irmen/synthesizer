@@ -1,4 +1,3 @@
-[![saythanks](https://img.shields.io/badge/say-thanks-ff69b4.svg)](https://saythanks.io/to/irmen)
 [![Latest Version](https://img.shields.io/pypi/v/synthplayer.svg)](https://pypi.python.org/pypi/synthplayer/)
 
 **Software sound synthesizer (FM/PWM oscillators), sound file streaming and conversion, 
@@ -10,6 +9,8 @@ and is distributed under the LGPL 3.0 software license (see 'LICENSE').
 Pypi: [synthplayer](https://pypi.org/project/synthplayer/)  
 
 *requires Python 3.6 or newer*.
+
+**PROJECT IS ARCHIVED - NO BUG FIXES OR IMPROVEMENTS WILL BE MADE**
 
 
 # synthplayer.synth
